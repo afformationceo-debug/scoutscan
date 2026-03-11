@@ -1,0 +1,36 @@
+{
+  "name": "social-scraper",
+  "version": "1.0.0",
+  "description": "Production-grade social media scraping platform",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "scrape:hashtag": "tsx src/index.ts hashtag",
+    "scrape:profile": "tsx src/index.ts profile",
+    "dashboard": "node --max-http-header-size=65536 --import tsx/esm src/web/server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "better-sqlite3": "^12.6.2",
+    "crawlee": "^3.11.0",
+    "dotenv": "^16.4.0",
+    "hono": "^4.12.7",
+    "p-queue": "^8.0.0",
+    "playwright": "^1.48.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "tough-cookie": "^4.1.0",
+    "undici": "^6.19.0",
+    "winston": "^3.14.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/tough-cookie": "^4.0.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

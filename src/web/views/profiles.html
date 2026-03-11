@@ -1,0 +1,80 @@
+<!-- Profiles Page -->
+<div x-data="profilesPage()">
+  <h2 class="text-2xl font-bold text-gray-900 mb-6">Profile Lookup</h2>
+
+  <!-- Search Form -->
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <form @submit.prevent="lookupProfile()" class="flex gap-4">
+      <select x-model="platform" class="rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+        <option value="instagram">Instagram</option>
+        <option value="twitter">Twitter</option>
+        <option value="tiktok">TikTok</option>
+        <option value="youtube">YouTube</option>
+      </select>
+      <div class="flex-1">
+        <div class="flex">
+          <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">@</span>
+          <input type="text" x-model="username" placeholder="Enter username"
+                 class="flex-1 rounded-r-md border-gray-300 shadow-sm px-3 py-2 border" required>
+        </div>
+      </div>
+      <button type="submit" :disabled="isLoading"
+              class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+        <span x-show="!isLoading">Lookup</span>
+        <span x-show="isLoading">Loading...</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Error -->
+  <div x-show="error" x-cloak class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+    <span x-text="error"></span>
+  </div>
+
+  <!-- Profile Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <template x-for="profile in profiles" :key="profile.id + profile.platform">
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="bg-indigo-600 px-4 py-3">
+          <span class="text-white text-sm capitalize" x-text="profile.platform"></span>
+        </div>
+        <div class="p-6">
+          <div class="flex items-center mb-4">
+            <img :src="profile.profilePicUrl" class="w-16 h-16 rounded-full mr-4" alt="" loading="lazy">
+            <div>
+              <h3 class="font-bold text-lg" x-text="profile.fullName || profile.username"></h3>
+              <p class="text-gray-500 text-sm" x-text="'@' + profile.username"></p>
+              <span x-show="profile.isVerified" class="text-blue-500 text-xs">Verified</span>
+            </div>
+          </div>
+          <p class="text-gray-600 text-sm mb-4 line-clamp-3" x-text="profile.bio"></p>
+          <div class="grid grid-cols-3 gap-4 text-center border-t pt-4">
+            <div>
+              <p class="text-lg font-bold" x-text="formatNumber(profile.followersCount)"></p>
+              <p class="text-xs text-gray-500">Followers</p>
+            </div>
+            <div>
+              <p class="text-lg font-bold" x-text="formatNumber(profile.followingCount)"></p>
+              <p class="text-xs text-gray-500">Following</p>
+            </div>
+            <div>
+              <p class="text-lg font-bold" x-text="formatNumber(profile.postsCount)"></p>
+              <p class="text-xs text-gray-500">Posts</p>
+            </div>
+          </div>
+          <div x-show="profile.engagementRate" class="mt-4 text-center">
+            <span class="text-sm text-gray-600">Engagement Rate: </span>
+            <span class="font-bold text-indigo-600" x-text="(profile.engagementRate * 100).toFixed(2) + '%'"></span>
+          </div>
+          <div x-show="profile.externalUrl" class="mt-2 text-center">
+            <a :href="profile.externalUrl" target="_blank" class="text-sm text-indigo-600 hover:underline" x-text="profile.externalUrl"></a>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <p x-show="profiles.length === 0 && !isLoading" class="text-gray-500 text-center py-12">
+    Enter a username above to lookup a profile.
+  </p>
+</div>

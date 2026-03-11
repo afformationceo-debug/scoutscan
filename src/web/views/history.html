@@ -1,0 +1,66 @@
+<!-- History Page -->
+<div x-data="historyPage()" x-init="load()">
+  <h2 class="text-2xl font-bold text-gray-900 mb-6">Scraping History</h2>
+
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200" x-show="jobs.length > 0">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Query</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Results</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        <template x-for="job in jobs" :key="job.id">
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-mono text-gray-500" x-text="job.id.substring(0, 8)"></td>
+            <td class="px-4 py-3 text-sm capitalize" x-text="job.type"></td>
+            <td class="px-4 py-3 text-sm capitalize" x-text="job.platform"></td>
+            <td class="px-4 py-3 text-sm font-medium">
+              <span x-text="job.type === 'hashtag' ? '#' : '@'"></span><span x-text="job.query"></span>
+            </td>
+            <td class="px-4 py-3 text-sm">
+              <span class="px-2 py-1 text-xs rounded-full"
+                    :class="{
+                      'bg-yellow-100 text-yellow-800': job.status === 'pending',
+                      'bg-blue-100 text-blue-800': job.status === 'running',
+                      'bg-green-100 text-green-800': job.status === 'completed',
+                      'bg-red-100 text-red-800': job.status === 'failed',
+                    }"
+                    x-text="job.status"></span>
+            </td>
+            <td class="px-4 py-3 text-sm" x-text="job.resultCount"></td>
+            <td class="px-4 py-3 text-sm text-gray-500" x-text="new Date(job.createdAt).toLocaleString()"></td>
+            <td class="px-4 py-3 text-sm space-x-2">
+              <a :href="job.type === 'hashtag' ? '/search?jobId=' + job.id : '/profiles?jobId=' + job.id"
+                 class="text-indigo-600 hover:text-indigo-800">View</a>
+              <button @click="rerun(job)" class="text-blue-600 hover:text-blue-800">Re-run</button>
+              <button @click="exportJob(job.id, 'csv')" class="text-green-600 hover:text-green-800">CSV</button>
+              <button @click="exportJob(job.id, 'xlsx')" class="text-green-600 hover:text-green-800">XLSX</button>
+              <button @click="remove(job.id)" class="text-red-600 hover:text-red-800">Delete</button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <p x-show="jobs.length === 0" class="text-gray-500 text-center py-12">No scraping history yet.</p>
+
+    <!-- Pagination -->
+    <div x-show="total > limit" class="px-4 py-3 border-t flex items-center justify-between">
+      <span class="text-sm text-gray-500" x-text="'Showing ' + (offset + 1) + '-' + Math.min(offset + limit, total) + ' of ' + total"></span>
+      <div class="flex gap-2">
+        <button @click="offset = Math.max(0, offset - limit); load()" :disabled="offset === 0"
+                class="px-3 py-1 border rounded text-sm disabled:opacity-50">Previous</button>
+        <button @click="offset += limit; load()" :disabled="offset + limit >= total"
+                class="px-3 py-1 border rounded text-sm disabled:opacity-50">Next</button>
+      </div>
+    </div>
+  </div>
+</div>

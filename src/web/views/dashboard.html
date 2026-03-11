@@ -1,0 +1,87 @@
+<!-- Platform Status Cards -->
+<div x-data="platformStatus()" x-init="load()">
+  <h2 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
+
+  <!-- Platform cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+    <template x-for="p in platforms" :key="p.platform">
+      <div class="bg-white rounded-lg shadow p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-gray-700 capitalize" x-text="p.platform"></h3>
+          <span class="text-xs px-2 py-1 rounded-full"
+                :class="p.hasCookies ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                x-text="p.hasCookies ? 'Ready' : 'No cookies'"></span>
+        </div>
+        <p class="text-xs text-gray-500" x-text="p.cookieCount + ' cookies loaded'"></p>
+      </div>
+    </template>
+  </div>
+
+  <!-- Quick Search -->
+  <div class="bg-white rounded-lg shadow p-6 mb-8">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Hashtag Search</h3>
+    <form @submit.prevent="quickSearch()" class="flex gap-4">
+      <select x-model="searchPlatform" class="rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+        <option value="instagram">Instagram</option>
+        <option value="twitter">Twitter</option>
+        <option value="tiktok">TikTok</option>
+        <option value="youtube">YouTube</option>
+      </select>
+      <input type="text" x-model="searchTag" placeholder="Enter hashtag (e.g. travel)"
+             class="flex-1 rounded-md border-gray-300 shadow-sm px-3 py-2 border"
+             required>
+      <input type="number" x-model="searchMax" min="1" max="200" placeholder="Max results"
+             class="w-32 rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+      <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700">
+        Search
+      </button>
+    </form>
+  </div>
+
+  <!-- Recent Jobs -->
+  <div class="bg-white rounded-lg shadow p-6">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Jobs</h3>
+    <div x-data="recentJobs()" x-init="load()">
+      <table class="min-w-full divide-y divide-gray-200" x-show="jobs.length > 0">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Query</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Results</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <template x-for="job in jobs" :key="job.id">
+            <tr>
+              <td class="px-4 py-3 text-sm capitalize" x-text="job.platform"></td>
+              <td class="px-4 py-3 text-sm">
+                <span x-text="job.type === 'hashtag' ? '#' : '@'"></span><span x-text="job.query"></span>
+              </td>
+              <td class="px-4 py-3 text-sm">
+                <span class="px-2 py-1 text-xs rounded-full"
+                      :class="{
+                        'bg-yellow-100 text-yellow-800': job.status === 'pending',
+                        'bg-blue-100 text-blue-800': job.status === 'running',
+                        'bg-green-100 text-green-800': job.status === 'completed',
+                        'bg-red-100 text-red-800': job.status === 'failed',
+                      }"
+                      x-text="job.status"></span>
+              </td>
+              <td class="px-4 py-3 text-sm" x-text="job.resultCount"></td>
+              <td class="px-4 py-3 text-sm text-gray-500" x-text="new Date(job.createdAt).toLocaleString()"></td>
+              <td class="px-4 py-3 text-sm">
+                <a :href="'/search?jobId=' + job.id" class="text-indigo-600 hover:text-indigo-800 mr-2">View</a>
+                <button @click="exportJob(job.id, 'csv')" class="text-green-600 hover:text-green-800 mr-2">CSV</button>
+                <button @click="exportJob(job.id, 'xlsx')" class="text-green-600 hover:text-green-800">XLSX</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p x-show="jobs.length === 0" class="text-gray-500 text-center py-8">No jobs yet. Start a search above!</p>
+    </div>
+  </div>
+</div>

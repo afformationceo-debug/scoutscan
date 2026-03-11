@@ -1,0 +1,44 @@
+<!-- Settings Page -->
+<div x-data="settingsPage()" x-init="load()">
+  <h2 class="text-2xl font-bold text-gray-900 mb-6">Settings</h2>
+
+  <!-- Platform Cookie Status -->
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Platform Cookie Status</h3>
+    <p class="text-sm text-gray-500 mb-4">
+      To enable scraping, export your browser cookies for each platform using a browser extension
+      (e.g., EditThisCookie) and save them as JSON files in the <code class="bg-gray-100 px-1 rounded">cookies/</code> directory.
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <template x-for="p in platforms" :key="p.platform">
+        <div class="border rounded-lg p-4" :class="p.hasCookies ? 'border-green-300 bg-green-50' : 'border-gray-200'">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-semibold capitalize" x-text="p.platform"></h4>
+            <span class="text-2xl" x-text="p.hasCookies ? '&#10003;' : '&#10007;'"
+                  :class="p.hasCookies ? 'text-green-600' : 'text-red-400'"></span>
+          </div>
+          <p class="text-sm text-gray-600" x-text="p.hasCookies ? p.cookieCount + ' cookies loaded' : 'No cookies found'"></p>
+          <p class="text-xs text-gray-400 mt-1" x-text="'File: cookies/' + p.platform + '.json'"></p>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="bg-white rounded-lg shadow p-6">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">How to Add Cookies</h3>
+    <ol class="list-decimal list-inside space-y-2 text-sm text-gray-600">
+      <li>Install a cookie export browser extension (e.g., <strong>EditThisCookie</strong> for Chrome)</li>
+      <li>Log in to the target platform (Instagram, Twitter, etc.)</li>
+      <li>Click the extension and export cookies as JSON</li>
+      <li>Save the JSON file as <code class="bg-gray-100 px-1 rounded">cookies/&lt;platform&gt;.json</code></li>
+      <li>Refresh this page to verify the cookies are loaded</li>
+    </ol>
+    <div class="mt-4">
+      <button @click="load()" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm">
+        Refresh Status
+      </button>
+    </div>
+  </div>
+</div>

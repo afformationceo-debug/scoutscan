@@ -1,0 +1,334 @@
+import { randomUUID } from 'crypto';
+import { EventEmitter } from 'events';
+import { ScrapingEngine } from '../../core/engine.js';
+import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
+import {
+  createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames,
+} from './db.js';
+
+interface SSEClient {
+  id: string;
+  jobId: string;
+  controller: ReadableStreamDefaultController;
+}
+
+class JobManager extends EventEmitter {
+  private queue: Array<{ jobId: string; run: () => Promise<void> }> = [];
+  private running = false;
+  private sseClients: SSEClient[] = [];
+
+  /** Start a hashtag search job */
+  startHashtagJob(platform: Platform, hashtag: string, maxResults = 50, enrichProfiles = true): string {
+    const jobId = randomUUID();
+    createJob({
+      id: jobId,
+      type: 'hashtag',
+      platform,
+      query: hashtag,
+      status: 'pending',
+      maxResults,
+      createdAt: new Date().toISOString(),
+    });
+
+    this.queue.push({
+      jobId,
+      run: () => this.runHashtagJob(jobId, platform, hashtag, maxResults, enrichProfiles),
+    });
+
+    this.processQueue();
+    return jobId;
+  }
+
+  /** Start a profile scraping job */
+  startProfileJob(platform: Platform, username: string): string {
+    const jobId = randomUUID();
+    createJob({
+      id: jobId,
+      type: 'profile',
+      platform,
+      query: username,
+      status: 'pending',
+      maxResults: 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    this.queue.push({
+      jobId,
+      run: () => this.runProfileJob(jobId, platform, username),
+    });
+
+    this.processQueue();
+    return jobId;
+  }
+
+  /** Start a re-enrichment job for missing profiles */
+  startReEnrichJob(platform: Platform): string {
+    const missing = getMissingProfileUsernames(platform);
+    if (missing.length === 0) {
+      throw new Error('No missing profiles to enrich');
+    }
+
+    const jobId = randomUUID();
+    createJob({
+      id: jobId,
+      type: 'profile' as any,
+      platform,
+      query: `re-enrich (${missing.length} profiles)`,
+      status: 'pending',
+      maxResults: missing.length,
+      createdAt: new Date().toISOString(),
+    });
+
+    this.queue.push({
+      jobId,
+      run: () => this.runReEnrichJob(jobId, platform, missing),
+    });
+
+    this.processQueue();
+    return jobId;
+  }
+
+  /** Register an SSE client for a job */
+  addSSEClient(jobId: string, controller: ReadableStreamDefaultController): string {
+    const clientId = randomUUID();
+    this.sseClients.push({ id: clientId, jobId, controller });
+
+    // Send current job state
+    const job = getJob(jobId);
+    if (job) {
+      this.sendSSE(jobId, 'status', job);
+    }
+
+    return clientId;
+  }
+
+  /** Remove an SSE client */
+  removeSSEClient(clientId: string): void {
+    this.sseClients = this.sseClients.filter(c => c.id !== clientId);
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.running || this.queue.length === 0) return;
+
+    this.running = true;
+    const task = this.queue.shift()!;
+
+    try {
+      await task.run();
+    } catch (error) {
+      updateJobStatus(task.jobId, 'failed', {
+        error: (error as Error).message,
+      });
+      this.sendSSE(task.jobId, 'error', { message: (error as Error).message });
+    } finally {
+      this.running = false;
+      this.processQueue();
+    }
+  }
+
+  private async runHashtagJob(jobId: string, platform: Platform, hashtag: string, maxResults: number, enrichProfiles = true): Promise<void> {
+    updateJobStatus(jobId, 'running');
+    this.sendSSE(jobId, 'status', { status: 'running' });
+
+    const engine = new ScrapingEngine({ platforms: [platform] });
+    let count = 0;
+    const collectedPosts: Post[] = [];
+
+    try {
+      const scraper = (engine as any).scrapers.get(platform);
+      if (!scraper) throw new Error(`Platform not available: ${platform}`);
+
+      // Phase 1: Collect posts
+      for await (const post of scraper.searchByHashtag(hashtag, { maxResults })) {
+        count++;
+        collectedPosts.push(post);
+        insertPost(jobId, post);
+        updateJobStatus(jobId, 'running', { resultCount: count });
+        this.sendSSE(jobId, 'post', post);
+        this.sendSSE(jobId, 'progress', { phase: 'posts', count, total: maxResults });
+
+        if (count >= maxResults) break;
+      }
+
+      // Phase 2: Profile enrichment (skip already-scraped profiles across all jobs)
+      let profilesCount = 0;
+      if (enrichProfiles && collectedPosts.length > 0) {
+        const existingProfiles = getExistingProfileUsernames(platform);
+        const allUsernames = [...new Set(
+          collectedPosts
+            .map(p => p.owner?.username)
+            .filter((u): u is string => Boolean(u))
+        )];
+        const newUsernames = allUsernames.filter(u => !existingProfiles.has(u));
+        const skipped = allUsernames.length - newUsernames.length;
+
+        if (skipped > 0) {
+          console.log(`[enrichment] Skipping ${skipped} already-scraped profiles, ${newUsernames.length} new to fetch`);
+        }
+
+        this.sendSSE(jobId, 'profile_start', { total: newUsernames.length, skipped });
+
+        let consecutiveFailures = 0;
+        const MAX_CONSECUTIVE_FAILURES = 5;
+        let failedUsernames: string[] = [];
+
+        for (const username of newUsernames) {
+          try {
+            const profile = await engine.getProfile(platform, username);
+            insertProfile(jobId, profile);
+            profilesCount++;
+            consecutiveFailures = 0;
+            this.sendSSE(jobId, 'profile', profile);
+            this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+          } catch (err) {
+            consecutiveFailures++;
+            failedUsernames.push(username);
+            console.warn(`[enrichment] Failed @${username} (${consecutiveFailures} consecutive): ${(err as Error).message}`);
+            this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
+
+            // If too many consecutive failures, pause longer to avoid IP block
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+              console.warn(`[enrichment] ${MAX_CONSECUTIVE_FAILURES} consecutive failures, pausing 30s to recover...`);
+              this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
+              await new Promise(r => setTimeout(r, 30000));
+              consecutiveFailures = 0;
+            }
+          }
+
+          // Anti-bot delay: 1-2 seconds
+          const delay = 1000 + Math.random() * 1000;
+          await new Promise(r => setTimeout(r, delay));
+        }
+
+        // Retry failed profiles once with longer delays
+        if (failedUsernames.length > 0) {
+          console.log(`[enrichment] Retrying ${failedUsernames.length} failed profiles...`);
+          this.sendSSE(jobId, 'profile_retry', { count: failedUsernames.length });
+
+          for (const username of failedUsernames) {
+            try {
+              await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+              const profile = await engine.getProfile(platform, username);
+              insertProfile(jobId, profile);
+              profilesCount++;
+              this.sendSSE(jobId, 'profile', profile);
+              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+            } catch {
+              console.warn(`[enrichment] Retry also failed for @${username}, skipping`);
+            }
+          }
+        }
+      }
+
+      updateJobStatus(jobId, 'completed', { resultCount: count });
+      this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount });
+    } catch (error) {
+      updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: count });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
+    } finally {
+      await engine.close();
+    }
+  }
+
+  private async runProfileJob(jobId: string, platform: Platform, username: string): Promise<void> {
+    updateJobStatus(jobId, 'running');
+    this.sendSSE(jobId, 'status', { status: 'running' });
+
+    const engine = new ScrapingEngine({ platforms: [platform] });
+
+    try {
+      const profile = await engine.getProfile(platform, username);
+      insertProfile(jobId, profile);
+      updateJobStatus(jobId, 'completed', { resultCount: 1 });
+      this.sendSSE(jobId, 'profile', profile);
+      this.sendSSE(jobId, 'complete', { resultCount: 1 });
+    } catch (error) {
+      updateJobStatus(jobId, 'failed', { error: (error as Error).message });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
+    } finally {
+      await engine.close();
+    }
+  }
+
+  private async runReEnrichJob(jobId: string, platform: Platform, usernames: string[]): Promise<void> {
+    updateJobStatus(jobId, 'running');
+    this.sendSSE(jobId, 'status', { status: 'running' });
+
+    const engine = new ScrapingEngine({ platforms: [platform] });
+    let profilesCount = 0;
+
+    try {
+      this.sendSSE(jobId, 'profile_start', { total: usernames.length, skipped: 0 });
+
+      let consecutiveFailures = 0;
+      const MAX_CONSECUTIVE_FAILURES = 5;
+      let failedUsernames: string[] = [];
+
+      for (const username of usernames) {
+        try {
+          const profile = await engine.getProfile(platform, username);
+          insertProfile(jobId, profile);
+          profilesCount++;
+          consecutiveFailures = 0;
+          this.sendSSE(jobId, 'profile', profile);
+          this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
+        } catch (err) {
+          consecutiveFailures++;
+          failedUsernames.push(username);
+          console.warn(`[re-enrich] Failed @${username} (${consecutiveFailures}): ${(err as Error).message}`);
+          this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
+
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
+            await new Promise(r => setTimeout(r, 30000));
+            consecutiveFailures = 0;
+          }
+        }
+
+        const delay = 1000 + Math.random() * 1000;
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      // Retry failed profiles once
+      if (failedUsernames.length > 0) {
+        this.sendSSE(jobId, 'profile_retry', { count: failedUsernames.length });
+        for (const username of failedUsernames) {
+          try {
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+            const profile = await engine.getProfile(platform, username);
+            insertProfile(jobId, profile);
+            profilesCount++;
+            this.sendSSE(jobId, 'profile', profile);
+            this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
+          } catch {
+            console.warn(`[re-enrich] Retry also failed for @${username}`);
+          }
+        }
+      }
+
+      updateJobStatus(jobId, 'completed', { resultCount: profilesCount });
+      this.sendSSE(jobId, 'complete', { postsCount: 0, profilesCount });
+    } catch (error) {
+      updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: profilesCount });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
+    } finally {
+      await engine.close();
+    }
+  }
+
+  private sendSSE(jobId: string, event: string, data: any): void {
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    const clients = this.sseClients.filter(c => c.jobId === jobId);
+
+    for (const client of clients) {
+      try {
+        client.controller.enqueue(new TextEncoder().encode(payload));
+      } catch {
+        // Client disconnected
+        this.removeSSEClient(client.id);
+      }
+    }
+  }
+}
+
+export const jobManager = new JobManager();

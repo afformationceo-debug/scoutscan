@@ -1,0 +1,403 @@
+{
+  "timestamp": "2026-03-11T04:04:40.751Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-03-11T04:04:40.653Z",
+    "activeFeatures": [
+      "core",
+      "web",
+      "instagram",
+      "twitter",
+      "tiktok",
+      "youtube",
+      "anti-detection",
+      "xiaohongshu",
+      "linkedin"
+    ],
+    "primaryFeature": "core",
+    "features": {
+      "core": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:13:33.708Z",
+          "lastUpdated": "2026-03-11T04:03:50.909Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/cookie-manager.ts"
+      },
+      "web": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:13:36.795Z",
+          "lastUpdated": "2026-03-11T04:04:40.653Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/login.ts"
+      },
+      "instagram": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:15:15.242Z",
+          "lastUpdated": "2026-03-11T04:04:14.117Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/instagram/scraper.ts"
+      },
+      "twitter": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:17:25.108Z",
+          "lastUpdated": "2026-03-11T02:25:06.304Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/twitter/index.ts"
+      },
+      "tiktok": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:17:33.251Z",
+          "lastUpdated": "2026-03-11T02:25:54.088Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/tiktok/index.ts"
+      },
+      "youtube": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:17:40.412Z",
+          "lastUpdated": "2026-03-11T02:26:47.774Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/youtube/index.ts"
+      },
+      "anti-detection": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:47:04.142Z",
+          "lastUpdated": "2026-03-10T18:48:00.139Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/anti-detection/index.ts"
+      },
+      "xiaohongshu": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:48:35.443Z",
+          "lastUpdated": "2026-03-10T18:50:45.324Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/xiaohongshu/index.ts"
+      },
+      "linkedin": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-10T18:49:02.822Z",
+          "lastUpdated": "2026-03-10T18:50:44.185Z"
+        },
+        "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/linkedin/index.ts"
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-03-10T18:02:55.590Z",
+      "onboardingCompleted": false,
+      "lastActivity": "2026-03-11T04:04:40.653Z"
+    },
+    "history": [
+      {
+        "timestamp": "2026-03-10T18:13:33.708Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:13:36.795Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:13:44.457Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:13:54.056Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:14:07.413Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:14:19.047Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:14:27.345Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:14:57.948Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:15:15.242Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:16:10.677Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:16:49.675Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:16:50.378Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:17:17.278Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:17:25.108Z",
+        "feature": "twitter",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:17:33.251Z",
+        "feature": "tiktok",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:17:40.412Z",
+        "feature": "youtube",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:18:16.520Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:47:04.142Z",
+        "feature": "anti-detection",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:47:30.673Z",
+        "feature": "anti-detection",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:47:59.239Z",
+        "feature": "anti-detection",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:48:00.139Z",
+        "feature": "anti-detection",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:48:35.443Z",
+        "feature": "xiaohongshu",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:49:02.822Z",
+        "feature": "linkedin",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:49:24.153Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:10.325Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:22.197Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:27.402Z",
+        "feature": "xiaohongshu",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:33.262Z",
+        "feature": "linkedin",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:44.185Z",
+        "feature": "linkedin",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-10T18:50:45.324Z",
+        "feature": "xiaohongshu",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:24:18.101Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:25:06.304Z",
+        "feature": "twitter",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:25:54.088Z",
+        "feature": "tiktok",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:26:47.774Z",
+        "feature": "youtube",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:27:03.439Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T02:27:11.685Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:00:14.488Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:03:50.909Z",
+        "feature": "core",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:04:00.490Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:04:05.391Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:04:14.117Z",
+        "feature": "instagram",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T04:04:40.653Z",
+        "feature": "web",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}
