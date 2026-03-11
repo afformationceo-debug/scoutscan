@@ -4,7 +4,8 @@ import { CookieManager } from '../../core/cookie-manager.js';
 import { listJobs, getJob, getJobPosts, getJobProfiles, deleteJob, getAllProfiles, getProfileStats, getMissingProfileUsernames } from '../services/db.js';
 import { jobManager } from '../services/job-manager.js';
 import { exportCSV, exportXLSX } from '../services/export.js';
-import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget } from '../services/master-db.js';
+import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget, createCampaign, listCampaigns, addDMAccount, listDMAccounts } from '../services/master-db.js';
+import { dmEngine } from '../../services/dm-engine.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
 import { db } from '../services/db.js';
 import { scheduler } from '../../services/scheduler.js';
@@ -288,6 +289,91 @@ api.post('/keywords/:pairId/run', (c) => {
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400);
   }
+});
+
+// ─── DM Campaigns ───
+
+api.post('/campaigns', async (c) => {
+  const body = await c.req.json();
+  const { name, brand, platform, targetCountry, targetTiers, minFollowers, maxFollowers, messageTemplate, dailyLimit, delayMinSec, delayMaxSec } = body;
+  if (!name || !platform || !messageTemplate) {
+    return c.json({ error: 'Missing required fields: name, platform, messageTemplate' }, 400);
+  }
+  const id = crypto.randomUUID();
+  createCampaign({ id, name, brand, platform, targetCountry, targetTiers, minFollowers, maxFollowers, messageTemplate, dailyLimit, delayMinSec, delayMaxSec });
+  return c.json({ id, message: 'Campaign created' }, 201);
+});
+
+api.get('/campaigns', (c) => {
+  const campaigns = listCampaigns();
+  return c.json({ campaigns });
+});
+
+api.patch('/campaigns/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const fields: string[] = [];
+  const params: any[] = [];
+  for (const [key, val] of Object.entries(body)) {
+    const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    params.push(typeof val === 'object' ? JSON.stringify(val) : val);
+  }
+  if (fields.length > 0) {
+    fields.push('updated_at = ?');
+    params.push(new Date().toISOString());
+    params.push(id);
+    db.prepare(`UPDATE dm_campaigns SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  }
+  return c.json({ message: 'Updated' });
+});
+
+api.post('/campaigns/:id/queue', (c) => {
+  const id = c.req.param('id');
+  try {
+    const queued = dmEngine.generateQueue(id);
+    return c.json({ queued, message: `${queued} influencers added to queue` });
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+api.post('/campaigns/:id/start', (c) => {
+  const id = c.req.param('id');
+  dmEngine.processCampaign(id).catch(err => {
+    console.error(`[DM] Campaign ${id} error:`, err);
+  });
+  return c.json({ message: 'Campaign started' });
+});
+
+api.post('/campaigns/:id/pause', (c) => {
+  const id = c.req.param('id');
+  dmEngine.pauseCampaign(id);
+  return c.json({ message: 'Campaign paused' });
+});
+
+// ─── DM Accounts ───
+
+api.post('/dm-accounts', async (c) => {
+  const body = await c.req.json();
+  const { platform, username, sessionFile } = body;
+  if (!platform || !username) {
+    return c.json({ error: 'Missing required fields: platform, username' }, 400);
+  }
+  addDMAccount(platform, username, sessionFile);
+  return c.json({ message: 'Account added' }, 201);
+});
+
+api.get('/dm-accounts', (c) => {
+  const platform = c.req.query('platform') || undefined;
+  const accounts = listDMAccounts(platform);
+  return c.json({ accounts });
+});
+
+api.delete('/dm-accounts/:id', (c) => {
+  const id = parseInt(c.req.param('id'));
+  db.prepare('DELETE FROM dm_accounts WHERE id = ?').run(id);
+  return c.json({ message: 'Account deleted' });
 });
 
 export { api };
