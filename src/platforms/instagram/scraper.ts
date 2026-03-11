@@ -61,6 +61,9 @@ export class InstagramScraper implements PlatformScraper {
   async *searchByHashtag(tag: string, options: SearchOptions = {}): AsyncGenerator<Post> {
     const cleanTag = tag.replace(/^#/, '');
     const maxResults = options.maxResults || 100;
+    const since = options.since || null;
+    let consecutiveOld = 0;
+    const MAX_CONSECUTIVE_OLD = 20;
     let yielded = 0;
     const maxBrowserRetries = 2;
 
@@ -133,9 +136,17 @@ export class InstagramScraper implements PlatformScraper {
         }
 
         while (collectedPosts.length > 0 && yielded < maxResults) {
-          yield collectedPosts.shift()!;
+          const post = collectedPosts.shift()!;
+          if (since && post.timestamp && post.timestamp < since) {
+            consecutiveOld++;
+            if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
+            continue;
+          }
+          consecutiveOld = 0;
+          yield post;
           yielded++;
         }
+        if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
 
         // Scroll for more content
         const maxScrolls = Math.ceil((maxResults - yielded) / 12);
@@ -146,8 +157,19 @@ export class InstagramScraper implements PlatformScraper {
 
           const beforeYield = yielded;
           while (collectedPosts.length > 0 && yielded < maxResults) {
-            yield collectedPosts.shift()!;
+            const post = collectedPosts.shift()!;
+            if (since && post.timestamp && post.timestamp < since) {
+              consecutiveOld++;
+              if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
+              continue;
+            }
+            consecutiveOld = 0;
+            yield post;
             yielded++;
+          }
+          if (consecutiveOld >= MAX_CONSECUTIVE_OLD) {
+            console.log(`[Instagram] Delta: ${MAX_CONSECUTIVE_OLD} consecutive old posts, stopping early`);
+            break;
           }
 
           if (yielded === beforeYield) {

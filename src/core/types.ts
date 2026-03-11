@@ -29,6 +29,7 @@ export interface ScrapingOptions {
 export interface SearchOptions extends ScrapingOptions {
   cursor?: string;
   sortBy?: 'recent' | 'top';
+  since?: string;  // ISO timestamp for delta scraping
 }
 
 export type Platform = 'instagram' | 'twitter' | 'tiktok' | 'youtube' | 'xiaohongshu' | 'linkedin';

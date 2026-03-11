@@ -6,6 +6,7 @@ import { api } from './routes/api.js';
 import { sse } from './routes/sse.js';
 import { pages } from './routes/pages.js';
 import { recoverStuckJobs } from './services/db.js';
+import { scheduler } from '../services/scheduler.js';
 
 const app = new Hono();
 
@@ -42,4 +43,7 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
     /history   - Scraping History
     /settings  - Cookie Settings
   `);
+
+  // Start scheduled scraping
+  scheduler.start();
 });
