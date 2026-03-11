@@ -79,6 +79,128 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 `);
 
+// ─── Master Tables (keyword targets, influencer master, DM system) ───
+
+db.exec(`
+  -- Table 1: keyword_targets (수집 지휘소)
+  CREATE TABLE IF NOT EXISTS keyword_targets (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_id               TEXT NOT NULL UNIQUE,
+    platform              TEXT NOT NULL,
+    region                TEXT NOT NULL,
+    keyword               TEXT NOT NULL,
+    scraping_cycle_hours  INTEGER DEFAULT 72,
+    last_post_timestamp   TEXT,
+    last_scraped_at       TEXT,
+    next_scrape_at        TEXT,
+    total_extracted       INTEGER DEFAULT 0,
+    max_results_per_run   INTEGER DEFAULT 200,
+    is_active             INTEGER DEFAULT 1,
+    created_at            TEXT NOT NULL,
+    updated_at            TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_kt_platform ON keyword_targets(platform);
+  CREATE INDEX IF NOT EXISTS idx_kt_next ON keyword_targets(next_scrape_at);
+
+  -- Table 2: influencer_master (핵심 자산 금고)
+  CREATE TABLE IF NOT EXISTS influencer_master (
+    influencer_key    TEXT PRIMARY KEY,
+    platform          TEXT NOT NULL,
+    username          TEXT NOT NULL,
+    full_name         TEXT,
+    bio               TEXT,
+    profile_pic_url   TEXT,
+    followers_count   INTEGER DEFAULT 0,
+    following_count   INTEGER DEFAULT 0,
+    posts_count       INTEGER DEFAULT 0,
+    engagement_rate   REAL,
+    is_verified       INTEGER DEFAULT 0,
+    is_business       INTEGER DEFAULT 0,
+    is_private        INTEGER DEFAULT 0,
+    category          TEXT,
+    contact_email     TEXT,
+    contact_phone     TEXT,
+    external_url      TEXT,
+    detected_country  TEXT,
+    detected_language TEXT,
+    geo_confidence    REAL DEFAULT 0,
+    geo_source        TEXT,
+    scout_tier        TEXT DEFAULT 'C',
+    scout_tier_auto   TEXT DEFAULT 'C',
+    scout_tier_manual TEXT,
+    dm_status         TEXT DEFAULT 'pending',
+    dm_last_sent_at   TEXT,
+    dm_campaign_id    TEXT,
+    source_pair_ids   TEXT,
+    first_seen_at     TEXT NOT NULL,
+    last_updated_at   TEXT NOT NULL,
+    UNIQUE(platform, username)
+  );
+  CREATE INDEX IF NOT EXISTS idx_im_platform ON influencer_master(platform);
+  CREATE INDEX IF NOT EXISTS idx_im_country ON influencer_master(detected_country);
+  CREATE INDEX IF NOT EXISTS idx_im_tier ON influencer_master(scout_tier);
+  CREATE INDEX IF NOT EXISTS idx_im_dm ON influencer_master(dm_status);
+
+  -- Table 3: dm_campaigns
+  CREATE TABLE IF NOT EXISTS dm_campaigns (
+    id                TEXT PRIMARY KEY,
+    name              TEXT NOT NULL,
+    brand             TEXT,
+    platform          TEXT NOT NULL,
+    target_country    TEXT,
+    target_tiers      TEXT,
+    min_followers     INTEGER,
+    max_followers     INTEGER,
+    message_template  TEXT NOT NULL,
+    daily_limit       INTEGER DEFAULT 40,
+    max_retries       INTEGER DEFAULT 2,
+    delay_min_sec     INTEGER DEFAULT 45,
+    delay_max_sec     INTEGER DEFAULT 120,
+    status            TEXT DEFAULT 'draft',
+    total_queued      INTEGER DEFAULT 0,
+    total_sent        INTEGER DEFAULT 0,
+    total_failed      INTEGER DEFAULT 0,
+    total_replied     INTEGER DEFAULT 0,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+  );
+
+  -- Table 4: dm_action_queue
+  CREATE TABLE IF NOT EXISTS dm_action_queue (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    influencer_key    TEXT NOT NULL,
+    campaign_id       TEXT NOT NULL,
+    platform          TEXT NOT NULL,
+    account_username  TEXT,
+    message_rendered  TEXT NOT NULL,
+    execute_status    TEXT DEFAULT 'pending',
+    error_message     TEXT,
+    scheduled_at      TEXT,
+    executed_at       TEXT,
+    retry_count       INTEGER DEFAULT 0,
+    created_at        TEXT NOT NULL,
+    FOREIGN KEY (influencer_key) REFERENCES influencer_master(influencer_key),
+    FOREIGN KEY (campaign_id) REFERENCES dm_campaigns(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_dmq_status ON dm_action_queue(execute_status);
+  CREATE INDEX IF NOT EXISTS idx_dmq_campaign ON dm_action_queue(campaign_id);
+
+  -- Table 5: dm_accounts
+  CREATE TABLE IF NOT EXISTS dm_accounts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform        TEXT NOT NULL,
+    username        TEXT NOT NULL,
+    session_file    TEXT,
+    daily_sent      INTEGER DEFAULT 0,
+    daily_limit     INTEGER DEFAULT 40,
+    last_sent_at    TEXT,
+    last_reset_date TEXT,
+    status          TEXT DEFAULT 'active',
+    created_at      TEXT NOT NULL,
+    UNIQUE(platform, username)
+  );
+`);
+
 // ─── Jobs CRUD ───
 
 const insertJobStmt = db.prepare(`

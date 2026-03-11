@@ -109,3 +109,106 @@ export interface Job {
   startedAt?: string;
   completedAt?: string;
 }
+
+// ─── Master DB Types ───
+
+export interface KeywordTarget {
+  id: number;
+  pairId: string;
+  platform: Platform;
+  region: string;
+  keyword: string;
+  scrapingCycleHours: number;
+  lastPostTimestamp?: string;
+  lastScrapedAt?: string;
+  nextScrapeAt?: string;
+  totalExtracted: number;
+  maxResultsPerRun: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InfluencerMaster {
+  influencerKey: string;
+  platform: Platform;
+  username: string;
+  fullName?: string;
+  bio?: string;
+  profilePicUrl?: string;
+  followersCount: number;
+  followingCount: number;
+  postsCount: number;
+  engagementRate?: number;
+  isVerified: boolean;
+  isBusiness: boolean;
+  isPrivate: boolean;
+  category?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  externalUrl?: string;
+  detectedCountry?: string;
+  detectedLanguage?: string;
+  geoConfidence: number;
+  geoSource?: string;
+  scoutTier: string;
+  scoutTierAuto: string;
+  scoutTierManual?: string;
+  dmStatus: string;
+  dmLastSentAt?: string;
+  dmCampaignId?: string;
+  sourcePairIds?: string[];
+  firstSeenAt: string;
+  lastUpdatedAt: string;
+}
+
+export interface DMCampaign {
+  id: string;
+  name: string;
+  brand?: string;
+  platform: Platform;
+  targetCountry?: string;
+  targetTiers?: string[];
+  minFollowers?: number;
+  maxFollowers?: number;
+  messageTemplate: string;
+  dailyLimit: number;
+  maxRetries: number;
+  delayMinSec: number;
+  delayMaxSec: number;
+  status: 'draft' | 'active' | 'paused' | 'completed';
+  totalQueued: number;
+  totalSent: number;
+  totalFailed: number;
+  totalReplied: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DMActionItem {
+  id: number;
+  influencerKey: string;
+  campaignId: string;
+  platform: Platform;
+  accountUsername?: string;
+  messageRendered: string;
+  executeStatus: 'pending' | 'processing' | 'success' | 'failed' | 'skipped';
+  errorMessage?: string;
+  scheduledAt?: string;
+  executedAt?: string;
+  retryCount: number;
+  createdAt: string;
+}
+
+export interface DMAccount {
+  id: number;
+  platform: Platform;
+  username: string;
+  sessionFile?: string;
+  dailySent: number;
+  dailyLimit: number;
+  lastSentAt?: string;
+  lastResetDate?: string;
+  status: 'active' | 'paused' | 'blocked';
+  createdAt: string;
+}
