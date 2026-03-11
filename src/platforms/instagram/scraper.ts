@@ -39,6 +39,9 @@ export class InstagramScraper implements PlatformScraper {
   private proxyRouter: ProxyRouter;
   private rateLimiter: RateLimiter;
   private sessionManager: SessionManager;
+  private apiSuccessCount = 0;
+  private apiAttemptCount = 0;
+  private useApiFirst = true;
 
   private cookieManager: CookieManager;
 
@@ -67,6 +70,8 @@ export class InstagramScraper implements PlatformScraper {
       const region = REGIONS[attempt % REGIONS.length];
       const proxy = this.proxyRouter.getRotatingProxy();
 
+      const sessionId = randomUUID();
+
       try {
         if (attempt > 0) {
           logger.info(`[Instagram] Browser retry #${attempt} (region: ${region}, collected so far: ${yielded})`);
@@ -74,7 +79,6 @@ export class InstagramScraper implements PlatformScraper {
         }
 
         await this.browser.launch({ headless: true });
-        const sessionId = randomUUID();
         const collectedPosts: Post[] = [];
 
         await this.browser.createStealthContext(sessionId, { region, proxy });
@@ -163,7 +167,6 @@ export class InstagramScraper implements PlatformScraper {
         }
 
         await this.browser.closeContext(sessionId);
-        await this.browser.closeAll();
 
         // If we got results, don't retry
         if (yielded > 0) break;
@@ -176,7 +179,7 @@ export class InstagramScraper implements PlatformScraper {
           this.proxyRouter.markBlocked(proxy);
         }
 
-        await this.browser.closeAll();
+        await this.browser.closeContext(sessionId).catch(() => {});
 
         // On last browser retry with no results, try API
         if (attempt === maxBrowserRetries && yielded === 0) {
@@ -215,9 +218,28 @@ export class InstagramScraper implements PlatformScraper {
     }
   }
 
-  /** Get profile with retry + proxy rotation (max 3 attempts) */
+  /** Get profile with API-first + browser fallback */
   async getProfile(username: string, options: ScrapingOptions = {}): Promise<InfluencerProfile> {
-    const maxRetries = 3;
+    // Phase 1: API-first (fast path ~200ms)
+    if (this.useApiFirst) {
+      try {
+        this.apiAttemptCount++;
+        await this.api.initSession();
+        const profile = await this.api.getProfile(username);
+        this.apiSuccessCount++;
+        return profile;
+      } catch (apiError) {
+        logger.debug(`[Instagram] API failed for @${username}: ${(apiError as Error).message}, trying browser`);
+        // Auto-switch: if first 10 attempts have < 50% success, disable API-first
+        if (this.apiAttemptCount >= 10 && (this.apiSuccessCount / this.apiAttemptCount) < 0.5) {
+          logger.warn(`[Instagram] API success rate ${Math.round(this.apiSuccessCount / this.apiAttemptCount * 100)}% — switching to browser-first`);
+          this.useApiFirst = false;
+        }
+      }
+    }
+
+    // Phase 2: Browser fallback (max 2 retries)
+    const maxRetries = 2;
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -227,19 +249,16 @@ export class InstagramScraper implements PlatformScraper {
       try {
         const result = await this.getProfileOnce(username, region, proxy);
         if (attempt > 0) {
-          logger.info(`[Instagram] @${username} succeeded on retry #${attempt} (region: ${region})`);
+          logger.info(`[Instagram] @${username} succeeded on browser retry #${attempt}`);
         }
         return result;
       } catch (error) {
         lastError = error as Error;
-        logger.warn(`[Instagram] @${username} attempt ${attempt + 1}/${maxRetries} failed: ${lastError.message}`);
+        logger.warn(`[Instagram] @${username} browser attempt ${attempt + 1}/${maxRetries} failed: ${lastError.message}`);
 
-        // Mark proxy as blocked if we got rate limited
         if (proxy && (lastError.message.includes('429') || lastError.message.includes('blocked') || lastError.message.includes('login'))) {
           this.proxyRouter.markBlocked(proxy);
         }
-
-        await this.browser.closeAll();
 
         if (attempt < maxRetries - 1) {
           await backoffDelay(attempt, 3000, 15000);
@@ -247,14 +266,7 @@ export class InstagramScraper implements PlatformScraper {
       }
     }
 
-    // Final fallback: API
-    logger.warn(`[Instagram] All browser attempts failed for @${username}, trying API fallback`);
-    try {
-      await this.api.initSession();
-      return this.api.getProfile(username);
-    } catch (apiError) {
-      throw new Error(`All methods failed for @${username}: ${lastError?.message}`);
-    }
+    throw new Error(`All methods failed for @${username}: ${lastError?.message}`);
   }
 
   /** Single profile fetch attempt with specified region and proxy */
@@ -266,80 +278,82 @@ export class InstagramScraper implements PlatformScraper {
 
     let profileData: any = null;
 
-    await this.browser.createStealthContext(sessionId, { region, proxy });
+    try {
+      await this.browser.createStealthContext(sessionId, { region, proxy });
 
-    // Load cookies
-    if (this.cookieManager.hasCookies('instagram')) {
-      const cookies = this.cookieManager.loadCookies('instagram');
-      await this.browser.setCookies(sessionId, this.cookieManager.toPlaywrightCookies(cookies));
-    }
+      // Load cookies
+      if (this.cookieManager.hasCookies('instagram')) {
+        const cookies = this.cookieManager.loadCookies('instagram');
+        await this.browser.setCookies(sessionId, this.cookieManager.toPlaywrightCookies(cookies));
+      }
 
-    const page = await this.browser.createPage(sessionId, {
-      blockMedia: true,
-      interceptResponses: (url, body) => {
-        if (url.includes('web_profile_info') || url.includes('/graphql/query')) {
-          try {
-            const data = JSON.parse(body);
-            const user = data?.data?.user || data?.graphql?.user;
-            if (user && user.username) {
-              profileData = user;
-            }
-          } catch {}
-        }
-      },
-    });
-
-    await page.goto(`https://www.instagram.com/${username}/`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-
-    await randomDelay(3000, 5000);
-
-    // Try to extract from embedded page data
-    if (!profileData) {
-      profileData = await page.evaluate(() => {
-        // Method 1: __additionalDataLoaded
-        for (const key of Object.keys((window as any).__additionalData || {})) {
-          const data = (window as any).__additionalData[key]?.data?.user;
-          if (data) return data;
-        }
-        // Method 2: _sharedData
-        const shared = (window as any)._sharedData;
-        if (shared?.entry_data?.ProfilePage?.[0]?.graphql?.user) {
-          return shared.entry_data.ProfilePage[0].graphql.user;
-        }
-        // Method 3: JSON-LD
-        const jsonLd = document.querySelector('script[type="application/ld+json"]');
-        if (jsonLd) {
-          try { return JSON.parse(jsonLd.textContent || ''); } catch {}
-        }
-        // Method 4: meta tags
-        const desc = document.querySelector('meta[name="description"]')?.getAttribute('content');
-        const title = document.querySelector('title')?.textContent;
-        if (desc) {
-          const match = desc.match(/([\d,.]+[KMB]?) Followers, ([\d,.]+[KMB]?) Following, ([\d,.]+[KMB]?) Posts/i);
-          if (match) {
-            return { _fromMeta: true, description: desc, title, followers: match[1], following: match[2], posts: match[3] };
+      const page = await this.browser.createPage(sessionId, {
+        blockMedia: true,
+        interceptResponses: (url, body) => {
+          if (url.includes('web_profile_info') || url.includes('/graphql/query')) {
+            try {
+              const data = JSON.parse(body);
+              const user = data?.data?.user || data?.graphql?.user;
+              if (user && user.username) {
+                profileData = user;
+              }
+            } catch {}
           }
-        }
-        return null;
+        },
       });
+
+      await page.goto(`https://www.instagram.com/${username}/`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+
+      await randomDelay(3000, 5000);
+
+      // Try to extract from embedded page data
+      if (!profileData) {
+        profileData = await page.evaluate(() => {
+          // Method 1: __additionalDataLoaded
+          for (const key of Object.keys((window as any).__additionalData || {})) {
+            const data = (window as any).__additionalData[key]?.data?.user;
+            if (data) return data;
+          }
+          // Method 2: _sharedData
+          const shared = (window as any)._sharedData;
+          if (shared?.entry_data?.ProfilePage?.[0]?.graphql?.user) {
+            return shared.entry_data.ProfilePage[0].graphql.user;
+          }
+          // Method 3: JSON-LD
+          const jsonLd = document.querySelector('script[type="application/ld+json"]');
+          if (jsonLd) {
+            try { return JSON.parse(jsonLd.textContent || ''); } catch {}
+          }
+          // Method 4: meta tags
+          const desc = document.querySelector('meta[name="description"]')?.getAttribute('content');
+          const title = document.querySelector('title')?.textContent;
+          if (desc) {
+            const match = desc.match(/([\d,.]+[KMB]?) Followers, ([\d,.]+[KMB]?) Following, ([\d,.]+[KMB]?) Posts/i);
+            if (match) {
+              return { _fromMeta: true, description: desc, title, followers: match[1], following: match[2], posts: match[3] };
+            }
+          }
+          return null;
+        });
+      }
+
+      await simulateReading(page, 2000);
+
+      if (!profileData) {
+        throw new Error(`No profile data found for @${username}`);
+      }
+
+      if (profileData._fromMeta) {
+        return this.parseMetaProfile(profileData, username);
+      }
+
+      return this.parseUserProfile(profileData);
+    } finally {
+      await this.browser.closeContext(sessionId);
     }
-
-    await simulateReading(page, 2000);
-    await this.browser.closeContext(sessionId);
-    await this.browser.closeAll();
-
-    if (!profileData) {
-      throw new Error(`No profile data found for @${username}`);
-    }
-
-    if (profileData._fromMeta) {
-      return this.parseMetaProfile(profileData, username);
-    }
-
-    return this.parseUserProfile(profileData);
   }
 
   /** Full hashtag search with profile enrichment */
