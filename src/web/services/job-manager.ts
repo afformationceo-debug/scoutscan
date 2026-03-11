@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
+import pLimit from 'p-limit';
 import { ScrapingEngine } from '../../core/engine.js';
 import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
 import {
@@ -168,55 +169,62 @@ class JobManager extends EventEmitter {
 
         this.sendSSE(jobId, 'profile_start', { total: newUsernames.length, skipped });
 
+        const limit = pLimit(3);
         let consecutiveFailures = 0;
         const MAX_CONSECUTIVE_FAILURES = 5;
         let failedUsernames: string[] = [];
 
-        for (const username of newUsernames) {
-          try {
-            const profile = await engine.getProfile(platform, username);
-            insertProfile(jobId, profile);
-            profilesCount++;
-            consecutiveFailures = 0;
-            this.sendSSE(jobId, 'profile', profile);
-            this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
-          } catch (err) {
-            consecutiveFailures++;
-            failedUsernames.push(username);
-            console.warn(`[enrichment] Failed @${username} (${consecutiveFailures} consecutive): ${(err as Error).message}`);
-            this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
-
-            // If too many consecutive failures, pause longer to avoid IP block
-            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-              console.warn(`[enrichment] ${MAX_CONSECUTIVE_FAILURES} consecutive failures, pausing 30s to recover...`);
-              this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
-              await new Promise(r => setTimeout(r, 30000));
+        const enrichTasks = newUsernames.map(username =>
+          limit(async () => {
+            try {
+              const profile = await engine.getProfile(platform, username);
+              insertProfile(jobId, profile);
+              profilesCount++;
               consecutiveFailures = 0;
+              this.sendSSE(jobId, 'profile', profile);
+              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+            } catch (err) {
+              consecutiveFailures++;
+              failedUsernames.push(username);
+              console.warn(`[enrichment] Failed @${username} (${consecutiveFailures} consecutive): ${(err as Error).message}`);
+              this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
+
+              if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                console.warn(`[enrichment] ${MAX_CONSECUTIVE_FAILURES} consecutive failures, pausing 30s to recover...`);
+                this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
+                await new Promise(r => setTimeout(r, 30000));
+                consecutiveFailures = 0;
+              }
             }
-          }
 
-          // Anti-bot delay: 1-2 seconds
-          const delay = 1000 + Math.random() * 1000;
-          await new Promise(r => setTimeout(r, delay));
-        }
+            // Anti-bot delay (slightly shorter since we're parallel)
+            const delay = 800 + Math.random() * 1200;
+            await new Promise(r => setTimeout(r, delay));
+          })
+        );
 
-        // Retry failed profiles once with longer delays
+        await Promise.allSettled(enrichTasks);
+
         if (failedUsernames.length > 0) {
           console.log(`[enrichment] Retrying ${failedUsernames.length} failed profiles...`);
           this.sendSSE(jobId, 'profile_retry', { count: failedUsernames.length });
 
-          for (const username of failedUsernames) {
-            try {
-              await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
-              const profile = await engine.getProfile(platform, username);
-              insertProfile(jobId, profile);
-              profilesCount++;
-              this.sendSSE(jobId, 'profile', profile);
-              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
-            } catch {
-              console.warn(`[enrichment] Retry also failed for @${username}, skipping`);
-            }
-          }
+          const retryLimit = pLimit(2);
+          const retryTasks = failedUsernames.map(username =>
+            retryLimit(async () => {
+              try {
+                await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+                const profile = await engine.getProfile(platform, username);
+                insertProfile(jobId, profile);
+                profilesCount++;
+                this.sendSSE(jobId, 'profile', profile);
+                this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+              } catch {
+                console.warn(`[enrichment] Retry also failed for @${username}, skipping`);
+              }
+            })
+          );
+          await Promise.allSettled(retryTasks);
         }
       }
 
@@ -260,50 +268,61 @@ class JobManager extends EventEmitter {
     try {
       this.sendSSE(jobId, 'profile_start', { total: usernames.length, skipped: 0 });
 
+      const limit = pLimit(3);
       let consecutiveFailures = 0;
       const MAX_CONSECUTIVE_FAILURES = 5;
       let failedUsernames: string[] = [];
 
-      for (const username of usernames) {
-        try {
-          const profile = await engine.getProfile(platform, username);
-          insertProfile(jobId, profile);
-          profilesCount++;
-          consecutiveFailures = 0;
-          this.sendSSE(jobId, 'profile', profile);
-          this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
-        } catch (err) {
-          consecutiveFailures++;
-          failedUsernames.push(username);
-          console.warn(`[re-enrich] Failed @${username} (${consecutiveFailures}): ${(err as Error).message}`);
-          this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
-
-          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
-            await new Promise(r => setTimeout(r, 30000));
+      const enrichTasks = usernames.map(username =>
+        limit(async () => {
+          try {
+            const profile = await engine.getProfile(platform, username);
+            insertProfile(jobId, profile);
+            profilesCount++;
             consecutiveFailures = 0;
-          }
-        }
+            this.sendSSE(jobId, 'profile', profile);
+            this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
+          } catch (err) {
+            consecutiveFailures++;
+            failedUsernames.push(username);
+            console.warn(`[re-enrich] Failed @${username} (${consecutiveFailures}): ${(err as Error).message}`);
+            this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
 
-        const delay = 1000 + Math.random() * 1000;
-        await new Promise(r => setTimeout(r, delay));
-      }
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+              this.sendSSE(jobId, 'profile_pause', { reason: 'consecutive_failures', pauseSeconds: 30 });
+              await new Promise(r => setTimeout(r, 30000));
+              consecutiveFailures = 0;
+            }
+          }
+
+          // Anti-bot delay (slightly shorter since we're parallel)
+          const delay = 800 + Math.random() * 1200;
+          await new Promise(r => setTimeout(r, delay));
+        })
+      );
+
+      await Promise.allSettled(enrichTasks);
 
       // Retry failed profiles once
       if (failedUsernames.length > 0) {
         this.sendSSE(jobId, 'profile_retry', { count: failedUsernames.length });
-        for (const username of failedUsernames) {
-          try {
-            await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
-            const profile = await engine.getProfile(platform, username);
-            insertProfile(jobId, profile);
-            profilesCount++;
-            this.sendSSE(jobId, 'profile', profile);
-            this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
-          } catch {
-            console.warn(`[re-enrich] Retry also failed for @${username}`);
-          }
-        }
+
+        const retryLimit = pLimit(2);
+        const retryTasks = failedUsernames.map(username =>
+          retryLimit(async () => {
+            try {
+              await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
+              const profile = await engine.getProfile(platform, username);
+              insertProfile(jobId, profile);
+              profilesCount++;
+              this.sendSSE(jobId, 'profile', profile);
+              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
+            } catch {
+              console.warn(`[re-enrich] Retry also failed for @${username}`);
+            }
+          })
+        );
+        await Promise.allSettled(retryTasks);
       }
 
       updateJobStatus(jobId, 'completed', { resultCount: profilesCount });
