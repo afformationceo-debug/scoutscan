@@ -6,7 +6,8 @@ import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
 import {
   createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames,
 } from './db.js';
-import { upsertInfluencer } from './master-db.js';
+import { upsertInfluencer, updateInfluencerGeo } from './master-db.js';
+import { GeoClassifier } from '../../core/geo-classifier.js';
 
 interface SSEClient {
   id: string;
@@ -18,6 +19,19 @@ class JobManager extends EventEmitter {
   private queue: Array<{ jobId: string; run: () => Promise<void> }> = [];
   private running = false;
   private sseClients: SSEClient[] = [];
+  private geoClassifier = new GeoClassifier();
+
+  /** Run GeoClassifier on a profile and persist result */
+  private geoClassify(profile: InfluencerProfile): void {
+    try {
+      const geo = this.geoClassifier.classify(profile);
+      if (geo.confidence >= 0.4) {
+        updateInfluencerGeo(profile.platform, profile.username, geo);
+      }
+    } catch {
+      // GeoClassifier errors should not break enrichment
+    }
+  }
 
   /** Start a hashtag search job */
   startHashtagJob(platform: Platform, hashtag: string, maxResults = 50, enrichProfiles = true): string {
@@ -181,6 +195,7 @@ class JobManager extends EventEmitter {
               const profile = await engine.getProfile(platform, username);
               insertProfile(jobId, profile);
               upsertInfluencer(profile);
+              this.geoClassify(profile);
               profilesCount++;
               consecutiveFailures = 0;
               this.sendSSE(jobId, 'profile', profile);
@@ -251,6 +266,7 @@ class JobManager extends EventEmitter {
       const profile = await engine.getProfile(platform, username);
       insertProfile(jobId, profile);
       upsertInfluencer(profile);
+      this.geoClassify(profile);
       updateJobStatus(jobId, 'completed', { resultCount: 1 });
       this.sendSSE(jobId, 'profile', profile);
       this.sendSSE(jobId, 'complete', { resultCount: 1 });
@@ -320,6 +336,7 @@ class JobManager extends EventEmitter {
               const profile = await engine.getProfile(platform, username);
               insertProfile(jobId, profile);
               upsertInfluencer(profile);
+              this.geoClassify(profile);
               profilesCount++;
               this.sendSSE(jobId, 'profile', profile);
               this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });

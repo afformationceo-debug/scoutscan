@@ -4,7 +4,9 @@ import { CookieManager } from '../../core/cookie-manager.js';
 import { listJobs, getJob, getJobPosts, getJobProfiles, deleteJob, getAllProfiles, getProfileStats, getMissingProfileUsernames } from '../services/db.js';
 import { jobManager } from '../services/job-manager.js';
 import { exportCSV, exportXLSX } from '../services/export.js';
-import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget } from '../services/master-db.js';
+import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget } from '../services/master-db.js';
+import { GeoClassifier } from '../../core/geo-classifier.js';
+import { db } from '../services/db.js';
 
 const api = new Hono();
 const cookieManager = new CookieManager();
@@ -198,6 +200,49 @@ api.get('/master/influencers', (c) => {
 api.get('/master/stats', (c) => {
   const stats = getInfluencerStats();
   return c.json(stats);
+});
+
+// ─── Geo Tagging ───
+
+api.post('/master/geo-tag', (c) => {
+  const geoClassifier = new GeoClassifier();
+  const rows = db.prepare(
+    `SELECT influencer_key, platform, username, full_name, bio, profile_pic_url,
+            followers_count, following_count, posts_count, engagement_rate,
+            is_verified, is_business, is_private, category, contact_email, external_url
+     FROM influencer_master WHERE detected_country IS NULL OR geo_confidence < 0.4`
+  ).all() as any[];
+
+  let tagged = 0;
+  for (const row of rows) {
+    const profile = {
+      platform: row.platform,
+      id: row.influencer_key,
+      username: row.username,
+      fullName: row.full_name || '',
+      bio: row.bio || '',
+      profilePicUrl: row.profile_pic_url || '',
+      followersCount: row.followers_count || 0,
+      followingCount: row.following_count || 0,
+      postsCount: row.posts_count || 0,
+      engagementRate: row.engagement_rate || undefined,
+      isVerified: !!row.is_verified,
+      isBusinessAccount: !!row.is_business,
+      isPrivate: !!row.is_private,
+      category: row.category || undefined,
+      contactEmail: row.contact_email || undefined,
+      externalUrl: row.external_url || undefined,
+      scrapedAt: new Date().toISOString(),
+    };
+
+    const geo = geoClassifier.classify(profile as any);
+    if (geo.confidence >= 0.4) {
+      updateInfluencerGeo(row.platform, row.username, geo);
+      tagged++;
+    }
+  }
+
+  return c.json({ tagged, total: rows.length, message: `Geo-tagged ${tagged}/${rows.length} influencers` });
 });
 
 // ─── Keyword Targets ───
