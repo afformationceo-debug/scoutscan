@@ -273,6 +273,77 @@ function searchPage() {
   };
 }
 
+// ─── Keywords Page Component ───
+
+function keywordsPage() {
+  return {
+    targets: [],
+    loading: false,
+    showAddForm: false,
+    newTarget: {
+      pairId: '',
+      platform: 'instagram',
+      region: '',
+      keyword: '',
+      scrapingCycleHours: 72,
+      maxResultsPerRun: 200,
+    },
+
+    async load() {
+      this.loading = true;
+      const res = await fetch('/api/keywords');
+      const data = await res.json();
+      this.targets = data.targets;
+      this.loading = false;
+    },
+
+    async addKeyword() {
+      if (!this.newTarget.pairId || !this.newTarget.keyword || !this.newTarget.region) {
+        alert('Please fill in Pair ID, Region, and Keyword');
+        return;
+      }
+      await fetch('/api/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.newTarget),
+      });
+      this.showAddForm = false;
+      this.newTarget = { pairId: '', platform: 'instagram', region: '', keyword: '', scrapingCycleHours: 72, maxResultsPerRun: 200 };
+      this.load();
+    },
+
+    async toggleActive(target) {
+      await fetch(`/api/keywords/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !target.isActive }),
+      });
+      this.load();
+    },
+
+    async runNow(target) {
+      try {
+        const res = await fetch(`/api/keywords/${target.pairId}/run`, { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          alert(data.error);
+        } else {
+          alert(`Scraping started for ${target.pairId}`);
+          this.load();
+        }
+      } catch (err) {
+        alert('Failed to start: ' + err.message);
+      }
+    },
+
+    async removeKeyword(id) {
+      if (!confirm('Delete this keyword target?')) return;
+      await fetch(`/api/keywords/${id}`, { method: 'DELETE' });
+      this.load();
+    },
+  };
+}
+
 // ─── Master Data Page Component ───
 
 function dataPage() {

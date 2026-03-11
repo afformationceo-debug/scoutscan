@@ -7,6 +7,7 @@ import { exportCSV, exportXLSX } from '../services/export.js';
 import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget } from '../services/master-db.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
 import { db } from '../services/db.js';
+import { scheduler } from '../../services/scheduler.js';
 
 const api = new Hono();
 const cookieManager = new CookieManager();
@@ -277,6 +278,16 @@ api.delete('/keywords/:id', (c) => {
   const id = parseInt(c.req.param('id'));
   deleteKeywordTarget(id);
   return c.json({ message: 'Deleted' });
+});
+
+api.post('/keywords/:pairId/run', (c) => {
+  const pairId = c.req.param('pairId');
+  try {
+    const jobId = scheduler.runNow(pairId);
+    return c.json({ jobId, message: `Scraping started for ${pairId}` }, 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
 });
 
 export { api };
