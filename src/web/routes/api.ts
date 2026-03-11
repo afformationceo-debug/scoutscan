@@ -4,6 +4,7 @@ import { CookieManager } from '../../core/cookie-manager.js';
 import { listJobs, getJob, getJobPosts, getJobProfiles, deleteJob, getAllProfiles, getProfileStats, getMissingProfileUsernames } from '../services/db.js';
 import { jobManager } from '../services/job-manager.js';
 import { exportCSV, exportXLSX } from '../services/export.js';
+import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget } from '../services/master-db.js';
 
 const api = new Hono();
 const cookieManager = new CookieManager();
@@ -170,6 +171,67 @@ api.get('/profiles/stats', (c) => {
 api.get('/platforms', (c) => {
   const status = cookieManager.getCookieStatus();
   return c.json({ platforms: status });
+});
+
+// ─── Master DB ───
+
+api.post('/master/migrate', (c) => {
+  const count = migrateProfilesToMaster();
+  return c.json({ migrated: count, message: `Migrated ${count} profiles to influencer_master` });
+});
+
+api.get('/master/influencers', (c) => {
+  const platform = c.req.query('platform') || undefined;
+  const country = c.req.query('country') || undefined;
+  const tier = c.req.query('tier') || undefined;
+  const dmStatus = c.req.query('dmStatus') || undefined;
+  const search = c.req.query('search') || undefined;
+  const limit = parseInt(c.req.query('limit') || '100');
+  const offset = parseInt(c.req.query('offset') || '0');
+  const sortBy = c.req.query('sortBy') || 'followers';
+  const order = (c.req.query('order') || 'desc') as 'asc' | 'desc';
+
+  const result = getInfluencers({ platform, country, tier, dmStatus, search, limit, offset, sortBy, order });
+  return c.json(result);
+});
+
+api.get('/master/stats', (c) => {
+  const stats = getInfluencerStats();
+  return c.json(stats);
+});
+
+// ─── Keyword Targets ───
+
+api.get('/keywords', (c) => {
+  const targets = listKeywordTargets();
+  return c.json({ targets });
+});
+
+api.post('/keywords', async (c) => {
+  const body = await c.req.json();
+  const { pairId, platform, region, keyword, scrapingCycleHours, maxResultsPerRun } = body;
+  if (!pairId || !platform || !region || !keyword) {
+    return c.json({ error: 'Missing required fields: pairId, platform, region, keyword' }, 400);
+  }
+  try {
+    const id = createKeywordTarget({ pairId, platform, region, keyword, scrapingCycleHours, maxResultsPerRun });
+    return c.json({ id, message: 'Keyword target created' }, 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+api.patch('/keywords/:id', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const body = await c.req.json();
+  updateKeywordTarget(id, body);
+  return c.json({ message: 'Updated' });
+});
+
+api.delete('/keywords/:id', (c) => {
+  const id = parseInt(c.req.param('id'));
+  deleteKeywordTarget(id);
+  return c.json({ message: 'Deleted' });
 });
 
 export { api };

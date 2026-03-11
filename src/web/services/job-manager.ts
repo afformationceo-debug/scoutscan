@@ -6,6 +6,7 @@ import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
 import {
   createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames,
 } from './db.js';
+import { upsertInfluencer } from './master-db.js';
 
 interface SSEClient {
   id: string;
@@ -179,6 +180,7 @@ class JobManager extends EventEmitter {
             try {
               const profile = await engine.getProfile(platform, username);
               insertProfile(jobId, profile);
+              upsertInfluencer(profile);
               profilesCount++;
               consecutiveFailures = 0;
               this.sendSSE(jobId, 'profile', profile);
@@ -216,6 +218,7 @@ class JobManager extends EventEmitter {
                 await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
                 const profile = await engine.getProfile(platform, username);
                 insertProfile(jobId, profile);
+                upsertInfluencer(profile);
                 profilesCount++;
                 this.sendSSE(jobId, 'profile', profile);
                 this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
@@ -247,6 +250,7 @@ class JobManager extends EventEmitter {
     try {
       const profile = await engine.getProfile(platform, username);
       insertProfile(jobId, profile);
+      upsertInfluencer(profile);
       updateJobStatus(jobId, 'completed', { resultCount: 1 });
       this.sendSSE(jobId, 'profile', profile);
       this.sendSSE(jobId, 'complete', { resultCount: 1 });
@@ -278,6 +282,7 @@ class JobManager extends EventEmitter {
           try {
             const profile = await engine.getProfile(platform, username);
             insertProfile(jobId, profile);
+            upsertInfluencer(profile);
             profilesCount++;
             consecutiveFailures = 0;
             this.sendSSE(jobId, 'profile', profile);
@@ -314,6 +319,7 @@ class JobManager extends EventEmitter {
               await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
               const profile = await engine.getProfile(platform, username);
               insertProfile(jobId, profile);
+              upsertInfluencer(profile);
               profilesCount++;
               this.sendSSE(jobId, 'profile', profile);
               this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: usernames.length });
