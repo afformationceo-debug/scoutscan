@@ -381,18 +381,23 @@ function dataPage() {
       if (this.search) params.set('search', this.search);
 
       const [profileRes, statsRes, missingRes] = await Promise.all([
-        fetch(`/api/profiles?${params}`),
-        fetch('/api/profiles/stats'),
+        fetch(`/api/master/influencers?${params}`),
+        fetch('/api/master/stats'),
         fetch('/api/profiles/missing'),
       ]);
       const profileData = await profileRes.json();
       const statsData = await statsRes.json();
       const missingData = await missingRes.json();
 
-      this.profiles = profileData.profiles;
+      this.profiles = profileData.influencers;
       this.total = profileData.total;
-      this.stats = statsData.stats;
-      this.totalAll = statsData.stats.reduce((sum, s) => sum + s.count, 0);
+      // Master stats format: { total, byCountry, byTier }
+      const byPlatform = {};
+      for (const inf of profileData.influencers) {
+        byPlatform[inf.platform] = (byPlatform[inf.platform] || 0) + 1;
+      }
+      this.stats = Object.entries(byPlatform).map(([platform, count]) => ({ platform, count }));
+      this.totalAll = statsData.total || 0;
       this.missingProfiles = missingData.missing || {};
       this.loading = false;
     },
@@ -506,6 +511,111 @@ function dataPage() {
     exportAll(format) {
       // TODO: implement master export
       alert('Export coming soon. Use per-job export from History page for now.');
+    },
+  };
+}
+
+// ─── Campaigns Page Component ───
+
+function campaignsPage() {
+  return {
+    campaigns: [],
+    loading: false,
+    showCreateForm: false,
+    newCampaign: {
+      name: '',
+      brand: '',
+      platform: 'instagram',
+      targetCountry: '',
+      targetTiersStr: 'S,A',
+      dailyLimit: 40,
+      messageTemplate: '',
+    },
+
+    async load() {
+      this.loading = true;
+      const res = await fetch('/api/campaigns');
+      const data = await res.json();
+      this.campaigns = data.campaigns;
+      this.loading = false;
+    },
+
+    async createCampaign() {
+      if (!this.newCampaign.name || !this.newCampaign.messageTemplate) {
+        alert('Please fill in Campaign Name and Message Template');
+        return;
+      }
+      const targetTiers = this.newCampaign.targetTiersStr.split(',').map(s => s.trim()).filter(Boolean);
+      await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: this.newCampaign.name,
+          brand: this.newCampaign.brand || undefined,
+          platform: this.newCampaign.platform,
+          targetCountry: this.newCampaign.targetCountry || undefined,
+          targetTiers: targetTiers.length > 0 ? targetTiers : undefined,
+          dailyLimit: this.newCampaign.dailyLimit,
+          messageTemplate: this.newCampaign.messageTemplate,
+        }),
+      });
+      this.showCreateForm = false;
+      this.newCampaign = { name: '', brand: '', platform: 'instagram', targetCountry: '', targetTiersStr: 'S,A', dailyLimit: 40, messageTemplate: '' };
+      this.load();
+    },
+
+    async generateQueue(campaignId) {
+      const res = await fetch(`/api/campaigns/${campaignId}/queue`, { method: 'POST' });
+      const data = await res.json();
+      alert(data.message || data.error);
+      this.load();
+    },
+
+    async startCampaign(campaignId) {
+      await fetch(`/api/campaigns/${campaignId}/start`, { method: 'POST' });
+      this.load();
+    },
+
+    async pauseCampaign(campaignId) {
+      await fetch(`/api/campaigns/${campaignId}/pause`, { method: 'POST' });
+      this.load();
+    },
+  };
+}
+
+// ─── Accounts Page Component ───
+
+function accountsPage() {
+  return {
+    accounts: [],
+    loading: false,
+    showAddForm: false,
+    newAccount: { platform: 'instagram', username: '', sessionFile: '' },
+
+    async load() {
+      this.loading = true;
+      const res = await fetch('/api/dm-accounts');
+      const data = await res.json();
+      this.accounts = data.accounts;
+      this.loading = false;
+    },
+
+    async addAccount() {
+      if (!this.newAccount.username) { alert('Username required'); return; }
+      await fetch('/api/dm-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.newAccount),
+      });
+      this.showAddForm = false;
+      this.newAccount = { platform: 'instagram', username: '', sessionFile: '' };
+      this.load();
+    },
+
+    async removeAccount(id) {
+      if (!confirm('Delete this DM account?')) return;
+      await fetch(`/api/dm-accounts/${id}`, { method: 'DELETE' });
+      this.load();
     },
   };
 }

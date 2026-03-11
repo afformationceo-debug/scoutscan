@@ -12,6 +12,16 @@
             class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
       Keywords
     </button>
+    <button @click="activeTab = 'campaigns'"
+            :class="activeTab === 'campaigns' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
+      Campaigns
+    </button>
+    <button @click="activeTab = 'accounts'"
+            :class="activeTab === 'accounts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
+      Accounts
+    </button>
   </div>
 
   <!-- Profiles Tab -->
@@ -129,6 +139,9 @@
               <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Category</th>
               <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Email</th>
               <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">URL</th>
+              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Country</th>
+              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Tier</th>
+              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">DM</th>
               <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
                   @click="sortBy='scraped'; load()">Scraped</th>
             </tr>
@@ -142,42 +155,56 @@
                         x-text="p.platform"></span>
                 </td>
                 <td class="px-2 py-2 font-medium text-indigo-700 whitespace-nowrap" x-text="'@' + p.username"></td>
-                <td class="px-2 py-2 text-gray-900 whitespace-nowrap max-w-[140px] truncate" x-text="p.fullName || '-'"></td>
+                <td class="px-2 py-2 text-gray-900 whitespace-nowrap max-w-[140px] truncate" x-text="p.full_name || '-'"></td>
                 <td class="px-2 py-2 text-gray-600 max-w-[200px]">
                   <p class="line-clamp-2 text-[12px]" x-text="p.bio || '-'"></p>
                 </td>
-                <td class="px-2 py-2 text-right font-medium whitespace-nowrap" x-text="formatNumber(p.followersCount)"></td>
-                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.followingCount)"></td>
-                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.postsCount)"></td>
+                <td class="px-2 py-2 text-right font-medium whitespace-nowrap" x-text="formatNumber(p.followers_count)"></td>
+                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.following_count)"></td>
+                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.posts_count)"></td>
                 <td class="px-2 py-2 text-right whitespace-nowrap">
-                  <span x-text="p.engagementRate != null ? p.engagementRate.toFixed(2) + '%' : '-'"
-                        :class="p.engagementRate >= 3 ? 'text-green-600 font-medium' : p.engagementRate >= 1 ? 'text-indigo-600' : 'text-gray-500'"></span>
+                  <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(2) + '%' : '-'"
+                        :class="p.engagement_rate >= 3 ? 'text-green-600 font-medium' : p.engagement_rate >= 1 ? 'text-indigo-600' : 'text-gray-500'"></span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span x-show="p.isVerified" class="text-blue-500 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.isVerified" class="text-gray-300 text-[11px]">-</span>
+                  <span x-show="p.is_verified" class="text-blue-500 font-bold text-[11px]">Y</span>
+                  <span x-show="!p.is_verified" class="text-gray-300 text-[11px]">-</span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span x-show="p.isBusinessAccount" class="text-amber-600 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.isBusinessAccount" class="text-gray-300 text-[11px]">-</span>
+                  <span x-show="p.is_business" class="text-amber-600 font-bold text-[11px]">Y</span>
+                  <span x-show="!p.is_business" class="text-gray-300 text-[11px]">-</span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span x-show="p.isPrivate" class="text-red-500 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.isPrivate" class="text-gray-300 text-[11px]">-</span>
+                  <span x-show="p.is_private" class="text-red-500 font-bold text-[11px]">Y</span>
+                  <span x-show="!p.is_private" class="text-gray-300 text-[11px]">-</span>
                 </td>
                 <td class="px-2 py-2 text-gray-600 whitespace-nowrap text-[12px]" x-text="(p.category && p.category !== 'None') ? p.category : '-'"></td>
                 <td class="px-2 py-2 whitespace-nowrap text-[12px]">
-                  <a x-show="p.contactEmail" :href="'mailto:' + p.contactEmail"
-                     class="text-indigo-500 hover:underline" x-text="p.contactEmail"></a>
-                  <span x-show="!p.contactEmail" class="text-gray-300">-</span>
+                  <a x-show="p.contact_email" :href="'mailto:' + p.contact_email"
+                     class="text-indigo-500 hover:underline" x-text="p.contact_email"></a>
+                  <span x-show="!p.contact_email" class="text-gray-300">-</span>
                 </td>
                 <td class="px-2 py-2 max-w-[160px] text-[12px]">
-                  <a x-show="p.externalUrl" :href="p.externalUrl" target="_blank"
+                  <a x-show="p.external_url" :href="p.external_url" target="_blank"
                      class="text-indigo-500 hover:underline truncate block"
-                     x-text="p.externalUrl?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
-                  <span x-show="!p.externalUrl" class="text-gray-300">-</span>
+                     x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
+                  <span x-show="!p.external_url" class="text-gray-300">-</span>
                 </td>
-                <td class="px-2 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="formatDate(p.scrapedAt)"></td>
+                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
+                  <span x-text="p.detected_country || '-'"
+                        :class="p.detected_country && p.detected_country !== 'UNKNOWN' ? 'font-medium text-gray-900' : 'text-gray-300'"></span>
+                </td>
+                <td class="px-2 py-2 text-center">
+                  <span class="text-[11px] px-1.5 py-0.5 rounded font-bold"
+                        :class="p.scout_tier === 'S' ? 'bg-amber-100 text-amber-700' : p.scout_tier === 'A' ? 'bg-green-100 text-green-700' : p.scout_tier === 'B' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'"
+                        x-text="p.scout_tier || '-'"></span>
+                </td>
+                <td class="px-2 py-2 text-center">
+                  <span class="text-[11px] px-1.5 py-0.5 rounded font-medium"
+                        :class="p.dm_status === 'sent' ? 'bg-green-100 text-green-600' : p.dm_status === 'replied' ? 'bg-indigo-100 text-indigo-600' : p.dm_status === 'blacklist' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'"
+                        x-text="p.dm_status || 'pending'"></span>
+                </td>
+                <td class="px-2 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="formatDate(p.last_updated_at)"></td>
               </tr>
             </template>
           </tbody>
@@ -311,6 +338,205 @@
                         class="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium hover:bg-red-200">
                   Del
                 </button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Campaigns Tab -->
+  <div x-show="activeTab === 'campaigns'" x-data="campaignsPage()" x-init="load()">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-gray-900">DM Campaigns</h2>
+      <button @click="showCreateForm = !showCreateForm"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+        <span x-text="showCreateForm ? 'Cancel' : 'New Campaign'"></span>
+      </button>
+    </div>
+
+    <!-- Create Campaign Form -->
+    <div x-show="showCreateForm" class="bg-white rounded-lg shadow p-5 mb-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-4">New DM Campaign</h3>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Campaign Name</label>
+          <input type="text" x-model="newCampaign.name" placeholder="Q1 Outreach"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Brand</label>
+          <input type="text" x-model="newCampaign.brand" placeholder="Brand name"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
+          <select x-model="newCampaign.platform" class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+            <option value="instagram">Instagram</option>
+            <option value="twitter">Twitter</option>
+            <option value="tiktok">TikTok</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Target Country</label>
+          <input type="text" x-model="newCampaign.targetCountry" placeholder="TW, US, KR..."
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Target Tiers</label>
+          <input type="text" x-model="newCampaign.targetTiersStr" placeholder="S,A,B"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Daily Limit/Account</label>
+          <input type="number" x-model.number="newCampaign.dailyLimit" min="1" max="100"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div class="col-span-2 md:col-span-3">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Message Template</label>
+          <textarea x-model="newCampaign.messageTemplate" rows="4"
+                    placeholder="Hi @{{username}}! We love your content..."
+                    class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm font-mono"></textarea>
+          <p class="text-[11px] text-gray-400 mt-1">Variables: {{username}}, {{full_name}}, {{followers_count}}, {{platform}}, {{brand}}</p>
+        </div>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button @click="createCampaign()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+          Create Campaign
+        </button>
+      </div>
+    </div>
+
+    <!-- Campaigns List -->
+    <div class="space-y-4">
+      <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
+      <div x-show="!loading && campaigns.length === 0" class="text-center py-12 text-gray-400 bg-white rounded-lg shadow">
+        No campaigns yet. Click "New Campaign" to get started.
+      </div>
+      <template x-for="c in campaigns" :key="c.id">
+        <div class="bg-white rounded-lg shadow p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="font-semibold text-gray-900" x-text="c.name"></h3>
+              <p class="text-xs text-gray-500">
+                <span class="capitalize" x-text="c.platform"></span>
+                <span x-show="c.target_country" x-text="' / ' + c.target_country"></span>
+                <span x-show="c.brand" x-text="' / ' + c.brand"></span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                    :class="c.status === 'active' ? 'bg-green-100 text-green-700' : c.status === 'completed' ? 'bg-blue-100 text-blue-700' : c.status === 'paused' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'"
+                    x-text="c.status"></span>
+              <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)"
+                      class="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-medium hover:bg-indigo-200">Queue</button>
+              <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)"
+                      class="text-[11px] bg-green-100 text-green-700 px-2 py-1 rounded font-medium hover:bg-green-200">Start</button>
+              <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)"
+                      class="text-[11px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium hover:bg-amber-200">Pause</button>
+            </div>
+          </div>
+          <!-- Progress -->
+          <div class="flex items-center gap-4 text-[12px] text-gray-600 mb-2">
+            <span>Queued: <span class="font-medium" x-text="c.total_queued"></span></span>
+            <span>Sent: <span class="font-medium text-green-600" x-text="c.total_sent"></span></span>
+            <span>Failed: <span class="font-medium text-red-500" x-text="c.total_failed"></span></span>
+            <span>Replied: <span class="font-medium text-indigo-600" x-text="c.total_replied"></span></span>
+          </div>
+          <div x-show="c.total_queued > 0" class="w-full bg-gray-200 rounded-full h-2">
+            <div class="bg-green-500 h-2 rounded-full transition-all"
+                 :style="'width: ' + Math.round((c.total_sent / c.total_queued) * 100) + '%'"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Accounts Tab -->
+  <div x-show="activeTab === 'accounts'" x-data="accountsPage()" x-init="load()">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-gray-900">DM Accounts</h2>
+      <button @click="showAddForm = !showAddForm"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+        <span x-text="showAddForm ? 'Cancel' : 'Add Account'"></span>
+      </button>
+    </div>
+
+    <!-- Add Account Form -->
+    <div x-show="showAddForm" class="bg-white rounded-lg shadow p-5 mb-6">
+      <div class="grid grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
+          <select x-model="newAccount.platform" class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+            <option value="instagram">Instagram</option>
+            <option value="twitter">Twitter</option>
+            <option value="tiktok">TikTok</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Username</label>
+          <input type="text" x-model="newAccount.username" placeholder="@username"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Session File (optional)</label>
+          <input type="text" x-model="newAccount.sessionFile" placeholder="/path/to/session.json"
+                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+        </div>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button @click="addAccount()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
+          Add Account
+        </button>
+      </div>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
+      <div x-show="!loading && accounts.length === 0" class="text-center py-12 text-gray-400">
+        No DM accounts configured. Click "Add Account" to get started.
+      </div>
+      <table x-show="!loading && accounts.length > 0" class="min-w-full divide-y divide-gray-200 text-[13px]">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Platform</th>
+            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Username</th>
+            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Daily Sent</th>
+            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Daily Limit</th>
+            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Last Sent</th>
+            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Status</th>
+            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <template x-for="a in accounts" :key="a.id">
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-2 whitespace-nowrap">
+                <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium capitalize"
+                      :class="a.platform === 'instagram' ? 'bg-pink-50 text-pink-600' : a.platform === 'twitter' ? 'bg-sky-50 text-sky-600' : 'bg-gray-100 text-gray-600'"
+                      x-text="a.platform"></span>
+              </td>
+              <td class="px-3 py-2 font-medium text-indigo-700" x-text="'@' + a.username"></td>
+              <td class="px-3 py-2 text-center">
+                <span class="font-medium" x-text="a.daily_sent"></span>
+                <span class="text-gray-400">/ <span x-text="a.daily_limit"></span></span>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <div class="w-16 mx-auto bg-gray-200 rounded-full h-1.5">
+                  <div class="bg-indigo-500 h-1.5 rounded-full" :style="'width: ' + Math.min(100, Math.round(a.daily_sent / a.daily_limit * 100)) + '%'"></div>
+                </div>
+              </td>
+              <td class="px-3 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="a.last_sent_at ? formatDate(a.last_sent_at) : 'Never'"></td>
+              <td class="px-3 py-2 text-center">
+                <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium"
+                      :class="a.status === 'active' ? 'bg-green-100 text-green-700' : a.status === 'blocked' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'"
+                      x-text="a.status"></span>
+              </td>
+              <td class="px-3 py-2 text-center">
+                <button @click="removeAccount(a.id)"
+                        class="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium hover:bg-red-200">Del</button>
               </td>
             </tr>
           </template>
