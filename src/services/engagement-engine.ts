@@ -29,8 +29,8 @@ export class EngagementEngine {
     influencerKey: string,
     campaignId: string,
     options: { like?: boolean; comment?: boolean; commentCategory?: string } = {}
-  ): Promise<{ liked: boolean; commented: boolean }> {
-    const result = { liked: false, commented: false };
+  ): Promise<{ liked: boolean; commented: boolean; likedPostUrl?: string; commentText?: string; commentedPostUrl?: string }> {
+    const result: { liked: boolean; commented: boolean; likedPostUrl?: string; commentText?: string; commentedPostUrl?: string } = { liked: false, commented: false };
     const now = new Date().toISOString();
 
     // Find a recent post from this influencer
@@ -53,6 +53,7 @@ export class EngagementEngine {
         await this.likePost(platform, accountUsername, postUrl);
         this.updateEngagementStatus(influencerKey, campaignId, 'like', 'success');
         result.liked = true;
+        result.likedPostUrl = postUrl;
       } catch (err) {
         this.updateEngagementStatus(influencerKey, campaignId, 'like', 'failed', (err as Error).message);
       }
@@ -68,6 +69,8 @@ export class EngagementEngine {
           this.updateEngagementStatus(influencerKey, campaignId, 'comment', 'success');
           this.incrementTemplateUsage(comment.id);
           result.commented = true;
+          result.commentText = rendered;
+          result.commentedPostUrl = postUrl;
         }
       } catch (err) {
         this.updateEngagementStatus(influencerKey, campaignId, 'comment', 'failed', (err as Error).message);

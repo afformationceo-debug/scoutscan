@@ -61,21 +61,36 @@ export class CookieHealthService {
     db.prepare(`UPDATE dm_accounts SET cookie_status = 'checking', cookie_last_checked_at = ? WHERE platform = ? AND username = ?`)
       .run(now, platform, username);
 
-    // Validate cookies
-    const validation = this.cookieManager.validateCookies(platform, username);
+    // Validate cookies — check both per-account AND platform-level cookie files
+    let validation = this.cookieManager.validateCookies(platform, username);
+
+    // Fallback: if per-account cookies are missing but platform-level cookies exist, check those
+    if (!validation.valid && !this.cookieManager.hasAccountCookies(platform, username) && this.cookieManager.hasCookies(platform)) {
+      const platformCookies = this.cookieManager.loadCookies(platform);
+      const criticalNames = this.cookieManager.getCriticalCookieNames(platform);
+      const cookieNames = new Set(platformCookies.map(c => c.name));
+      const missing = criticalNames.filter(name => !cookieNames.has(name));
+      validation = { valid: missing.length === 0, missingCookies: missing, expiresAt: validation.expiresAt };
+    }
 
     const status: CookieHealthStatus = {
       platform,
       username,
-      status: validation.valid ? 'valid' : (this.cookieManager.hasAccountCookies(platform, username) ? 'expired' : 'unknown'),
+      status: validation.valid ? 'valid' : (this.cookieManager.hasAccountCookies(platform, username) || this.cookieManager.hasCookies(platform) ? 'expired' : 'unknown'),
       missingCookies: validation.missingCookies,
       expiresAt: validation.expiresAt,
       lastCheckedAt: now,
     };
 
-    // Update DB
+    // Update cookie_status in DB (NOT the main 'status' field — that's managed by DM engine)
     db.prepare(`UPDATE dm_accounts SET cookie_status = ?, cookie_last_checked_at = ?, cookie_expires_at = ? WHERE platform = ? AND username = ?`)
       .run(status.status, now, status.expiresAt || null, platform, username);
+
+    // If valid, auto-reactivate accounts that were marked cookie_expired
+    if (status.status === 'valid') {
+      db.prepare(`UPDATE dm_accounts SET status = 'active' WHERE platform = ? AND username = ? AND status = 'cookie_expired'`)
+        .run(platform, username);
+    }
 
     // Detect status change → broadcast
     if (!previousStatus || previousStatus.status !== status.status) {

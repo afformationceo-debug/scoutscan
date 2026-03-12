@@ -10,7 +10,13 @@ function formatNumber(num) {
 function formatDate(dateStr) {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('ko-KR') + ' ' + d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' ' + d.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateKST(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' ' + d.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function exportJob(jobId, format) {
@@ -97,7 +103,7 @@ function searchPage() {
     activityLogs: [],
 
     addLog(msg) {
-      const ts = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
       this.activityLogs.push(`[${ts}] ${msg}`);
       if (this.activityLogs.length > 100) this.activityLogs.shift();
       this.$nextTick(() => {
@@ -509,7 +515,7 @@ function dataPage() {
     },
 
     addEnrichLog(msg) {
-      const ts = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
       this.enrichLogs.push(`[${ts}] ${msg}`);
       if (this.enrichLogs.length > 100) this.enrichLogs.shift();
       this.$nextTick(() => {
@@ -812,10 +818,13 @@ function campaignsPage() {
       campaign._targetsLoading = false;
     },
 
+    cookieUploadResult: null,
+
     uploadCookieDialog(campaign) {
       this.cookieUploadCampaign = campaign;
       this.cookieSenderUsername = campaign.sender_username || '';
       this.cookieJsonText = '';
+      this.cookieUploadResult = null;
       this.showCookieUpload = true;
     },
 
@@ -841,10 +850,12 @@ function campaignsPage() {
       });
       const data = await res.json();
       if (data.error) {
-        alert('오류: ' + data.error);
+        this.cookieUploadResult = { status: 'error', message: '오류: ' + data.error };
       } else {
-        alert(`쿠키 업로드 완료. 상태: ${data.status}` + (data.missingCookies?.length ? ` (누락: ${data.missingCookies.join(', ')})` : ''));
-        this.showCookieUpload = false;
+        const msg = data.status === 'valid'
+          ? '쿠키 업로드 완료! 상태: 유효함 (Valid)'
+          : `쿠키 업로드됨. 상태: ${data.status}` + (data.missingCookies?.length ? ` (누락: ${data.missingCookies.join(', ')})` : '');
+        this.cookieUploadResult = { status: data.status, message: msg, expiresAt: data.expiresAt };
         this.load();
       }
     },
@@ -1171,7 +1182,7 @@ function campaignLive(campaignId) {
       if (this.eventSource) this.eventSource.close();
       this.eventSource = new EventSource(`/api/campaigns/${campaignId}/stream`);
 
-      const ts = () => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = () => new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       const addLive = (type, data, msg) => {
         this.liveEvents.unshift({ type, ...data, ts: ts(), msg });
@@ -1204,9 +1215,13 @@ function campaignLive(campaignId) {
       });
       this.eventSource.addEventListener('engagement', (e) => {
         const d = JSON.parse(e.data);
-        this.currentStatus = `@${d.recipient} 참여 완료${d.liked ? ' (좋아요)' : ''}${d.commented ? ' (댓글)' : ''}`;
+        let details = [];
+        if (d.liked) details.push(d.likedPostUrl ? `좋아요(${d.likedPostUrl.split('/').filter(Boolean).pop()})` : '좋아요');
+        if (d.commented) details.push(d.commentText ? `댓글: "${d.commentText.slice(0,30)}"` : '댓글');
+        const detailStr = details.join(' + ');
+        this.currentStatus = `@${d.recipient} 참여 완료 → ${detailStr}`;
         this.currentPhase = 'engaged';
-        addLive('engagement', d, `참여 @${d.recipient}`);
+        addLive('engagement', d, `@${d.recipient} → ${detailStr}`);
       });
       this.eventSource.addEventListener('round_complete', (e) => {
         const d = JSON.parse(e.data);

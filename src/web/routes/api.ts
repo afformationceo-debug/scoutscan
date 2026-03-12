@@ -692,16 +692,22 @@ api.post('/dm-accounts/:id/upload-cookies', async (c) => {
   if (!account) return c.json({ error: 'Account not found' }, 404);
 
   try {
-    const body = await c.req.parseBody();
-    const file = body['file'];
-
     let cookieData: string;
-    if (file && typeof file === 'object' && 'text' in file) {
-      cookieData = await (file as File).text();
-    } else if (typeof body.cookies === 'string') {
-      cookieData = body.cookies;
+    const contentType = c.req.header('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      const jsonBody = await c.req.json();
+      cookieData = typeof jsonBody.cookies === 'string' ? jsonBody.cookies : JSON.stringify(jsonBody.cookies);
     } else {
-      return c.json({ error: 'No cookie data provided. Send as file upload or JSON body with "cookies" field' }, 400);
+      const body = await c.req.parseBody();
+      const file = body['file'];
+      if (file && typeof file === 'object' && 'text' in file) {
+        cookieData = await (file as File).text();
+      } else if (typeof body.cookies === 'string') {
+        cookieData = body.cookies;
+      } else {
+        return c.json({ error: 'No cookie data provided. Send as JSON body or file upload with "cookies" field' }, 400);
+      }
     }
 
     // Parse and save cookies

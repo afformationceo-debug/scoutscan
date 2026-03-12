@@ -173,6 +173,9 @@ export class DMEngine {
                 recipient: item.recipient_username,
                 liked: engResult.liked,
                 commented: engResult.commented,
+                likedPostUrl: engResult.likedPostUrl || null,
+                commentText: engResult.commentText || null,
+                commentedPostUrl: engResult.commentedPostUrl || null,
               });
             }
             // Wait 30-60s after engagement before DM
