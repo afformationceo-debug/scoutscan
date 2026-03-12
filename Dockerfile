@@ -24,16 +24,20 @@ RUN npm install tsx
 COPY src/ ./src/
 COPY tsconfig.json ./
 COPY CLAUDE.md ./
+COPY start.sh ./
 
-# Create data and cookies directories
+# Copy seed data (initial DB + cookies for first deploy)
+COPY seed/ ./seed/
+
+# Create data and cookies directories (volumes will mount here)
 RUN mkdir -p data cookies/instagram
 
 # Expose port
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Start server
-CMD ["node", "--max-http-header-size=65536", "--import", "tsx/esm", "src/web/server.ts"]
+# Start via seed script
+CMD ["bash", "start.sh"]

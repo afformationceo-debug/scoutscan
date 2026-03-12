@@ -1,0 +1,80 @@
+[
+  {
+    "name": "datr",
+    "value": "4GmyaXFg2XKWLRovLJHihkpb",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "ds_user_id",
+    "value": "71299085927",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "csrftoken",
+    "value": "XptvDcis7i-URXYLoWP56N",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "ig_did",
+    "value": "30B47B34-53DA-40B1-91A4-F5329BE05FC9",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "mid",
+    "value": "abJp4AAEAAHPqlYdt0xwxSmYTGmb",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "ps_l",
+    "value": "1",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "ps_n",
+    "value": "1",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "IDE",
+    "value": "AHWqTUmgSd_rIMiuzeqTFaOtDwzLS_ZIQTLx9nLTRsflmP7yx0rKkcDHjCEo_xPP",
+    "domain": ".doubleclick.net",
+    "path": "/"
+  },
+  {
+    "name": "dpr",
+    "value": "2",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "wd",
+    "value": "1920x1080",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "fr",
+    "value": "05BRiYiZfMUdokuQv.AWflTeYwT1VRwl3IKQPg_P0y_gI_tPIi6fRUzEEgcl-wINx6nP0.Bpsswg..AAA.0.0.Bpstmy.AWcg72UbU2CfRZVXhgmdqQyWDR4",
+    "domain": ".facebook.com",
+    "path": "/"
+  },
+  {
+    "name": "sessionid",
+    "value": "71299085927%3A6V3NyO2H8ohTKv%3A5%3AAYhTfblFU7akeC_1YqOKSAflu_cIwCeUqOzKjHlsgA",
+    "domain": ".instagram.com",
+    "path": "/"
+  },
+  {
+    "name": "rur",
+    "value": "\"PRN\\05471299085927\\0541804865446:01fe9b69d2876f91f3c10d1a137a2fefed43b82b13eb82610d592fe05430c6a198fa4f93\"",
+    "domain": ".instagram.com",
+    "path": "/"
+  }
+]
