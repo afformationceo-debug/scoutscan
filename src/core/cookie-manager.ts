@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 
@@ -174,5 +174,129 @@ export class CookieManager {
     }
 
     return result;
+  }
+
+  /** Get the list of critical cookies for a platform */
+  getCriticalCookieNames(platform: string): string[] {
+    const critical: Record<string, string[]> = {
+      instagram: ['sessionid', 'csrftoken', 'ds_user_id'],
+      twitter: ['auth_token', 'ct0', 'twid'],
+      tiktok: ['sessionid', 'tt_csrf_token', 'msToken', 'ttwid'],
+      youtube: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO'],
+      xiaohongshu: ['web_session', 'xsecappid'],
+      linkedin: ['li_at', 'JSESSIONID', 'bcookie'],
+    };
+    return critical[platform] || [];
+  }
+
+  // ─── Per-Account Cookie Methods ───
+
+  /** Get file path for per-account cookies */
+  private getAccountCookiePath(platform: string, username: string): string {
+    return join(this.cookieDir, platform, `${username}.json`);
+  }
+
+  /** Load cookies for a specific account */
+  loadAccountCookies(platform: string, username: string): CookieEntry[] {
+    const filePath = this.getAccountCookiePath(platform, username);
+    if (!existsSync(filePath)) {
+      logger.debug(`No cookie file for ${platform}/@${username}`);
+      return [];
+    }
+
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        return parsed.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain || `.${platform}.com`,
+          path: c.path || '/',
+          expires: c.expirationDate ? Math.floor(c.expirationDate) : c.expires,
+          httpOnly: c.httpOnly || false,
+          secure: c.secure !== false,
+          sameSite: this.normalizeSameSite(c.sameSite),
+        }));
+      }
+
+      if (typeof parsed === 'object') {
+        const domainMap: Record<string, string> = {
+          instagram: '.instagram.com',
+          twitter: '.x.com',
+          tiktok: '.tiktok.com',
+          youtube: '.youtube.com',
+          xiaohongshu: '.xiaohongshu.com',
+          linkedin: '.linkedin.com',
+        };
+        return Object.entries(parsed).map(([name, value]) => ({
+          name,
+          value: String(value),
+          domain: domainMap[platform] || `.${platform}.com`,
+          path: '/',
+          secure: true,
+          sameSite: 'None' as const,
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      logger.error(`Failed to parse account cookies for ${platform}/@${username}: ${(error as Error).message}`);
+      return [];
+    }
+  }
+
+  /** Save cookies for a specific account */
+  saveAccountCookies(platform: string, username: string, cookies: CookieEntry[]): void {
+    const dir = join(this.cookieDir, platform);
+    mkdirSync(dir, { recursive: true });
+
+    const filePath = this.getAccountCookiePath(platform, username);
+    writeFileSync(filePath, JSON.stringify(cookies, null, 2), 'utf-8');
+    logger.info(`Account cookies saved: ${platform}/@${username} (${cookies.length} entries)`);
+  }
+
+  /** Check if cookies exist for a specific account */
+  hasAccountCookies(platform: string, username: string): boolean {
+    return existsSync(this.getAccountCookiePath(platform, username));
+  }
+
+  /** Validate cookies for a specific account — check critical cookies exist and aren't expired */
+  validateCookies(platform: string, username: string): {
+    valid: boolean;
+    missingCookies: string[];
+    expiresAt?: string;
+  } {
+    const cookies = this.loadAccountCookies(platform, username);
+    const critical = this.getCriticalCookieNames(platform);
+    const cookieNames = new Set(cookies.map(c => c.name));
+
+    const missingCookies = critical.filter(name => !cookieNames.has(name));
+
+    if (cookies.length === 0) {
+      return { valid: false, missingCookies: critical };
+    }
+
+    // Check expiration of critical cookies
+    let earliestExpiry: number | undefined;
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const cookie of cookies) {
+      if (critical.includes(cookie.name) && cookie.expires) {
+        if (cookie.expires < now) {
+          missingCookies.push(`${cookie.name}(expired)`);
+        } else {
+          if (!earliestExpiry || cookie.expires < earliestExpiry) {
+            earliestExpiry = cookie.expires;
+          }
+        }
+      }
+    }
+
+    const valid = missingCookies.length === 0;
+    const expiresAt = earliestExpiry ? new Date(earliestExpiry * 1000).toISOString() : undefined;
+
+    return { valid, missingCookies, expiresAt };
   }
 }

@@ -44,6 +44,7 @@ export class LinkedInScraper implements PlatformScraper {
 
   async *searchByHashtag(tag: string, options: SearchOptions = {}): AsyncGenerator<Post> {
     const maxResults = options.maxResults || 30;
+    const until = options.until || null;
     let yielded = 0;
 
     try {
@@ -92,7 +93,11 @@ export class LinkedInScraper implements PlatformScraper {
         await randomDelay(3000, 6000);
 
         while (collectedPosts.length > 0 && yielded < maxResults) {
-          yield collectedPosts.shift()!;
+          const post = collectedPosts.shift()!;
+          if (until && post.timestamp && post.timestamp > until) {
+            continue;
+          }
+          yield post;
           yielded++;
         }
 

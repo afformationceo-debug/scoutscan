@@ -6,8 +6,10 @@ import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
 import {
   createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames,
 } from './db.js';
-import { upsertInfluencer, updateInfluencerGeo } from './master-db.js';
+import { upsertInfluencer, updateInfluencerGeo, getKeywordTarget, updateKeywordTarget } from './master-db.js';
+import { registry } from '../../services/registry.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
+import { AIClassifier } from '../../services/ai-classifier.js';
 
 interface SSEClient {
   id: string;
@@ -16,8 +18,7 @@ interface SSEClient {
 }
 
 class JobManager extends EventEmitter {
-  private queue: Array<{ jobId: string; run: () => Promise<void> }> = [];
-  private running = false;
+  private jobLimit = pLimit(3);
   private sseClients: SSEClient[] = [];
   private geoClassifier = new GeoClassifier();
 
@@ -34,7 +35,7 @@ class JobManager extends EventEmitter {
   }
 
   /** Start a hashtag search job */
-  startHashtagJob(platform: Platform, hashtag: string, maxResults = 50, enrichProfiles = true): string {
+  startHashtagJob(platform: Platform, hashtag: string, maxResults = 50, enrichProfiles = true, pairId?: string, since?: string, until?: string): string {
     const jobId = randomUUID();
     createJob({
       id: jobId,
@@ -46,12 +47,13 @@ class JobManager extends EventEmitter {
       createdAt: new Date().toISOString(),
     });
 
-    this.queue.push({
-      jobId,
-      run: () => this.runHashtagJob(jobId, platform, hashtag, maxResults, enrichProfiles),
+    this.jobLimit(() => this.runHashtagJob(jobId, platform, hashtag, maxResults, enrichProfiles, since, pairId, until)).catch(error => {
+      updateJobStatus(jobId, 'failed', {
+        error: (error as Error).message,
+      });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
     });
 
-    this.processQueue();
     return jobId;
   }
 
@@ -68,12 +70,13 @@ class JobManager extends EventEmitter {
       createdAt: new Date().toISOString(),
     });
 
-    this.queue.push({
-      jobId,
-      run: () => this.runProfileJob(jobId, platform, username),
+    this.jobLimit(() => this.runProfileJob(jobId, platform, username)).catch(error => {
+      updateJobStatus(jobId, 'failed', {
+        error: (error as Error).message,
+      });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
     });
 
-    this.processQueue();
     return jobId;
   }
 
@@ -95,12 +98,13 @@ class JobManager extends EventEmitter {
       createdAt: new Date().toISOString(),
     });
 
-    this.queue.push({
-      jobId,
-      run: () => this.runReEnrichJob(jobId, platform, missing),
+    this.jobLimit(() => this.runReEnrichJob(jobId, platform, missing)).catch(error => {
+      updateJobStatus(jobId, 'failed', {
+        error: (error as Error).message,
+      });
+      this.sendSSE(jobId, 'error', { message: (error as Error).message });
     });
 
-    this.processQueue();
     return jobId;
   }
 
@@ -123,26 +127,7 @@ class JobManager extends EventEmitter {
     this.sseClients = this.sseClients.filter(c => c.id !== clientId);
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.running || this.queue.length === 0) return;
-
-    this.running = true;
-    const task = this.queue.shift()!;
-
-    try {
-      await task.run();
-    } catch (error) {
-      updateJobStatus(task.jobId, 'failed', {
-        error: (error as Error).message,
-      });
-      this.sendSSE(task.jobId, 'error', { message: (error as Error).message });
-    } finally {
-      this.running = false;
-      this.processQueue();
-    }
-  }
-
-  private async runHashtagJob(jobId: string, platform: Platform, hashtag: string, maxResults: number, enrichProfiles = true): Promise<void> {
+  private async runHashtagJob(jobId: string, platform: Platform, hashtag: string, maxResults: number, enrichProfiles = true, since?: string, pairId?: string, until?: string): Promise<void> {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
@@ -155,7 +140,7 @@ class JobManager extends EventEmitter {
       if (!scraper) throw new Error(`Platform not available: ${platform}`);
 
       // Phase 1: Collect posts
-      for await (const post of scraper.searchByHashtag(hashtag, { maxResults })) {
+      for await (const post of scraper.searchByHashtag(hashtag, { maxResults, since, until })) {
         count++;
         collectedPosts.push(post);
         insertPost(jobId, post);
@@ -246,8 +231,45 @@ class JobManager extends EventEmitter {
         }
       }
 
+      // Phase 3: AI Classification (if OpenAI key available)
+      if (profilesCount > 0) {
+        const aiKey = process.env.OPENAI_API_KEY;
+        if (aiKey) {
+          try {
+            this.sendSSE(jobId, 'progress', { phase: 'ai_classify', count: 0, total: profilesCount });
+            const classifier = new AIClassifier(aiKey);
+            const aiCount = await classifier.classifyAll({
+              onProgress: (done, total) => {
+                this.sendSSE(jobId, 'progress', { phase: 'ai_classify', count: done, total });
+              },
+            });
+            const assigned = classifier.autoAssignToCampaigns();
+            console.log(`[JobManager] AI classified ${aiCount} profiles, assigned ${assigned} to campaigns`);
+            this.sendSSE(jobId, 'ai_complete', { classified: aiCount, assigned });
+          } catch (err) {
+            console.warn(`[JobManager] AI classification failed:`, (err as Error).message);
+          }
+        }
+      }
+
       updateJobStatus(jobId, 'completed', { resultCount: count });
       this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount });
+
+      // Update keyword target totalExtracted
+      if (pairId) {
+        const target = getKeywordTarget(pairId);
+        if (target) {
+          updateKeywordTarget(target.id, { totalExtracted: (target.totalExtracted || 0) + count });
+        }
+      }
+
+      // Post-completion: auto-replenish DM queues with newly scraped profiles
+      try {
+        const added = registry.dmEngine?.autoReplenishQueues() ?? 0;
+        if (added > 0) console.log(`[JobManager] Auto-replenished ${added} DM queue targets after job ${jobId.slice(0, 8)}`);
+      } catch (err) {
+        console.warn(`[JobManager] DM replenish failed:`, (err as Error).message);
+      }
     } catch (error) {
       updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: count });
       this.sendSSE(jobId, 'error', { message: (error as Error).message });

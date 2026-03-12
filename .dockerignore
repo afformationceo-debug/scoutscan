@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.git/
+.env
+*.log
+output/
+.DS_Store
+.claude/
+.playwright-mcp/
+docs/
+posts-tab.png

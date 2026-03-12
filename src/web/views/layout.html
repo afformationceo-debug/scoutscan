@@ -1,46 +1,141 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-gray-50">
+<html lang="ko" class="h-full">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Social Scraper Dashboard</title>
+  <title>Social Scraper</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            dark: { body: '#0F1015', card: '#181B21', hover: '#222730', border: '#2F3541', subtle: '#13141A' },
+            accent: { DEFAULT: '#BFF009', hover: '#D4FF3D', dim: 'rgba(191,240,9,0.12)' },
+            success: '#4CE275', error: '#E85B56', warning: '#FFB74D', info: '#60A5FA',
+            kaia: { green: '#7EDA6C', muted: '#919DB5', text: '#ADB6C8' },
+          },
+          fontFamily: {
+            sans: ['Inter', 'Pretendard', 'system-ui', 'sans-serif'],
+            heading: ['Manrope', 'Pretendard', 'system-ui', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'monospace'],
+          },
+          maxWidth: { container: '1440px' },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <style>
     [x-cloak] { display: none !important; }
-    .nav-active { background-color: rgb(79 70 229); color: white; }
+    body { background: #0F1015; color: #FFFFFF; }
+    /* Scrollbar — KaiaScan style */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #13141A; }
+    ::-webkit-scrollbar-thumb { background: #2F3541; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3D4556; }
+    /* Data table */
+    .data-table th { color: #919DB5; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .data-table td { color: #ADB6C8; font-size: 13px; }
+    .data-table tr:hover td { background: #222730; }
+    .data-table .num { font-family: 'IBM Plex Mono', monospace; }
+    /* Badge */
+    .badge { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 9999px; }
+    .badge-s { background: rgba(255,183,77,0.12); color: #FFB74D; }
+    .badge-a { background: rgba(76,226,117,0.12); color: #4CE275; }
+    .badge-b { background: rgba(96,165,250,0.12); color: #60A5FA; }
+    .badge-c { background: rgba(145,157,181,0.10); color: #919DB5; }
+    .badge-success { background: rgba(76,226,117,0.12); color: #4CE275; }
+    .badge-error { background: rgba(232,91,86,0.12); color: #E85B56; }
+    .badge-warning { background: rgba(255,183,77,0.12); color: #FFB74D; }
+    .badge-info { background: rgba(96,165,250,0.12); color: #60A5FA; }
+    .badge-accent { background: rgba(191,240,9,0.12); color: #BFF009; }
+    .badge-ig { background: rgba(236,72,153,0.12); color: #EC4899; }
+    .badge-tw { background: rgba(56,189,248,0.12); color: #38BDF8; }
+    .badge-tt { background: rgba(255,255,255,0.08); color: #FFFFFF; }
+    .badge-yt { background: rgba(239,68,68,0.12); color: #EF4444; }
+    .badge-xhs { background: rgba(251,146,60,0.12); color: #FB923C; }
+    /* Nav */
+    .nav-link { color: #919DB5; transition: all 0.2s; font-size: 13px; }
+    .nav-link:hover { color: #FFFFFF; }
+    .nav-active { color: #BFF009 !important; border-bottom: 2px solid #BFF009; }
+    /* Inputs — KaiaScan dark input style */
+    input, select, textarea {
+      background: #13141A !important; border: 1px solid #2F3541 !important; color: #FFFFFF !important;
+      font-size: 13px; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input::placeholder, textarea::placeholder { color: #919DB5 !important; opacity: 0.6; }
+    input:focus, select:focus, textarea:focus {
+      outline: none !important; border-color: #BFF009 !important;
+      box-shadow: 0 0 0 2px rgba(191,240,9,0.15) !important;
+    }
+    /* Buttons */
+    .btn-accent { background: #BFF009; color: #0F1015; font-weight: 700; letter-spacing: -0.01em; transition: all 0.2s; }
+    .btn-accent:hover { background: #D4FF3D; box-shadow: 0 0 20px rgba(191,240,9,0.2); }
+    .btn-accent:disabled { opacity: 0.35; box-shadow: none; }
+    /* Progress bar */
+    .progress-bar { background: #2F3541; border-radius: 9999px; overflow: hidden; }
+    .progress-bar-fill { background: linear-gradient(90deg, #BFF009, #4CE275); border-radius: 9999px; transition: width 0.4s ease; }
+    /* Tab */
+    .tab-btn { color: #919DB5; border-bottom: 2px solid transparent; padding: 12px 18px; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+    .tab-btn:hover { color: #ADB6C8; }
+    .tab-active { color: #BFF009 !important; border-color: #BFF009 !important; }
+    /* Guide box */
+    .guide-box { background: linear-gradient(135deg, rgba(191,240,9,0.06), rgba(76,226,117,0.04)); border: 1px solid rgba(191,240,9,0.15); border-radius: 12px; padding: 16px 20px; }
+    .guide-box p { color: #ADB6C8; font-size: 13px; line-height: 1.7; }
+    .guide-box strong { color: #BFF009; font-weight: 600; }
+    /* Card glow on hover */
+    .card-glow:hover { border-color: rgba(191,240,9,0.25); box-shadow: 0 0 30px rgba(191,240,9,0.05); }
+    /* Pulse dot animation */
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+    /* Live indicator */
+    .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #4CE275; display: inline-block; }
+    .live-dot::after { content: ''; display: block; width: 6px; height: 6px; border-radius: 50%; background: #4CE275; animation: pulse-dot 1.5s ease-in-out infinite; }
   </style>
 </head>
-<body class="h-full" x-data="app()">
+<body class="h-full font-sans antialiased" x-data="app()">
   <div class="min-h-full">
-    <!-- Navigation -->
-    <nav class="bg-indigo-600">
-      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex h-16 items-center justify-between">
-          <div class="flex items-center">
-            <span class="text-white font-bold text-xl">Social Scraper</span>
-            <div class="ml-10 flex items-baseline space-x-4">
-              <a href="/" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 {{page}}"
-                 :class="{'nav-active': '{{page}}' === 'dashboard'}">Dashboard</a>
-              <a href="/search" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                 :class="{'nav-active': '{{page}}' === 'search'}">Search</a>
-              <a href="/profiles" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                 :class="{'nav-active': '{{page}}' === 'profiles'}">Profiles</a>
-              <a href="/data" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                 :class="{'nav-active': '{{page}}' === 'data'}">Data</a>
-              <a href="/history" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                 :class="{'nav-active': '{{page}}' === 'history'}">History</a>
-              <a href="/settings" class="rounded-md px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-                 :class="{'nav-active': '{{page}}' === 'settings'}">Settings</a>
+    <!-- Navigation — KaiaScan-inspired sticky nav -->
+    <nav class="border-b border-dark-border bg-dark-card/90 backdrop-blur-md sticky top-0 z-50">
+      <div class="mx-auto max-w-container px-6">
+        <div class="flex h-14 items-center justify-between">
+          <div class="flex items-center gap-10">
+            <a href="/" class="flex items-center gap-1.5">
+              <div class="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
+                <svg class="w-4 h-4 text-dark-body" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+              </div>
+              <span class="font-heading font-bold text-[17px] tracking-tight"><span class="text-accent">Social</span> <span class="text-white">Scraper</span></span>
+            </a>
+            <div class="flex items-center gap-0.5">
+              <a href="/" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'dashboard'}">대시보드</a>
+              <a href="/search" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'search'}">검색</a>
+              <a href="/profiles" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'profiles'}">프로필 조회</a>
+              <a href="/data" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'data'}">데이터 관리</a>
+              <a href="/history" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'history'}">작업 이력</a>
+              <a href="/settings" class="nav-link px-3 py-4 font-medium"
+                 :class="{'nav-active': '{{page}}' === 'settings'}">설정</a>
             </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="live-dot"></span>
+            <span class="text-[11px] text-kaia-green font-medium">실시간</span>
           </div>
         </div>
       </div>
     </nav>
 
     <!-- Main Content -->
-    <main class="mx-auto max-w-7xl py-6 px-4 sm:px-6 lg:px-8">
+    <main class="mx-auto max-w-container py-6 px-6">
       {{content}}
     </main>
   </div>

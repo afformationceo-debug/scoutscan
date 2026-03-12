@@ -1,20 +1,27 @@
 import { db } from '../web/services/db.js';
-
-// instagram-private-api is CJS, use dynamic import
-let IgApiClient: any = null;
-async function getIgApi() {
-  if (!IgApiClient) {
-    const mod = await import('instagram-private-api');
-    IgApiClient = mod.IgApiClient;
-  }
-  return IgApiClient;
-}
+import { createDMRound, completeDMRound } from '../web/services/master-db.js';
+import { sseManager } from '../web/services/sse-manager.js';
+import { BrowserContextPool } from './browser-context-pool.js';
+import { sendInstagramDM } from './dm-platforms/instagram-dm.js';
+import { sendTwitterDM } from './dm-platforms/twitter-dm.js';
+import { sendTikTokDM } from './dm-platforms/tiktok-dm.js';
+import pLimit from 'p-limit';
 
 export class DMEngine {
   private activeCampaigns = new Map<string, boolean>(); // campaignId -> running
-  private accountMessageCount = new Map<string, number>(); // account username -> messages since last rotation
+  private pool: BrowserContextPool;
+  private _engagementEngine: any = null;
 
-  /** Process a campaign -- main send loop */
+  constructor(pool: BrowserContextPool) {
+    this.pool = pool;
+  }
+
+  /** Lazily set engagement engine to avoid circular deps */
+  setEngagementEngine(engine: any): void {
+    this._engagementEngine = engine;
+  }
+
+  /** Process a campaign -- parallel account execution */
   async processCampaign(campaignId: string): Promise<void> {
     if (this.activeCampaigns.get(campaignId)) {
       throw new Error('Campaign already running');
@@ -22,122 +29,49 @@ export class DMEngine {
     this.activeCampaigns.set(campaignId, true);
 
     try {
-      // Get campaign details
       const campaign = db.prepare('SELECT * FROM dm_campaigns WHERE id = ?').get(campaignId) as any;
       if (!campaign) throw new Error('Campaign not found');
 
-      // Update status to active
       db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
         .run('active', new Date().toISOString(), campaignId);
 
-      // Get pending queue items
-      const queueItems = db.prepare(
-        `SELECT q.*, im.username as recipient_username, im.full_name as recipient_name
-         FROM dm_action_queue q
-         JOIN influencer_master im ON q.influencer_key = im.influencer_key
-         WHERE q.campaign_id = ? AND q.execute_status = 'pending'
-         ORDER BY q.id`
-      ).all(campaignId) as any[];
+      // Get all active accounts for this campaign's platform
+      const accounts = db.prepare(
+        `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' ORDER BY daily_sent ASC`
+      ).all(campaign.platform) as any[];
 
-      if (queueItems.length === 0) {
-        console.log(`[DMEngine] No pending items for campaign ${campaignId}`);
+      if (accounts.length === 0) {
+        console.warn('[DMEngine] No active accounts available');
         db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
-          .run('completed', new Date().toISOString(), campaignId);
+          .run('paused', new Date().toISOString(), campaignId);
         return;
       }
 
-      console.log(`[DMEngine] Processing ${queueItems.length} items for campaign ${campaign.name}`);
-      let sentCount = 0;
-      let currentAccount: any = null;
-      let sessionSentCount = 0;
+      // Launch parallel account processing (each account sequential, accounts in parallel)
+      const accountLimit = pLimit(accounts.length);
+      const accountTasks = accounts.map(account =>
+        accountLimit(() => this.processAccountLoop(campaignId, campaign, account))
+      );
 
-      for (const item of queueItems) {
-        // Check if paused
-        if (!this.activeCampaigns.get(campaignId)) {
-          console.log(`[DMEngine] Campaign ${campaignId} paused`);
-          break;
-        }
+      await Promise.allSettled(accountTasks);
 
-        // Get available account (rotate every 10 messages)
-        if (!currentAccount || (this.accountMessageCount.get(currentAccount.username) || 0) >= 10) {
-          currentAccount = this.getAvailableAccount(campaign.platform);
-          if (!currentAccount) {
-            console.warn('[DMEngine] No available accounts, stopping');
-            break;
-          }
-          this.accountMessageCount.set(currentAccount.username, 0);
-          console.log(`[DMEngine] Switched to account @${currentAccount.username}`);
-        }
+      // Retry failed items (up to max_retries)
+      const retryable = db.prepare(
+        `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND execute_status = 'failed' AND retry_count < ?`
+      ).get(campaignId, campaign.max_retries || 2) as any;
 
-        // Mark as processing
-        db.prepare('UPDATE dm_action_queue SET execute_status = ?, account_username = ? WHERE id = ?')
-          .run('processing', currentAccount.username, item.id);
-
-        try {
-          // Send DM
-          if (campaign.platform === 'instagram') {
-            await this.sendInstagramDM(currentAccount, item.recipient_username, item.message_rendered);
-          } else {
-            await this.sendBrowserDM(campaign.platform, currentAccount, item.recipient_username, item.message_rendered);
-          }
-
-          // Success
-          const now = new Date().toISOString();
-          db.prepare(
-            `UPDATE dm_action_queue SET execute_status = 'success', executed_at = ? WHERE id = ?`
-          ).run(now, item.id);
-
-          // Update influencer_master dm_status
-          db.prepare(
-            `UPDATE influencer_master SET dm_status = 'sent', dm_last_sent_at = ?, dm_campaign_id = ?, last_updated_at = ? WHERE influencer_key = ?`
-          ).run(now, campaignId, now, item.influencer_key);
-
-          // Update account counter
-          db.prepare(
-            `UPDATE dm_accounts SET daily_sent = daily_sent + 1, last_sent_at = ? WHERE platform = ? AND username = ?`
-          ).run(now, campaign.platform, currentAccount.username);
-
-          // Update campaign counter
-          db.prepare(
-            `UPDATE dm_campaigns SET total_sent = total_sent + 1, updated_at = ? WHERE id = ?`
-          ).run(now, campaignId);
-
-          sentCount++;
-          sessionSentCount++;
-          this.accountMessageCount.set(currentAccount.username, (this.accountMessageCount.get(currentAccount.username) || 0) + 1);
-
-          console.log(`[DMEngine] Sent #${sentCount} to @${item.recipient_username} via @${currentAccount.username}`);
-
-        } catch (err) {
-          const errMsg = (err as Error).message;
-          db.prepare(
-            `UPDATE dm_action_queue SET execute_status = 'failed', error_message = ?, retry_count = retry_count + 1 WHERE id = ?`
-          ).run(errMsg, item.id);
-          db.prepare(
-            `UPDATE dm_campaigns SET total_failed = total_failed + 1, updated_at = ? WHERE id = ?`
-          ).run(new Date().toISOString(), campaignId);
-
-          console.warn(`[DMEngine] Failed to send to @${item.recipient_username}: ${errMsg}`);
-
-          // If account seems blocked, mark it
-          if (errMsg.includes('blocked') || errMsg.includes('spam') || errMsg.includes('challenge')) {
-            db.prepare(`UPDATE dm_accounts SET status = 'blocked' WHERE platform = ? AND username = ?`)
-              .run(campaign.platform, currentAccount.username);
-            currentAccount = null; // Force rotation
-          }
-        }
-
-        // Anti-bot delay (random between campaign's min and max delay)
-        const minDelay = (campaign.delay_min_sec || 45) * 1000;
-        const maxDelay = (campaign.delay_max_sec || 120) * 1000;
-        const delay = minDelay + Math.random() * (maxDelay - minDelay);
-        await new Promise(r => setTimeout(r, delay));
-
-        // Cooldown after every 20 sends in session
-        if (sessionSentCount > 0 && sessionSentCount % 20 === 0) {
-          const cooldown = 15 * 60 * 1000 + Math.random() * 15 * 60 * 1000; // 15-30 min
-          console.log(`[DMEngine] Cooldown ${Math.round(cooldown / 60000)}min after ${sessionSentCount} sends`);
-          await new Promise(r => setTimeout(r, cooldown));
+      if (retryable.cnt > 0) {
+        console.log(`[DMEngine] Retrying ${retryable.cnt} failed targets...`);
+        db.prepare(
+          `UPDATE dm_action_queue SET execute_status = 'pending', account_username = NULL WHERE campaign_id = ? AND execute_status = 'failed' AND retry_count < ?`
+        ).run(campaignId, campaign.max_retries || 2);
+        // Re-run with retries
+        const retryAccounts = db.prepare(
+          `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' ORDER BY daily_sent ASC`
+        ).all(campaign.platform) as any[];
+        if (retryAccounts.length > 0) {
+          const retryLimit = pLimit(retryAccounts.length);
+          await Promise.allSettled(retryAccounts.map(a => retryLimit(() => this.processAccountLoop(campaignId, campaign, a))));
         }
       }
 
@@ -149,13 +83,258 @@ export class DMEngine {
       if (remaining.cnt === 0) {
         db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
           .run('completed', new Date().toISOString(), campaignId);
+      } else {
+        // Still pending items, keep active
+        db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
+          .run('active', new Date().toISOString(), campaignId);
       }
 
-      console.log(`[DMEngine] Campaign ${campaign.name}: ${sentCount} sent, ${remaining.cnt} remaining`);
-
+      console.log(`[DMEngine] Campaign ${campaign.name}: ${remaining.cnt} remaining`);
     } finally {
       this.activeCampaigns.delete(campaignId);
     }
+  }
+
+  /** Per-account sequential processing loop */
+  private async processAccountLoop(campaignId: string, campaign: any, account: any): Promise<void> {
+    let sentCount = 0;
+    let failedCount = 0;
+    let engagedCount = 0;
+
+    // Create a new round for this account
+    const roundId = createDMRound(campaignId, account.username, 0);
+
+    try {
+      let sessionSentCount = 0;
+
+      while (this.activeCampaigns.get(campaignId)) {
+        // Get next matching target for this account
+        const item = this.getMatchingTarget(campaignId, campaign, account);
+        if (!item) {
+          console.log(`[DMEngine] @${account.username}: no more matching targets`);
+          break;
+        }
+
+        // Check daily limit
+        const accountState = db.prepare(
+          `SELECT daily_sent, daily_limit FROM dm_accounts WHERE id = ?`
+        ).get(account.id) as any;
+        if (accountState.daily_sent >= accountState.daily_limit) {
+          console.log(`[DMEngine] @${account.username}: daily limit reached (${accountState.daily_sent}/${accountState.daily_limit})`);
+          break;
+        }
+
+        // Mark as processing, assign to this account
+        db.prepare('UPDATE dm_action_queue SET execute_status = ?, account_username = ?, round_id = ? WHERE id = ?')
+          .run('processing', account.username, roundId, item.id);
+
+        sseManager.broadcast('campaign:' + campaignId, 'status', {
+          phase: 'processing',
+          message: `@${item.recipient_username} 처리 중...`,
+          recipient: item.recipient_username,
+        });
+
+        // Step 1: Engagement before DM (if enabled)
+        const engageBeforeDm = account.engage_before_dm || 0;
+        if (engageBeforeDm && this._engagementEngine) {
+          try {
+            const engResult = await this._engagementEngine.engageWithInfluencer(
+              campaign.platform,
+              account.username,
+              item.influencer_key,
+              campaignId,
+              {
+                like: true,
+                comment: !!account.comment_template_category,
+                commentCategory: account.comment_template_category || undefined,
+              }
+            );
+            if (engResult.liked || engResult.commented) {
+              engagedCount++;
+              db.prepare('UPDATE dm_action_queue SET engagement_status = ? WHERE id = ?')
+                .run('engaged', item.id);
+              sseManager.broadcast('campaign:' + campaignId, 'engagement', {
+                account: account.username,
+                recipient: item.recipient_username,
+                liked: engResult.liked,
+                commented: engResult.commented,
+              });
+            }
+            // Wait 30-60s after engagement before DM
+            const engDelay = 30000 + Math.random() * 30000;
+            const engDelaySec = Math.round(engDelay / 1000);
+            sseManager.broadcast('campaign:' + campaignId, 'status', {
+              phase: 'engage_wait',
+              message: `@${item.recipient_username} 참여 후 ${engDelaySec}초 대기...`,
+              delaySec: engDelaySec,
+              recipient: item.recipient_username,
+            });
+            await new Promise(r => setTimeout(r, engDelay));
+          } catch (err) {
+            console.warn(`[DMEngine] Engagement failed for ${item.influencer_key}: ${(err as Error).message}`);
+          }
+        }
+
+        // Step 2: Send DM — all platforms use browser-based DM modules
+        try {
+          await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered);
+
+          // Success
+          const now = new Date().toISOString();
+          db.prepare(`UPDATE dm_action_queue SET execute_status = 'success', executed_at = ? WHERE id = ?`)
+            .run(now, item.id);
+          db.prepare(`UPDATE influencer_master SET dm_status = 'sent', dm_last_sent_at = ?, dm_campaign_id = ?, last_updated_at = ? WHERE influencer_key = ?`)
+            .run(now, campaignId, now, item.influencer_key);
+          db.prepare(`UPDATE dm_accounts SET daily_sent = daily_sent + 1, last_sent_at = ? WHERE id = ?`)
+            .run(now, account.id);
+          db.prepare(`UPDATE dm_campaigns SET total_sent = total_sent + 1, updated_at = ? WHERE id = ?`)
+            .run(now, campaignId);
+
+          sentCount++;
+          sessionSentCount++;
+          console.log(`[DMEngine] @${account.username} sent #${sentCount} to @${item.recipient_username}`);
+
+          // Broadcast via SSE
+          sseManager.broadcast('campaign:' + campaignId, 'dm_sent', {
+            account: account.username,
+            recipient: item.recipient_username,
+            sentCount,
+          });
+        } catch (err) {
+          const errMsg = (err as Error).message;
+          db.prepare(`UPDATE dm_action_queue SET execute_status = 'failed', error_message = ?, retry_count = retry_count + 1 WHERE id = ?`)
+            .run(errMsg, item.id);
+          db.prepare(`UPDATE dm_campaigns SET total_failed = total_failed + 1, updated_at = ? WHERE id = ?`)
+            .run(new Date().toISOString(), campaignId);
+
+          failedCount++;
+          console.warn(`[DMEngine] @${account.username} failed to @${item.recipient_username}: ${errMsg}`);
+
+          sseManager.broadcast('campaign:' + campaignId, 'dm_failed', {
+            account: account.username,
+            recipient: item.recipient_username,
+            error: errMsg.slice(0, 100),
+            failedCount,
+          });
+
+          // Cookie expiration detection → mark account + broadcast
+          if (errMsg.includes('cookie_expired')) {
+            db.prepare(`UPDATE dm_accounts SET status = 'cookie_expired', cookie_status = 'expired' WHERE id = ?`)
+              .run(account.id);
+            sseManager.broadcast('cookie-health', 'expired', {
+              platform: campaign.platform,
+              username: account.username,
+            });
+            console.warn(`[DMEngine] @${account.username} cookie expired, stopping`);
+            break;
+          }
+
+          // Account block detection
+          if (errMsg.includes('blocked') || errMsg.includes('spam') || errMsg.includes('challenge')) {
+            db.prepare(`UPDATE dm_accounts SET status = 'blocked' WHERE id = ?`).run(account.id);
+            console.warn(`[DMEngine] @${account.username} appears blocked, stopping`);
+            break;
+          }
+        }
+
+        // Anti-bot delay
+        const minDelay = (campaign.delay_min_sec || 45) * 1000;
+        const maxDelay = (campaign.delay_max_sec || 120) * 1000;
+        const delay = minDelay + Math.random() * (maxDelay - minDelay);
+        const delaySec = Math.round(delay / 1000);
+        sseManager.broadcast('campaign:' + campaignId, 'status', {
+          phase: 'delay',
+          message: `다음 DM까지 ${delaySec}초 대기 중...`,
+          delaySec,
+          sentCount,
+          failedCount,
+        });
+        await new Promise(r => setTimeout(r, delay));
+
+        // Cooldown after every 20 sends
+        if (sessionSentCount > 0 && sessionSentCount % 20 === 0) {
+          const cooldown = 15 * 60 * 1000 + Math.random() * 15 * 60 * 1000;
+          const cooldownMin = Math.round(cooldown / 60000);
+          console.log(`[DMEngine] @${account.username} cooldown ${cooldownMin}min after ${sessionSentCount} sends`);
+          sseManager.broadcast('campaign:' + campaignId, 'status', {
+            phase: 'cooldown',
+            message: `${sessionSentCount}건 발송 후 ${cooldownMin}분 쿨다운...`,
+            cooldownMin,
+          });
+          await new Promise(r => setTimeout(r, cooldown));
+        }
+      }
+    } finally {
+      // Step 3: Complete round
+      completeDMRound(roundId, sentCount, failedCount, engagedCount);
+      console.log(`[DMEngine] @${account.username} round complete: sent=${sentCount} failed=${failedCount} engaged=${engagedCount}`);
+      sseManager.broadcast('campaign:' + campaignId, 'round_complete', {
+        account: account.username,
+        sentCount,
+        failedCount,
+        engagedCount,
+      });
+    }
+  }
+
+  /** Route DM to the correct platform module */
+  private async sendDM(platform: string, account: any, recipientUsername: string, message: string): Promise<void> {
+    switch (platform) {
+      case 'instagram':
+        await sendInstagramDM(this.pool, account, recipientUsername, message);
+        break;
+      case 'twitter':
+        await sendTwitterDM(this.pool, account, recipientUsername, message);
+        break;
+      case 'tiktok':
+        await sendTikTokDM(this.pool, account, recipientUsername, message);
+        break;
+      default:
+        throw new Error(`DM not supported for platform: ${platform}`);
+    }
+  }
+
+  /** Get next matching target for a specific account (per-account filtering + real-time assignment) */
+  private getMatchingTarget(campaignId: string, campaign: any, account: any): any | null {
+    const conditions: string[] = [
+      `q.campaign_id = ?`,
+      `q.execute_status = 'pending'`,
+      `q.account_username IS NULL`, // Not yet assigned
+    ];
+    const params: any[] = [campaignId];
+
+    // Per-account targeting filters
+    if (account.target_country) {
+      conditions.push('im.detected_country = ?');
+      params.push(account.target_country);
+    }
+    if (account.target_tiers) {
+      try {
+        const tiers = JSON.parse(account.target_tiers);
+        if (tiers.length > 0) {
+          conditions.push(`im.scout_tier IN (${tiers.map(() => '?').join(',')})`);
+          params.push(...tiers);
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    if (account.target_min_followers) {
+      conditions.push('im.followers_count >= ?');
+      params.push(account.target_min_followers);
+    }
+    if (account.target_max_followers) {
+      conditions.push('im.followers_count <= ?');
+      params.push(account.target_max_followers);
+    }
+
+    const where = conditions.join(' AND ');
+    return db.prepare(`
+      SELECT q.*, im.username as recipient_username, im.full_name as recipient_name
+      FROM dm_action_queue q
+      JOIN influencer_master im ON q.influencer_key = im.influencer_key
+      WHERE ${where}
+      ORDER BY q.id
+      LIMIT 1
+    `).get(...params) as any || null;
   }
 
   /** Pause a running campaign */
@@ -173,12 +352,10 @@ export class DMEngine {
     const conditions: string[] = ['dm_status = \'pending\''];
     const params: any[] = [];
 
-    if (campaign.platform) {
-      conditions.push('platform = ?');
-      params.push(campaign.platform);
-    }
+    if (campaign.platform) { conditions.push('platform = ?'); params.push(campaign.platform); }
     if (campaign.target_country) {
-      conditions.push('detected_country = ?');
+      // Use AI country if available, fall back to geo-detected country
+      conditions.push('UPPER(COALESCE(ai_country, detected_country)) = UPPER(?)');
       params.push(campaign.target_country);
     }
     if (campaign.target_tiers) {
@@ -186,24 +363,31 @@ export class DMEngine {
       conditions.push(`scout_tier IN (${tiers.map(() => '?').join(',')})`);
       params.push(...tiers);
     }
-    if (campaign.min_followers) {
-      conditions.push('followers_count >= ?');
-      params.push(campaign.min_followers);
-    }
-    if (campaign.max_followers) {
-      conditions.push('followers_count <= ?');
-      params.push(campaign.max_followers);
-    }
+    if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
+    if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
 
     // Exclude already queued
     conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE campaign_id = ?)`);
     params.push(campaignId);
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const influencers = db.prepare(
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    const candidates = db.prepare(
       `SELECT * FROM influencer_master ${where} ORDER BY followers_count DESC LIMIT 1000`
     ).all(...params) as any[];
+
+    // Filter: prefer AI classification, fall back to keyword-based analysis
+    const influencers = candidates.filter(inf => {
+      // If AI has classified this profile, use AI result
+      if (inf.ai_classified_at) {
+        return inf.ai_is_influencer === 1;
+      }
+      // Fall back to keyword-based business detection
+      return !this.isRealBusiness(inf);
+    });
+    const filtered = candidates.length - influencers.length;
+    if (filtered > 0) {
+      console.log(`[DMEngine] Filtered ${filtered} business/agency profiles from ${candidates.length} candidates`);
+    }
 
     const now = new Date().toISOString();
     const insertStmt = db.prepare(`
@@ -218,11 +402,45 @@ export class DMEngine {
       queued++;
     }
 
-    // Update campaign total_queued
     db.prepare('UPDATE dm_campaigns SET total_queued = total_queued + ?, updated_at = ? WHERE id = ?')
       .run(queued, now, campaignId);
 
     return queued;
+  }
+
+  /** Auto-replenish queues: add new profiles to active campaigns */
+  autoReplenishQueues(): number {
+    const activeCampaigns = db.prepare(
+      `SELECT * FROM dm_campaigns WHERE status IN ('active', 'paused') AND total_queued > 0`
+    ).all() as any[];
+
+    let totalAdded = 0;
+    for (const campaign of activeCampaigns) {
+      try {
+        const added = this.generateQueue(campaign.id);
+        if (added > 0) {
+          console.log(`[DMEngine] Replenished ${added} targets for campaign ${campaign.name}`);
+          totalAdded += added;
+        }
+      } catch (err) {
+        console.warn(`[DMEngine] Replenish failed for ${campaign.id}: ${(err as Error).message}`);
+      }
+    }
+    return totalAdded;
+  }
+
+  /** Get IDs of currently active campaigns (before recovery) */
+  getActiveCampaignIds(): string[] {
+    const rows = db.prepare(`SELECT id FROM dm_campaigns WHERE status = 'active'`).all() as any[];
+    return rows.map(r => r.id);
+  }
+
+  /** Recover stuck campaigns on server restart */
+  recoverStuckCampaigns(): number {
+    const result = db.prepare(
+      `UPDATE dm_campaigns SET status = 'paused', updated_at = ? WHERE status = 'active'`
+    ).run(new Date().toISOString());
+    return result.changes || 0;
   }
 
   /** Render message template with influencer data */
@@ -236,74 +454,60 @@ export class DMEngine {
       .replace(/\{\{campaign_name\}\}/g, influencer.campaign_name || '');
   }
 
+  /**
+   * Detect if a profile is a real business/clinic/agency (not an influencer).
+   * Uses bio text + category analysis rather than just the is_business flag,
+   * since many influencers also use business accounts.
+   */
+  private isRealBusiness(inf: any): boolean {
+    const bio = (inf.bio || '').toLowerCase();
+    const category = (inf.category || '').toLowerCase();
+    const username = (inf.username || '').toLowerCase();
+
+    // Business category keywords (strong signal)
+    const bizCategories = ['brand', 'product/service', 'health/beauty', 'medical', 'shopping'];
+    const hasBizCategory = bizCategories.some(c => category.includes(c));
+
+    // Bio keywords indicating real businesses (clinics, shops, agencies, media)
+    const businessKeywords = [
+      // Japanese
+      'クリニック', '皮膚科', '病院', '医院', '整形', '公式', '予約', '施術',
+      '美容外科', '美容皮膚科', 'アートメイク', '専門店', '公式line', '公式ライン',
+      '営業時間', '予約制', '予約受付', '看板', '開院', '料金',
+      // Korean
+      '클리닉', '피부과', '병원', '의원', '성형', '공식', '예약',
+      // English
+      'clinic', 'dermatology', 'hospital', 'official account', 'book now',
+      'appointment', 'surgery', 'our service', 'we offer',
+      // Brand/media/agency indicators
+      '公式instagram', '公式アカウント', 'オフィシャル', '株式会社',
+      '有限会社', '合同会社', '事務所', 'agency', 'management',
+      '編集部', '雑誌', 'メディア', '出版',
+    ];
+
+    const hasBizKeyword = businessKeywords.some(kw => bio.includes(kw.toLowerCase()));
+
+    // Strong username patterns (clinic/official in username = almost certainly business)
+    const strongUsernamePatterns = [/clinic/i, /official$/i, /skincare$/i, /_skin$/i];
+    const hasStrongUsername = strongUsernamePatterns.some(p => p.test(username));
+
+    // Strong: bio keywords match → definitely business
+    if (hasBizKeyword) return true;
+
+    // Strong: "clinic" or "official" in username → definitely business
+    if (hasStrongUsername) return true;
+
+    // Medium: business category + weak username signals → likely business
+    const weakUsernamePatterns = [/_global/i, /_md/i, /\.md/i, /\.ps/i];
+    const hasWeakUsername = weakUsernamePatterns.some(p => p.test(username));
+    if (hasBizCategory && hasWeakUsername) return true;
+
+    return false;
+  }
+
   private formatNumber(num: number): string {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toString();
   }
-
-  /** Get an available DM account */
-  private getAvailableAccount(platform: string): any | null {
-    // Lazy reset if new day
-    const today = new Date().toISOString().slice(0, 10);
-    db.prepare(
-      `UPDATE dm_accounts SET daily_sent = 0, last_reset_date = ? WHERE platform = ? AND (last_reset_date IS NULL OR last_reset_date < ?)`
-    ).run(today, platform, today);
-
-    const account = db.prepare(
-      `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' AND daily_sent < daily_limit ORDER BY daily_sent ASC LIMIT 1`
-    ).get(platform) as any;
-
-    return account || null;
-  }
-
-  /** Send DM via Instagram Private API (mobile API emulation) */
-  private async sendInstagramDM(account: any, recipientUsername: string, message: string): Promise<void> {
-    const ApiClient = await getIgApi();
-    const ig = new ApiClient();
-
-    ig.state.generateDevice(account.username);
-
-    // Load session from file if exists
-    if (account.session_file) {
-      try {
-        const fs = await import('fs');
-        const sessionData = JSON.parse(fs.readFileSync(account.session_file, 'utf-8'));
-        await ig.state.deserialize(sessionData);
-      } catch {
-        console.warn(`[DMEngine] Failed to load session for @${account.username}, will need re-login`);
-      }
-    }
-
-    // Ensure logged in
-    try {
-      await ig.account.currentUser();
-    } catch {
-      // Need to login - this requires username/password which we don't store
-      // For now, session file must be valid
-      throw new Error(`Session expired for @${account.username}, please re-authenticate`);
-    }
-
-    // Find user ID for recipient
-    const userInfo = await ig.user.searchExact(recipientUsername);
-    if (!userInfo) throw new Error(`User not found: @${recipientUsername}`);
-
-    // Get or create thread
-    const thread = ig.entity.directThread([userInfo.pk.toString()]);
-
-    // Send message
-    await thread.broadcastText(message);
-  }
-
-  /** Send DM via browser automation (fallback for non-Instagram platforms) */
-  private async sendBrowserDM(_platform: string, _account: any, _recipientUsername: string, _message: string): Promise<void> {
-    // Placeholder for Playwright-based DM sending
-    // This would use StealthBrowser to:
-    // 1. Navigate to recipient's profile
-    // 2. Click message/DM button
-    // 3. Type and send message
-    throw new Error(`Browser DM not yet implemented for ${_platform}. Use Instagram for now.`);
-  }
 }
-
-export const dmEngine = new DMEngine();

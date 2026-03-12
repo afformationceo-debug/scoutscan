@@ -1,87 +1,109 @@
+<!-- Guide Box -->
+<div class="guide-box mb-6">
+  <p><strong>대시보드</strong>에서는 플랫폼 쿠키 상태, 빠른 검색, 최근 작업 현황을 한눈에 확인할 수 있습니다. 스크래핑을 시작하려면 <strong>데이터 관리 → 키워드</strong> 탭에서 국가×키워드 페어를 등록하세요.</p>
+</div>
+
+<!-- Cookie Health Banner -->
+<div x-data="cookieHealthBanner()" x-init="init()">
+  <template x-if="expiredAccounts.length > 0">
+    <div class="bg-error/10 border border-error/30 rounded-lg p-4 mb-6">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-error font-semibold text-sm">쿠키 만료 경고</span>
+        <span class="badge badge-error text-xs" x-text="expiredAccounts.length + '개 계정'"></span>
+      </div>
+      <div class="space-y-1">
+        <template x-for="a in expiredAccounts" :key="a.platform + ':' + a.username">
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-kaia-text">
+              <span class="capitalize font-medium text-white" x-text="a.platform"></span>
+              <span class="text-accent" x-text="'@' + a.username"></span>
+              <span x-show="a.missingCookies && a.missingCookies.length > 0" class="text-kaia-muted text-xs ml-2"
+                    x-text="'누락: ' + a.missingCookies.join(', ')"></span>
+            </span>
+            <a href="/data?tab=accounts" class="text-accent text-xs hover:text-accent-hover">수정</a>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+</div>
+
 <!-- Platform Status Cards -->
 <div x-data="platformStatus()" x-init="load()">
-  <h2 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
+  <h2 class="text-2xl font-heading font-bold text-white mb-6">대시보드</h2>
 
   <!-- Platform cards -->
-  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
     <template x-for="p in platforms" :key="p.platform">
-      <div class="bg-white rounded-lg shadow p-4">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow hover:border-accent/30 transition-colors">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="font-semibold text-gray-700 capitalize" x-text="p.platform"></h3>
-          <span class="text-xs px-2 py-1 rounded-full"
-                :class="p.hasCookies ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-                x-text="p.hasCookies ? 'Ready' : 'No cookies'"></span>
+          <h3 class="font-semibold text-white text-sm capitalize" x-text="p.platform"></h3>
+          <span class="badge"
+                :class="p.hasCookies ? 'badge-success' : 'badge-error'"
+                x-text="p.hasCookies ? '정상' : '쿠키 없음'"></span>
         </div>
-        <p class="text-xs text-gray-500" x-text="p.cookieCount + ' cookies loaded'"></p>
+        <p class="text-xs text-kaia-muted" x-text="p.cookieCount + '개 쿠키 로드됨'"></p>
       </div>
     </template>
   </div>
 
   <!-- Quick Search -->
-  <div class="bg-white rounded-lg shadow p-6 mb-8">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Hashtag Search</h3>
-    <form @submit.prevent="quickSearch()" class="flex gap-4">
-      <select x-model="searchPlatform" class="rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-8 card-glow">
+    <h3 class="text-base font-heading font-semibold text-white mb-4">빠른 해시태그 검색</h3>
+    <form @submit.prevent="quickSearch()" class="flex gap-3">
+      <select x-model="searchPlatform" class="rounded-lg border px-3 py-2 text-sm">
         <option value="instagram">Instagram</option>
         <option value="twitter">Twitter</option>
         <option value="tiktok">TikTok</option>
         <option value="youtube">YouTube</option>
       </select>
-      <input type="text" x-model="searchTag" placeholder="Enter hashtag (e.g. travel)"
-             class="flex-1 rounded-md border-gray-300 shadow-sm px-3 py-2 border"
-             required>
-      <input type="number" x-model="searchMax" min="1" max="200" placeholder="Max results"
-             class="w-32 rounded-md border-gray-300 shadow-sm px-3 py-2 border">
-      <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700">
-        Search
-      </button>
+      <input type="text" x-model="searchTag" placeholder="해시태그 입력 (예: travel)"
+             class="flex-1 rounded-lg border px-3 py-2 text-sm" required>
+      <input type="number" x-model="searchMax" min="1" max="200" placeholder="최대 결과"
+             class="w-32 rounded-lg border px-3 py-2 text-sm">
+      <button type="submit" class="btn-accent px-6 py-2 rounded-lg text-sm">검색</button>
     </form>
   </div>
 
   <!-- Recent Jobs -->
-  <div class="bg-white rounded-lg shadow p-6">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Jobs</h3>
+  <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden card-glow">
+    <div class="px-6 py-4 border-b border-dark-border">
+      <h3 class="text-base font-heading font-semibold text-white">최근 작업</h3>
+    </div>
     <div x-data="recentJobs()" x-init="load()">
-      <table class="min-w-full divide-y divide-gray-200" x-show="jobs.length > 0">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Query</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Results</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+      <table class="min-w-full data-table" x-show="jobs.length > 0">
+        <thead>
+          <tr class="border-b border-dark-border">
+            <th class="px-4 py-3 text-left">플랫폼</th>
+            <th class="px-4 py-3 text-left">검색어</th>
+            <th class="px-4 py-3 text-left">상태</th>
+            <th class="px-4 py-3 text-right">결과</th>
+            <th class="px-4 py-3 text-left">생성일</th>
+            <th class="px-4 py-3 text-left">작업</th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody>
           <template x-for="job in jobs" :key="job.id">
-            <tr>
-              <td class="px-4 py-3 text-sm capitalize" x-text="job.platform"></td>
-              <td class="px-4 py-3 text-sm">
-                <span x-text="job.type === 'hashtag' ? '#' : '@'"></span><span x-text="job.query"></span>
-              </td>
-              <td class="px-4 py-3 text-sm">
-                <span class="px-2 py-1 text-xs rounded-full"
-                      :class="{
-                        'bg-yellow-100 text-yellow-800': job.status === 'pending',
-                        'bg-blue-100 text-blue-800': job.status === 'running',
-                        'bg-green-100 text-green-800': job.status === 'completed',
-                        'bg-red-100 text-red-800': job.status === 'failed',
-                      }"
+            <tr class="border-b border-dark-border/50">
+              <td class="px-4 py-3"><span class="badge capitalize" :class="'badge-' + (job.platform === 'instagram' ? 'ig' : job.platform === 'twitter' ? 'tw' : job.platform === 'tiktok' ? 'tt' : job.platform === 'youtube' ? 'yt' : 'xhs')" x-text="job.platform"></span></td>
+              <td class="px-4 py-3 text-white"><span x-text="job.type === 'hashtag' ? '#' : '@'"></span><span x-text="job.query"></span></td>
+              <td class="px-4 py-3">
+                <span class="badge"
+                      :class="{ 'badge-warning': job.status === 'pending', 'badge-info': job.status === 'running', 'badge-success': job.status === 'completed', 'badge-error': job.status === 'failed' }"
                       x-text="job.status"></span>
               </td>
-              <td class="px-4 py-3 text-sm" x-text="job.resultCount"></td>
-              <td class="px-4 py-3 text-sm text-gray-500" x-text="new Date(job.createdAt).toLocaleString()"></td>
-              <td class="px-4 py-3 text-sm">
-                <a :href="'/search?jobId=' + job.id" class="text-indigo-600 hover:text-indigo-800 mr-2">View</a>
-                <button @click="exportJob(job.id, 'csv')" class="text-green-600 hover:text-green-800 mr-2">CSV</button>
-                <button @click="exportJob(job.id, 'xlsx')" class="text-green-600 hover:text-green-800">XLSX</button>
+              <td class="px-4 py-3 text-right num" x-text="job.resultCount"></td>
+              <td class="px-4 py-3 text-kaia-muted text-xs" x-text="new Date(job.createdAt).toLocaleString()"></td>
+              <td class="px-4 py-3 space-x-2">
+                <a :href="'/search?jobId=' + job.id" class="text-accent text-xs hover:text-accent-hover">보기</a>
+                <button @click="exportJob(job.id, 'csv')" class="text-kaia-text text-xs hover:text-white">CSV</button>
+                <button @click="exportJob(job.id, 'xlsx')" class="text-kaia-text text-xs hover:text-white">XLSX</button>
               </td>
             </tr>
           </template>
         </tbody>
       </table>
-      <p x-show="jobs.length === 0" class="text-gray-500 text-center py-8">No jobs yet. Start a search above!</p>
+      <p x-show="jobs.length === 0" class="text-kaia-muted text-center py-12">아직 작업이 없습니다. 위에서 검색을 시작하세요.</p>
     </div>
   </div>
 </div>

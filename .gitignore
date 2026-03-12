@@ -4,3 +4,17 @@ dist/
 *.log
 storage/
 output/
+.DS_Store
+.claude/
+.playwright-mcp/
+
+# DB files (Railway volume will manage these)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Cookie files (Railway volume will manage these)
+cookies/
+
+# Screenshots
+*.png

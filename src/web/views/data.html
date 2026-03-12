@@ -1,210 +1,203 @@
 <!-- Master Data Page -->
-<div x-data="{ activeTab: 'profiles' }">
+<div x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || 'profiles' }">
   <!-- Tab Navigation -->
-  <div class="flex items-center gap-1 mb-6 border-b border-gray-200">
-    <button @click="activeTab = 'profiles'"
-            :class="activeTab === 'profiles' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
-      Profiles
-    </button>
-    <button @click="activeTab = 'keywords'"
-            :class="activeTab === 'keywords' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
-      Keywords
-    </button>
-    <button @click="activeTab = 'campaigns'"
-            :class="activeTab === 'campaigns' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
-      Campaigns
-    </button>
-    <button @click="activeTab = 'accounts'"
-            :class="activeTab === 'accounts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-            class="px-4 py-3 text-sm font-medium border-b-2 transition-colors">
-      Accounts
-    </button>
+  <div class="flex items-center gap-0 mb-6 border-b border-dark-border">
+    <button @click="activeTab = 'profiles'" :class="activeTab === 'profiles' ? 'tab-active' : ''" class="tab-btn">프로필</button>
+    <button @click="activeTab = 'keywords'" :class="activeTab === 'keywords' ? 'tab-active' : ''" class="tab-btn">키워드</button>
+    <button @click="activeTab = 'campaigns'" :class="activeTab === 'campaigns' ? 'tab-active' : ''" class="tab-btn">캠페인</button>
+    <button @click="activeTab = 'templates'" :class="activeTab === 'templates' ? 'tab-active' : ''" class="tab-btn">댓글 템플릿</button>
+  </div>
+
+  <!-- Guide boxes per tab -->
+  <div x-show="activeTab === 'profiles'" class="guide-box mb-6">
+    <p><strong>인플루언서 데이터</strong>는 스크래핑으로 수집된 모든 프로필의 마스터 데이터입니다. AI 분류를 통해 인플루언서/업체를 자동 판별하고 국가를 감지합니다. AI 분류 실행 후 캠페인에 자동 배정됩니다.</p>
+  </div>
+  <div x-show="activeTab === 'keywords'" class="guide-box mb-6">
+    <p><strong>키워드 타겟</strong>은 자동 스크래핑의 핵심입니다. 플랫폼과 국가를 선택하고 키워드를 입력하면 <strong>페어 ID</strong>가 자동 생성됩니다. <strong>주기</strong>에 설정한 시간(기본 72시간)마다 자동으로 스크래핑이 실행되며, 1회 실행에는 포스트 수집 + 프로필 분석이 모두 포함됩니다. <strong>Until</strong>을 설정하면 해당 날짜 이후의 게시물은 수집하지 않습니다. <strong>Run</strong> 버튼을 누르면 즉시 스크래핑이 시작됩니다.</p>
+  </div>
+  <div x-show="activeTab === 'campaigns'" class="guide-box mb-6">
+    <p><strong>DM 캠페인</strong>으로 수집된 인플루언서에게 자동 DM을 발송합니다. 캠페인 생성 시 <strong>발송 계정 쿠키</strong>를 직접 등록하세요. 캠페인 생성 → <strong>큐 생성</strong>(타겟 배정) → <strong>시작</strong> 순서로 진행합니다. 스크래핑으로 수집된 프로필은 국가 + 플랫폼 매칭으로 자동 배정됩니다.</p>
+  </div>
+  <div x-show="activeTab === 'templates'" class="guide-box mb-6">
+    <p><strong>댓글 템플릿</strong>은 DM 발송 전 인플루언서 게시물에 자동 댓글을 작성할 때 사용됩니다. 봇 감지를 방지하기 위해 다양한 템플릿(5개 이상 권장)을 등록하세요.</p>
   </div>
 
   <!-- Profiles Tab -->
   <div x-show="activeTab === 'profiles'" x-data="dataPage()" x-init="load()">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900">Profile Data</h2>
-      <div class="text-sm text-gray-500">
-        Total: <span class="font-semibold text-gray-900" x-text="total"></span> profiles
+      <h2 class="text-xl font-heading font-bold text-white">인플루언서 데이터</h2>
+      <div class="text-sm text-kaia-muted">전체: <span class="font-semibold text-white font-mono" x-text="total"></span></div>
+    </div>
+
+    <!-- AI Classification Banner -->
+    <div x-data="aiClassifyBanner()" x-init="loadStatus()" class="mb-6">
+      <div class="bg-dark-card border border-accent/30 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-white">AI 분류 현황</p>
+            <p class="text-xs text-kaia-text mt-1">
+              전체: <span class="font-mono text-white" x-text="aiTotal"></span> |
+              분류완료: <span class="font-mono text-success" x-text="aiClassified"></span> |
+              인플루언서: <span class="font-mono text-accent" x-text="aiInfluencers"></span> |
+              업체: <span class="font-mono text-error" x-text="aiBusinesses"></span> |
+              미분류: <span class="font-mono text-warning" x-text="aiUnclassified"></span>
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button x-show="aiUnclassified > 0 && !aiRunning" @click="runClassify(false)" class="btn-accent px-4 py-2 rounded-lg text-sm">AI 분류 실행</button>
+            <button x-show="!aiRunning" @click="runClassify(true)" class="bg-dark-hover text-kaia-text px-4 py-2 rounded-lg text-sm hover:text-white">전체 재분류</button>
+            <span x-show="aiRunning" class="text-accent text-sm animate-pulse">분류 중...</span>
+          </div>
+        </div>
+        <div x-show="aiMessage" class="mt-2 text-xs text-success" x-text="aiMessage"></div>
       </div>
     </div>
 
     <!-- Re-enrich Banner -->
-    <div x-show="Object.keys(missingProfiles).length > 0 && !enriching" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+    <div x-show="Object.keys(missingProfiles).length > 0 && !enriching" class="bg-dark-card border border-warning/30 rounded-lg p-4 mb-6">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm font-medium text-amber-800">Missing profiles detected</p>
-          <p class="text-xs text-amber-600 mt-1">
+          <p class="text-sm font-medium text-warning">누락된 프로필 감지</p>
+          <p class="text-xs text-kaia-text mt-1">
             <template x-for="[plat, cnt] in Object.entries(missingProfiles)" :key="plat">
-              <span class="mr-3"><span class="capitalize font-medium" x-text="plat"></span>: <span x-text="cnt"></span> missing</span>
+              <span class="mr-3"><span class="capitalize font-medium" x-text="plat"></span>: <span class="font-mono" x-text="cnt"></span></span>
             </template>
           </p>
         </div>
-        <button @click="startReEnrich()" class="bg-amber-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-amber-700 transition-colors">
-          Enrich Missing Profiles
-        </button>
+        <button @click="startReEnrich()" class="btn-accent px-4 py-2 rounded-lg text-sm">누락 프로필 분석</button>
       </div>
     </div>
 
     <!-- Enrichment Progress -->
-    <div x-show="enriching" class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-6">
+    <div x-show="enriching" class="bg-dark-card border border-accent/30 rounded-lg p-4 mb-6">
       <div class="flex items-center justify-between mb-2">
-        <p class="text-sm font-medium text-indigo-800">
-          <span x-show="enrichPaused" class="text-amber-600">Paused (recovering)...</span>
-          <span x-show="enrichRetrying" class="text-blue-600">Retrying failed profiles...</span>
-          <span x-show="!enrichPaused && !enrichRetrying">Enriching profiles...</span>
+        <p class="text-sm font-medium">
+          <span x-show="enrichPaused" class="text-warning">일시정지 (복구 중)...</span>
+          <span x-show="enrichRetrying" class="text-info">실패 항목 재시도...</span>
+          <span x-show="!enrichPaused && !enrichRetrying" class="text-accent">프로필 분석 중...</span>
         </p>
-        <span class="text-xs text-indigo-600" x-text="enrichCount + ' / ' + enrichTotal + ' (' + enrichErrors + ' errors)'"></span>
+        <span class="text-xs font-mono text-kaia-text" x-text="enrichCount + ' / ' + enrichTotal + ' (' + enrichErrors + ' 오류)'"></span>
       </div>
-      <div class="w-full bg-indigo-200 rounded-full h-2.5">
-        <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
-             :style="'width: ' + (enrichTotal > 0 ? Math.round(enrichCount / enrichTotal * 100) : 0) + '%'"></div>
+      <div class="progress-bar h-1.5">
+        <div class="progress-bar-fill h-1.5" :style="'width: ' + (enrichTotal > 0 ? Math.round(enrichCount / enrichTotal * 100) : 0) + '%'"></div>
       </div>
-      <!-- Activity Log -->
-      <div x-ref="enrichLog" class="mt-3 max-h-32 overflow-y-auto bg-gray-900 rounded text-[11px] text-green-400 font-mono p-2 space-y-0.5">
-        <template x-for="(log, i) in enrichLogs" :key="i">
-          <div x-text="log"></div>
-        </template>
+      <div x-ref="enrichLog" class="mt-3 max-h-32 overflow-y-auto bg-dark-body rounded-lg text-[11px] text-accent/70 font-mono p-3 space-y-0.5">
+        <template x-for="(log, i) in enrichLogs" :key="i"><div x-text="log"></div></template>
       </div>
     </div>
 
     <!-- Platform Tabs + Stats -->
-    <div class="bg-white rounded-lg shadow mb-6">
-      <div class="px-5 py-4 flex flex-wrap items-center gap-3 border-b border-gray-200">
-        <!-- Platform filter tabs -->
+    <div class="bg-dark-card border border-dark-border rounded-lg mb-6">
+      <div class="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-dark-border">
         <button @click="platform = ''; load()"
-                :class="platform === '' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
-          All <span class="ml-1 text-xs opacity-75" x-text="'(' + totalAll + ')'"></span>
+                :class="platform === '' ? 'btn-accent' : 'bg-dark-hover text-kaia-text'"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+          All <span class="ml-1 opacity-75 font-mono" x-text="'(' + totalAll + ')'"></span>
         </button>
         <template x-for="s in stats" :key="s.platform">
           <button @click="platform = s.platform; load()"
-                  :class="platform === s.platform ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                  class="px-4 py-2 rounded-md text-sm font-medium transition-colors capitalize">
+                  :class="platform === s.platform ? 'btn-accent' : 'bg-dark-hover text-kaia-text'"
+                  class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize">
             <span x-text="s.platform"></span>
-            <span class="ml-1 text-xs opacity-75" x-text="'(' + s.count + ')'"></span>
+            <span class="ml-1 opacity-75 font-mono" x-text="'(' + s.count + ')'"></span>
           </button>
         </template>
-
-        <!-- Spacer -->
         <div class="flex-1"></div>
-
-        <!-- Search -->
-        <div class="flex items-center gap-2">
-          <input type="text" x-model="search" @input.debounce.400ms="load()" placeholder="Search username, name, bio..."
-                 class="rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm w-64">
-        </div>
-
-        <!-- Sort -->
-        <select x-model="sortBy" @change="load()" class="text-sm rounded-md border-gray-300 px-2 py-1.5 border">
-          <option value="followers">Sort: Followers</option>
-          <option value="engagement">Sort: Engagement</option>
-          <option value="posts">Sort: Posts</option>
-          <option value="scraped">Sort: Scraped Date</option>
+        <select x-model="aiType" @change="load()" class="text-xs rounded-lg border px-2 py-1.5">
+          <option value="">AI: 전체</option>
+          <option value="influencer">AI: 인플루언서만</option>
+          <option value="business">AI: 업체만</option>
         </select>
-
-        <!-- Export -->
-        <button @click="exportAll('csv')" class="text-sm bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">CSV</button>
-        <button @click="exportAll('xlsx')" class="text-sm bg-green-600 text-white px-3 py-1.5 rounded hover:bg-green-700">XLSX</button>
+        <input type="text" x-model="search" @input.debounce.400ms="load()" placeholder="검색..."
+               class="rounded-lg border px-3 py-1.5 text-xs w-56">
+        <select x-model="sortBy" @change="load()" class="text-xs rounded-lg border px-2 py-1.5">
+          <option value="followers">정렬: 팔로워</option>
+          <option value="engagement">정렬: 참여율</option>
+          <option value="posts">정렬: 게시물</option>
+          <option value="scraped">정렬: 날짜</option>
+        </select>
+        <button @click="exportAll('csv')" class="text-xs text-kaia-text hover:text-accent px-2">CSV</button>
+        <button @click="exportAll('xlsx')" class="text-xs text-kaia-text hover:text-accent px-2">XLSX</button>
       </div>
 
       <!-- Profiles Table -->
       <div class="overflow-x-auto">
-        <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
-        <div x-show="!loading && profiles.length === 0" class="text-center py-12 text-gray-400">
-          No profiles found. Run a hashtag search with "Enrich Profiles" enabled.
-        </div>
-        <table x-show="!loading && profiles.length > 0" class="min-w-full divide-y divide-gray-200 text-[13px]">
-          <thead class="bg-gray-50 sticky top-0">
-            <tr>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Platform</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Username</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Name</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Bio</th>
-              <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
-                  @click="sortBy='followers'; load()">Followers</th>
-              <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
-                  @click="sortBy='following'; load()">Following</th>
-              <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
-                  @click="sortBy='posts'; load()">Posts</th>
-              <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
-                  @click="sortBy='engagement'; load()">Eng%</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">V</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Biz</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Pvt</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Category</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Email</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">URL</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Country</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Tier</th>
-              <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">DM</th>
-              <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
-                  @click="sortBy='scraped'; load()">Scraped</th>
+        <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
+        <div x-show="!loading && profiles.length === 0" class="text-center py-12 text-kaia-muted">프로필이 없습니다.</div>
+        <table x-show="!loading && profiles.length > 0" class="min-w-full data-table">
+          <thead>
+            <tr class="border-b border-dark-border">
+              <th class="px-2 py-2.5 text-left">플랫폼</th>
+              <th class="px-2 py-2.5 text-left">유저명</th>
+              <th class="px-2 py-2.5 text-left">이름</th>
+              <th class="px-2 py-2.5 text-left">바이오</th>
+              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='followers'; load()">팔로워</th>
+              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='following'; load()">팔로잉</th>
+              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='posts'; load()">게시물</th>
+              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='engagement'; load()">참여율</th>
+              <th class="px-2 py-2.5 text-center">인증</th>
+              <th class="px-2 py-2.5 text-center">AI분류</th>
+              <th class="px-2 py-2.5 text-center">AI국가</th>
+              <th class="px-2 py-2.5 text-center">비공개</th>
+              <th class="px-2 py-2.5 text-left">카테고리</th>
+              <th class="px-2 py-2.5 text-left">이메일</th>
+              <th class="px-2 py-2.5 text-left">URL</th>
+              <th class="px-2 py-2.5 text-center">국가</th>
+              <th class="px-2 py-2.5 text-center">등급</th>
+              <th class="px-2 py-2.5 text-center">DM</th>
+              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='scraped'; load()">업데이트</th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
+          <tbody>
             <template x-for="p in profiles" :key="p.platform + ':' + p.username">
-              <tr class="hover:bg-gray-50">
-                <td class="px-2 py-2 whitespace-nowrap">
-                  <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium"
-                        :class="p.platform === 'instagram' ? 'bg-pink-50 text-pink-600' : p.platform === 'twitter' ? 'bg-sky-50 text-sky-600' : p.platform === 'tiktok' ? 'bg-gray-900 text-white' : p.platform === 'youtube' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'"
-                        x-text="p.platform"></span>
-                </td>
-                <td class="px-2 py-2 font-medium text-indigo-700 whitespace-nowrap" x-text="'@' + p.username"></td>
-                <td class="px-2 py-2 text-gray-900 whitespace-nowrap max-w-[140px] truncate" x-text="p.full_name || '-'"></td>
-                <td class="px-2 py-2 text-gray-600 max-w-[200px]">
-                  <p class="line-clamp-2 text-[12px]" x-text="p.bio || '-'"></p>
-                </td>
-                <td class="px-2 py-2 text-right font-medium whitespace-nowrap" x-text="formatNumber(p.followers_count)"></td>
-                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.following_count)"></td>
-                <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(p.posts_count)"></td>
-                <td class="px-2 py-2 text-right whitespace-nowrap">
+              <tr class="border-b border-dark-border/30">
+                <td class="px-2 py-2"><span class="badge" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform"></span></td>
+                <td class="px-2 py-2 text-accent font-medium whitespace-nowrap" x-text="'@' + p.username"></td>
+                <td class="px-2 py-2 text-white whitespace-nowrap max-w-[140px] truncate" x-text="p.full_name || '-'"></td>
+                <td class="px-2 py-2 max-w-[200px]"><p class="line-clamp-2 text-[12px]" x-text="p.bio || '-'"></p></td>
+                <td class="px-2 py-2 text-right num text-white" x-text="formatNumber(p.followers_count)"></td>
+                <td class="px-2 py-2 text-right num" x-text="formatNumber(p.following_count)"></td>
+                <td class="px-2 py-2 text-right num" x-text="formatNumber(p.posts_count)"></td>
+                <td class="px-2 py-2 text-right num">
                   <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(2) + '%' : '-'"
-                        :class="p.engagement_rate >= 3 ? 'text-green-600 font-medium' : p.engagement_rate >= 1 ? 'text-indigo-600' : 'text-gray-500'"></span>
+                        :class="p.engagement_rate >= 3 ? 'text-success' : p.engagement_rate >= 1 ? 'text-accent' : 'text-kaia-muted'"></span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span x-show="p.is_verified" class="text-blue-500 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.is_verified" class="text-gray-300 text-[11px]">-</span>
+                  <span x-show="p.is_verified" class="text-accent text-[11px] font-bold">Y</span>
+                  <span x-show="!p.is_verified" class="text-dark-border">-</span>
                 </td>
-                <td class="px-2 py-2 text-center">
-                  <span x-show="p.is_business" class="text-amber-600 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.is_business" class="text-gray-300 text-[11px]">-</span>
-                </td>
-                <td class="px-2 py-2 text-center">
-                  <span x-show="p.is_private" class="text-red-500 font-bold text-[11px]">Y</span>
-                  <span x-show="!p.is_private" class="text-gray-300 text-[11px]">-</span>
-                </td>
-                <td class="px-2 py-2 text-gray-600 whitespace-nowrap text-[12px]" x-text="(p.category && p.category !== 'None') ? p.category : '-'"></td>
-                <td class="px-2 py-2 whitespace-nowrap text-[12px]">
-                  <a x-show="p.contact_email" :href="'mailto:' + p.contact_email"
-                     class="text-indigo-500 hover:underline" x-text="p.contact_email"></a>
-                  <span x-show="!p.contact_email" class="text-gray-300">-</span>
-                </td>
-                <td class="px-2 py-2 max-w-[160px] text-[12px]">
-                  <a x-show="p.external_url" :href="p.external_url" target="_blank"
-                     class="text-indigo-500 hover:underline truncate block"
-                     x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
-                  <span x-show="!p.external_url" class="text-gray-300">-</span>
+                <td class="px-2 py-2 text-center" :title="p.ai_reason || ''">
+                  <span x-show="p.ai_is_influencer === 1" class="text-success text-[11px] font-bold">인플</span>
+                  <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-error text-[11px] font-bold">업체</span>
+                  <span x-show="!p.ai_classified_at" class="text-dark-border">-</span>
                 </td>
                 <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
-                  <span x-text="p.detected_country || '-'"
-                        :class="p.detected_country && p.detected_country !== 'UNKNOWN' ? 'font-medium text-gray-900' : 'text-gray-300'"></span>
+                  <span x-text="p.ai_country || '-'" :class="p.ai_country && p.ai_country !== 'UNKNOWN' ? 'text-white font-medium' : 'text-dark-border'"></span>
+                  <span x-show="p.ai_confidence" class="text-[10px] text-kaia-muted" x-text="p.ai_confidence ? '(' + Math.round(p.ai_confidence * 100) + '%)' : ''"></span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span class="text-[11px] px-1.5 py-0.5 rounded font-bold"
-                        :class="p.scout_tier === 'S' ? 'bg-amber-100 text-amber-700' : p.scout_tier === 'A' ? 'bg-green-100 text-green-700' : p.scout_tier === 'B' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'"
-                        x-text="p.scout_tier || '-'"></span>
+                  <span x-show="p.is_private" class="text-error text-[11px] font-bold">Y</span>
+                  <span x-show="!p.is_private" class="text-dark-border">-</span>
+                </td>
+                <td class="px-2 py-2 text-[12px]" x-text="(p.category && p.category !== 'None') ? p.category : '-'"></td>
+                <td class="px-2 py-2 whitespace-nowrap text-[12px]">
+                  <a x-show="p.contact_email" :href="'mailto:' + p.contact_email" class="text-accent hover:underline" x-text="p.contact_email"></a>
+                  <span x-show="!p.contact_email" class="text-dark-border">-</span>
+                </td>
+                <td class="px-2 py-2 max-w-[160px] text-[12px]">
+                  <a x-show="p.external_url" :href="p.external_url" target="_blank" class="text-accent hover:underline truncate block" x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
+                  <span x-show="!p.external_url" class="text-dark-border">-</span>
+                </td>
+                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
+                  <span x-text="p.detected_country || '-'" :class="p.detected_country && p.detected_country !== 'UNKNOWN' ? 'text-white font-medium' : 'text-dark-border'"></span>
                 </td>
                 <td class="px-2 py-2 text-center">
-                  <span class="text-[11px] px-1.5 py-0.5 rounded font-medium"
-                        :class="p.dm_status === 'sent' ? 'bg-green-100 text-green-600' : p.dm_status === 'replied' ? 'bg-indigo-100 text-indigo-600' : p.dm_status === 'blacklist' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'"
-                        x-text="p.dm_status || 'pending'"></span>
+                  <span class="badge" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || '-'"></span>
                 </td>
-                <td class="px-2 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="formatDate(p.last_updated_at)"></td>
+                <td class="px-2 py-2 text-center">
+                  <span class="badge" :class="p.dm_status === 'sent' ? 'badge-success' : p.dm_status === 'replied' ? 'badge-info' : p.dm_status === 'blacklist' ? 'badge-error' : 'badge-c'" x-text="p.dm_status || 'pending'"></span>
+                </td>
+                <td class="px-2 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="formatDate(p.last_updated_at)"></td>
               </tr>
             </template>
           </tbody>
@@ -212,15 +205,15 @@
       </div>
 
       <!-- Pagination -->
-      <div x-show="total > limit" class="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
-        <div class="text-sm text-gray-500">
-          Showing <span x-text="offset + 1"></span>-<span x-text="Math.min(offset + limit, total)"></span> of <span x-text="total"></span>
+      <div x-show="total > limit" class="px-5 py-3 border-t border-dark-border flex items-center justify-between">
+        <div class="text-sm text-kaia-muted">
+          <span x-text="offset + 1"></span>-<span x-text="Math.min(offset + limit, total)"></span> of <span class="font-mono" x-text="total"></span>
         </div>
         <div class="flex gap-2">
           <button @click="offset = Math.max(0, offset - limit); load()" :disabled="offset === 0"
-                  class="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-30">Prev</button>
+                  class="px-3 py-1 text-sm border border-dark-border rounded-lg text-kaia-text hover:text-white disabled:opacity-30">이전</button>
           <button @click="offset = offset + limit; load()" :disabled="offset + limit >= total"
-                  class="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-30">Next</button>
+                  class="px-3 py-1 text-sm border border-dark-border rounded-lg text-kaia-text hover:text-white disabled:opacity-30">다음</button>
         </div>
       </div>
     </div>
@@ -229,25 +222,19 @@
   <!-- Keywords Tab -->
   <div x-show="activeTab === 'keywords'" x-data="keywordsPage()" x-init="load()">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900">Keyword Targets</h2>
-      <button @click="showAddForm = !showAddForm"
-              class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-        <span x-text="showAddForm ? 'Cancel' : 'Add Keyword'"></span>
+      <h2 class="text-xl font-heading font-bold text-white">키워드 타겟</h2>
+      <button @click="showAddForm = !showAddForm" class="btn-accent px-4 py-2 rounded-lg text-sm">
+        <span x-text="showAddForm ? '취소' : '키워드 추가'"></span>
       </button>
     </div>
 
     <!-- Add Keyword Form -->
-    <div x-show="showAddForm" class="bg-white rounded-lg shadow p-5 mb-6">
-      <h3 class="text-sm font-semibold text-gray-700 mb-4">New Keyword Target</h3>
+    <div x-show="showAddForm" class="bg-dark-card border border-dark-border rounded-lg p-5 mb-6">
+      <h3 class="text-sm font-semibold text-kaia-text mb-4">새 키워드 타겟</h3>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Pair ID</label>
-          <input type="text" x-model="newTarget.pairId" placeholder="e.g., INSTA_TW"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
-          <select x-model="newTarget.platform" class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">플랫폼</label>
+          <select x-model="newTarget.platform" @change="updatePairId()" class="w-full rounded-lg border px-3 py-1.5 text-sm">
             <option value="instagram">Instagram</option>
             <option value="twitter">Twitter</option>
             <option value="tiktok">TikTok</option>
@@ -256,88 +243,118 @@
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Region (ISO)</label>
-          <input type="text" x-model="newTarget.region" placeholder="TW, US, KR..."
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">국가</label>
+          <select x-model="newTarget.region" @change="updatePairId()" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+            <option value="">선택하세요</option>
+            <option value="US">미국 (US)</option>
+            <option value="KR">한국 (KR)</option>
+            <option value="JP">일본 (JP)</option>
+            <option value="CN">중국 (CN)</option>
+            <option value="TW">대만 (TW)</option>
+            <option value="HK">홍콩 (HK)</option>
+            <option value="SG">싱가포르 (SG)</option>
+            <option value="VN">베트남 (VN)</option>
+            <option value="TH">태국 (TH)</option>
+            <option value="ID">인도네시아 (ID)</option>
+            <option value="MY">말레이시아 (MY)</option>
+            <option value="PH">필리핀 (PH)</option>
+            <option value="IN">인도 (IN)</option>
+            <option value="AU">호주 (AU)</option>
+            <option value="GB">영국 (GB)</option>
+            <option value="DE">독일 (DE)</option>
+            <option value="FR">프랑스 (FR)</option>
+            <option value="BR">브라질 (BR)</option>
+            <option value="MN">몽골 (MN)</option>
+            <option value="MM">미얀마 (MM)</option>
+            <option value="KH">캄보디아 (KH)</option>
+            <option value="LA">라오스 (LA)</option>
+          </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Keyword / Hashtag</label>
-          <input type="text" x-model="newTarget.keyword" placeholder="#KoreanSkincare"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">키워드 / 해시태그</label>
+          <input type="text" x-model="newTarget.keyword" @input="updatePairId()" placeholder="#kbeauty" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Cycle (hours)</label>
-          <input type="number" x-model.number="newTarget.scrapingCycleHours" min="1" max="720"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">페어 ID <span class="text-kaia-muted/50">(자동 생성)</span></label>
+          <input type="text" :value="newTarget.pairId" readonly class="w-full rounded-lg border px-3 py-1.5 text-sm opacity-60 cursor-not-allowed">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Max Results/Run</label>
-          <input type="number" x-model.number="newTarget.maxResultsPerRun" min="10" max="5000"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">주기 (시간) <span class="text-kaia-muted/50">설정한 간격마다 자동 실행</span></label>
+          <input type="number" x-model.number="newTarget.scrapingCycleHours" min="1" max="720" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-kaia-muted mb-1">1회 최대 수량 <span class="text-kaia-muted/50">(포스트 + 프로필 분석 포함)</span></label>
+          <input type="number" x-model.number="newTarget.maxResultsPerRun" @input="updateEstimate()" min="10" max="5000" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-kaia-muted mb-1">Until (이 날짜까지만 수집) <span class="text-kaia-muted/50">선택사항</span></label>
+          <input type="date" x-model="newTarget.scrapeUntil" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
       </div>
+
+      <!-- Estimated Time Display -->
+      <div class="mt-4 p-3 bg-dark-body rounded-lg border border-dark-border/50">
+        <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-kaia-muted">예상 소요 시간:</span>
+            <span class="text-accent font-mono font-semibold" x-text="estimatedTime"></span>
+          </div>
+          <span class="text-[11px] text-kaia-muted">|</span>
+          <div class="text-[11px] text-kaia-muted">
+            포스트 수집 <span class="text-kaia-text" x-text="estimatedPostTime"></span>
+            + 프로필 분석 <span class="text-kaia-text" x-text="estimatedProfileTime"></span>
+          </div>
+        </div>
+        <p class="text-[11px] text-kaia-muted/60 mt-1">* 봇 감지 회피를 위한 안전 딜레이 포함. 실제 시간은 네트워크 상태에 따라 달라질 수 있습니다.</p>
+      </div>
+
       <div class="mt-4 flex justify-end">
-        <button @click="addKeyword()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-          Create
-        </button>
+        <button @click="addKeyword()" class="btn-accent px-4 py-2 rounded-lg text-sm">생성</button>
       </div>
     </div>
 
     <!-- Keywords Table -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
-      <div x-show="!loading && targets.length === 0" class="text-center py-12 text-gray-400">
-        No keyword targets configured. Click "Add Keyword" to get started.
-      </div>
-      <table x-show="!loading && targets.length > 0" class="min-w-full divide-y divide-gray-200 text-[13px]">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Pair ID</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Platform</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Region</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Keyword</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Cycle (h)</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Max/Run</th>
-            <th class="px-3 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase">Extracted</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Last Scraped</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Next Scrape</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Active</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Actions</th>
+    <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
+      <div x-show="!loading && targets.length === 0" class="text-center py-12 text-kaia-muted">등록된 키워드 타겟이 없습니다.</div>
+      <table x-show="!loading && targets.length > 0" class="min-w-full data-table">
+        <thead>
+          <tr class="border-b border-dark-border">
+            <th class="px-3 py-2.5 text-left">페어 ID</th>
+            <th class="px-3 py-2.5 text-left">플랫폼</th>
+            <th class="px-3 py-2.5 text-left">국가</th>
+            <th class="px-3 py-2.5 text-left">키워드</th>
+            <th class="px-3 py-2.5 text-center">주기</th>
+            <th class="px-3 py-2.5 text-center">최대/회</th>
+            <th class="px-3 py-2.5 text-left">Until</th>
+            <th class="px-3 py-2.5 text-right">추출 수</th>
+            <th class="px-3 py-2.5 text-left">마지막 스크래핑</th>
+            <th class="px-3 py-2.5 text-left">다음 스크래핑</th>
+            <th class="px-3 py-2.5 text-center">활성</th>
+            <th class="px-3 py-2.5 text-center">작업</th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody>
           <template x-for="t in targets" :key="t.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 font-medium text-indigo-700 whitespace-nowrap" x-text="t.pairId"></td>
-              <td class="px-3 py-2 whitespace-nowrap">
-                <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium capitalize"
-                      :class="t.platform === 'instagram' ? 'bg-pink-50 text-pink-600' : t.platform === 'twitter' ? 'bg-sky-50 text-sky-600' : t.platform === 'tiktok' ? 'bg-gray-900 text-white' : t.platform === 'youtube' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'"
-                      x-text="t.platform"></span>
-              </td>
-              <td class="px-3 py-2 font-medium whitespace-nowrap" x-text="t.region"></td>
-              <td class="px-3 py-2 text-gray-900" x-text="t.keyword"></td>
-              <td class="px-3 py-2 text-center" x-text="t.scrapingCycleHours"></td>
-              <td class="px-3 py-2 text-center" x-text="t.maxResultsPerRun"></td>
-              <td class="px-3 py-2 text-right font-medium" x-text="formatNumber(t.totalExtracted)"></td>
-              <td class="px-3 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="t.lastScrapedAt ? formatDate(t.lastScrapedAt) : 'Never'"></td>
+            <tr class="border-b border-dark-border/30">
+              <td class="px-3 py-2 text-accent font-medium whitespace-nowrap" x-text="t.pairId"></td>
+              <td class="px-3 py-2"><span class="badge" :class="'badge-' + (t.platform === 'instagram' ? 'ig' : t.platform === 'twitter' ? 'tw' : t.platform === 'tiktok' ? 'tt' : t.platform === 'youtube' ? 'yt' : 'xhs')" x-text="t.platform"></span></td>
+              <td class="px-3 py-2 text-white font-medium" x-text="t.region"></td>
+              <td class="px-3 py-2 text-white" x-text="t.keyword"></td>
+              <td class="px-3 py-2 text-center num" x-text="t.scrapingCycleHours + 'h'"></td>
+              <td class="px-3 py-2 text-center num" x-text="t.maxResultsPerRun"></td>
+              <td class="px-3 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.scrapeUntil ? t.scrapeUntil.split('T')[0] : '-'"></td>
+              <td class="px-3 py-2 text-right num text-white" x-text="formatNumber(t.totalExtracted)"></td>
+              <td class="px-3 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.lastScrapedAt ? formatDate(t.lastScrapedAt) : '없음'"></td>
               <td class="px-3 py-2 text-[11px] whitespace-nowrap"
-                  :class="t.nextScrapeAt && new Date(t.nextScrapeAt) <= new Date() ? 'text-amber-600 font-medium' : 'text-gray-500'"
+                  :class="t.nextScrapeAt && new Date(t.nextScrapeAt) <= new Date() ? 'text-warning font-medium' : 'text-kaia-muted'"
                   x-text="t.nextScrapeAt ? formatDate(t.nextScrapeAt) : '-'"></td>
               <td class="px-3 py-2 text-center">
-                <button @click="toggleActive(t)"
-                        :class="t.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'"
-                        class="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                        x-text="t.isActive ? 'ON' : 'OFF'"></button>
+                <button @click="toggleActive(t)" class="badge" :class="t.isActive ? 'badge-success' : 'badge-c'" x-text="t.isActive ? 'ON' : 'OFF'"></button>
               </td>
-              <td class="px-3 py-2 text-center whitespace-nowrap">
-                <button @click="runNow(t)" :disabled="!t.isActive"
-                        class="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium hover:bg-indigo-200 disabled:opacity-30 mr-1">
-                  Run
-                </button>
-                <button @click="removeKeyword(t.id)"
-                        class="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium hover:bg-red-200">
-                  Del
-                </button>
+              <td class="px-3 py-2 text-center whitespace-nowrap space-x-1">
+                <button @click="runNow(t)" :disabled="!t.isActive" class="badge badge-accent hover:opacity-80 disabled:opacity-30 cursor-pointer">Run</button>
+                <button @click="removeKeyword(t.id)" class="badge badge-error hover:opacity-80 cursor-pointer">삭제</button>
               </td>
             </tr>
           </template>
@@ -349,194 +366,472 @@
   <!-- Campaigns Tab -->
   <div x-show="activeTab === 'campaigns'" x-data="campaignsPage()" x-init="load()">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900">DM Campaigns</h2>
-      <button @click="showCreateForm = !showCreateForm"
-              class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-        <span x-text="showCreateForm ? 'Cancel' : 'New Campaign'"></span>
+      <h2 class="text-xl font-heading font-bold text-white">DM 캠페인</h2>
+      <button @click="showCreateForm = !showCreateForm" class="btn-accent px-4 py-2 rounded-lg text-sm">
+        <span x-text="showCreateForm ? '취소' : '새 캠페인'"></span>
       </button>
     </div>
 
     <!-- Create Campaign Form -->
-    <div x-show="showCreateForm" class="bg-white rounded-lg shadow p-5 mb-6">
-      <h3 class="text-sm font-semibold text-gray-700 mb-4">New DM Campaign</h3>
+    <div x-show="showCreateForm" class="bg-dark-card border border-dark-border rounded-lg p-5 mb-6">
+      <h3 class="text-sm font-semibold text-kaia-text mb-4">새 DM 캠페인</h3>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Campaign Name</label>
-          <input type="text" x-model="newCampaign.name" placeholder="Q1 Outreach"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">캠페인 이름</label>
+          <input type="text" x-model="newCampaign.name" placeholder="챗닥 일본" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Brand</label>
-          <input type="text" x-model="newCampaign.brand" placeholder="Brand name"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">브랜드</label>
+          <input type="text" x-model="newCampaign.brand" placeholder="브랜드명" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
-          <select x-model="newCampaign.platform" class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">플랫폼</label>
+          <select x-model="newCampaign.platform" class="w-full rounded-lg border px-3 py-1.5 text-sm">
             <option value="instagram">Instagram</option>
             <option value="twitter">Twitter</option>
             <option value="tiktok">TikTok</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Target Country</label>
-          <input type="text" x-model="newCampaign.targetCountry" placeholder="TW, US, KR..."
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">타겟 국가</label>
+          <select x-model="newCampaign.targetCountry" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+            <option value="">전체 (필터 없음)</option>
+            <option value="US">미국 (US)</option>
+            <option value="KR">한국 (KR)</option>
+            <option value="JP">일본 (JP)</option>
+            <option value="CN">중국 (CN)</option>
+            <option value="TW">대만 (TW)</option>
+            <option value="HK">홍콩 (HK)</option>
+            <option value="SG">싱가포르 (SG)</option>
+            <option value="VN">베트남 (VN)</option>
+            <option value="TH">태국 (TH)</option>
+            <option value="ID">인도네시아 (ID)</option>
+            <option value="MY">말레이시아 (MY)</option>
+            <option value="PH">필리핀 (PH)</option>
+            <option value="IN">인도 (IN)</option>
+            <option value="AU">호주 (AU)</option>
+            <option value="GB">영국 (GB)</option>
+            <option value="DE">독일 (DE)</option>
+            <option value="FR">프랑스 (FR)</option>
+            <option value="BR">브라질 (BR)</option>
+            <option value="MN">몽골 (MN)</option>
+            <option value="MM">미얀마 (MM)</option>
+          </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Target Tiers</label>
-          <input type="text" x-model="newCampaign.targetTiersStr" placeholder="S,A,B"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">일일 DM 한도</label>
+          <input type="number" x-model.number="newCampaign.dailyLimit" min="1" max="100" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Daily Limit/Account</label>
-          <input type="number" x-model.number="newCampaign.dailyLimit" min="1" max="100"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">발송 계정 유저명</label>
+          <input type="text" x-model="newCampaign.senderUsername" placeholder="@username" class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div class="col-span-2 md:col-span-3">
-          <label class="block text-xs font-medium text-gray-500 mb-1">Message Template</label>
-          <textarea x-model="newCampaign.messageTemplate" rows="4"
-                    placeholder="Hi @{{username}}! We love your content..."
-                    class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm font-mono"></textarea>
-          <p class="text-[11px] text-gray-400 mt-1">Variables: {{username}}, {{full_name}}, {{followers_count}}, {{platform}}, {{brand}}</p>
+          <label class="block text-xs text-kaia-muted mb-1">메시지 템플릿</label>
+          <textarea x-model="newCampaign.messageTemplate" rows="3"
+                    placeholder="こんにちはコラボ提案します！"
+                    class="w-full rounded-lg border px-3 py-1.5 text-sm font-mono"></textarea>
+          <p class="text-[11px] text-kaia-muted/50 mt-1">변수: {{username}}, {{full_name}}, {{followers_count}}, {{platform}}, {{brand}}</p>
+        </div>
+        <div class="col-span-2 md:col-span-3">
+          <label class="block text-xs text-kaia-muted mb-1">발송 계정 쿠키 (JSON)</label>
+          <textarea x-model="newCampaign.cookieJson" rows="4"
+                    placeholder='[{"name":"sessionid","value":"...","domain":".instagram.com"}]'
+                    class="w-full rounded-lg border px-3 py-1.5 text-xs font-mono"></textarea>
+          <p class="text-[11px] text-kaia-muted/50 mt-1">EditThisCookie 확장에서 추출한 JSON 쿠키를 붙여넣기하세요</p>
         </div>
       </div>
       <div class="mt-4 flex justify-end">
-        <button @click="createCampaign()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-          Create Campaign
-        </button>
+        <button @click="createCampaign()" class="btn-accent px-4 py-2 rounded-lg text-sm">캠페인 생성</button>
       </div>
     </div>
 
     <!-- Campaigns List -->
-    <div class="space-y-4">
-      <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
-      <div x-show="!loading && campaigns.length === 0" class="text-center py-12 text-gray-400 bg-white rounded-lg shadow">
-        No campaigns yet. Click "New Campaign" to get started.
-      </div>
+    <div class="space-y-3">
+      <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
+      <div x-show="!loading && campaigns.length === 0" class="text-center py-12 text-kaia-muted bg-dark-card border border-dark-border rounded-lg">캠페인이 없습니다.</div>
       <template x-for="c in campaigns" :key="c.id">
-        <div class="bg-white rounded-lg shadow p-5">
+        <div class="bg-dark-card border border-dark-border rounded-lg p-5 hover:border-dark-border/80 card-glow">
           <div class="flex items-center justify-between mb-3">
             <div>
-              <h3 class="font-semibold text-gray-900" x-text="c.name"></h3>
-              <p class="text-xs text-gray-500">
-                <span class="capitalize" x-text="c.platform"></span>
-                <span x-show="c.target_country" x-text="' / ' + c.target_country"></span>
-                <span x-show="c.brand" x-text="' / ' + c.brand"></span>
+              <h3 class="font-semibold text-white" x-text="c.name"></h3>
+              <p class="text-xs text-kaia-muted">
+                <span class="badge text-[10px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : 'tt')" x-text="c.platform"></span>
+                <span x-show="c.target_country" class="ml-1 font-medium text-white" x-text="c.target_country"></span>
+                <span x-show="c.brand" class="ml-1" x-text="c.brand"></span>
               </p>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                    :class="c.status === 'active' ? 'bg-green-100 text-green-700' : c.status === 'completed' ? 'bg-blue-100 text-blue-700' : c.status === 'paused' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'"
+              <!-- Cookie Status -->
+              <span class="flex items-center gap-1 text-[11px]">
+                <span class="inline-block w-2 h-2 rounded-full"
+                      :class="c.cookie_status === 'valid' ? 'bg-success' : c.cookie_status === 'expired' ? 'bg-error' : 'bg-kaia-muted'"></span>
+                <span :class="c.cookie_status === 'valid' ? 'text-success' : c.cookie_status === 'expired' ? 'text-error' : 'text-kaia-muted'"
+                      x-text="c.has_cookie ? (c.cookie_status || 'unknown') : 'no cookie'"></span>
+              </span>
+              <span class="badge"
+                    :class="c.status === 'active' ? 'badge-success' : c.status === 'completed' ? 'badge-info' : c.status === 'paused' ? 'badge-warning' : 'badge-c'"
                     x-text="c.status"></span>
-              <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)"
-                      class="text-[11px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-medium hover:bg-indigo-200">Queue</button>
-              <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)"
-                      class="text-[11px] bg-green-100 text-green-700 px-2 py-1 rounded font-medium hover:bg-green-200">Start</button>
-              <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)"
-                      class="text-[11px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-medium hover:bg-amber-200">Pause</button>
+              <button @click="openEditModal(c)" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[10px]">수정</button>
+              <button @click="uploadCookieDialog(c)" class="badge badge-accent cursor-pointer hover:opacity-80 text-[10px]">Cookie</button>
+              <button @click="checkCookieNow(c)" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[10px]">Check</button>
+              <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)" class="badge badge-accent cursor-pointer hover:opacity-80">큐 생성</button>
+              <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)" class="badge badge-success cursor-pointer hover:opacity-80">시작</button>
+              <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)" class="badge badge-warning cursor-pointer hover:opacity-80">일시정지</button>
             </div>
           </div>
-          <!-- Progress -->
-          <div class="flex items-center gap-4 text-[12px] text-gray-600 mb-2">
-            <span>Queued: <span class="font-medium" x-text="c.total_queued"></span></span>
-            <span>Sent: <span class="font-medium text-green-600" x-text="c.total_sent"></span></span>
-            <span>Failed: <span class="font-medium text-red-500" x-text="c.total_failed"></span></span>
-            <span>Replied: <span class="font-medium text-indigo-600" x-text="c.total_replied"></span></span>
+
+          <!-- Sender Account Info -->
+          <div x-show="c.sender_username" class="text-[11px] text-kaia-muted mb-2">
+            발송 계정: <span class="text-accent font-medium" x-text="'@' + c.sender_username"></span>
+            <span class="ml-2">한도: <span class="text-white font-mono" x-text="c.daily_limit"></span>/일</span>
           </div>
-          <div x-show="c.total_queued > 0" class="w-full bg-gray-200 rounded-full h-2">
-            <div class="bg-green-500 h-2 rounded-full transition-all"
-                 :style="'width: ' + Math.round((c.total_sent / c.total_queued) * 100) + '%'"></div>
+
+          <div class="flex items-center gap-4 text-[12px] text-kaia-text mb-2">
+            <span>대기: <span class="font-mono text-white" x-text="c.total_queued"></span></span>
+            <span>발송: <span class="font-mono text-success" x-text="c.total_sent"></span></span>
+            <span>실패: <span class="font-mono text-error" x-text="c.total_failed"></span></span>
+            <span>응답: <span class="font-mono text-accent" x-text="c.total_replied"></span></span>
+          </div>
+          <div x-show="c.total_queued > 0" class="progress-bar h-1.5 mb-3">
+            <div class="h-1.5 rounded-full bg-success transition-all" :style="'width: ' + Math.round((c.total_sent / c.total_queued) * 100) + '%'"></div>
+          </div>
+
+          <!-- Live Progress Section -->
+          <div class="mt-2 mb-2">
+            <div x-data="campaignLive(c.id)" x-init="init()" class="bg-dark-body rounded-lg border border-accent/20 p-3">
+              <!-- Status Bar -->
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-2 h-2 rounded-full animate-pulse" :class="c.status === 'active' ? 'bg-success' : 'bg-kaia-muted'"></span>
+                  <span class="text-[12px] font-semibold text-white">실시간 진행</span>
+                </div>
+                <div class="flex items-center gap-3 text-[11px]">
+                  <span class="text-success">성공: <span class="font-mono" x-text="summary.success || 0"></span></span>
+                  <span class="text-error">실패: <span class="font-mono" x-text="summary.failed || 0"></span></span>
+                  <span class="text-kaia-muted">대기: <span class="font-mono" x-text="summary.pending || 0"></span></span>
+                  <button @click="loadActivity()" class="text-accent hover:text-accent-hover">새로고침</button>
+                </div>
+              </div>
+              <!-- Current Status Banner (countdown, processing state) -->
+              <div x-show="currentStatus" class="mb-2 px-3 py-2 rounded-md text-[12px] font-mono"
+                   :class="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown' ? 'bg-warning/10 text-warning' : currentPhase === 'processing' ? 'bg-accent/10 text-accent' : 'bg-dark-hover text-kaia-text'">
+                <div class="flex items-center gap-2">
+                  <span x-show="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown'" class="animate-spin text-[10px]">&#9201;</span>
+                  <span x-show="currentPhase === 'processing'" class="animate-pulse">&#9889;</span>
+                  <span x-text="currentStatus"></span>
+                  <span x-show="countdown > 0" class="ml-auto font-bold text-white" x-text="countdown + '초'"></span>
+                </div>
+              </div>
+              <!-- Activity Table -->
+              <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <table class="min-w-full text-[11px]">
+                  <thead class="sticky top-0 bg-dark-body">
+                    <tr class="border-b border-dark-border/50 text-kaia-muted">
+                      <th class="px-2 py-1 text-left w-[130px]">유저</th>
+                      <th class="px-2 py-1 text-center w-[60px]">참여</th>
+                      <th class="px-2 py-1 text-center w-[60px]">DM</th>
+                      <th class="px-2 py-1 text-left">실패 원인</th>
+                      <th class="px-2 py-1 text-right w-[80px]">시간</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="a in activity" :key="a.id">
+                      <tr class="border-b border-dark-border/10 hover:bg-dark-hover/20">
+                        <td class="px-2 py-1">
+                          <div class="flex items-center gap-1">
+                            <img x-show="a.profile_pic_url" :src="a.profile_pic_url" class="w-4 h-4 rounded-full" loading="lazy">
+                            <span class="text-accent font-medium" x-text="'@' + (a.username || '-')"></span>
+                            <span class="text-kaia-muted/50" x-text="a.followers_count ? formatNumber(a.followers_count) : ''"></span>
+                          </div>
+                        </td>
+                        <td class="px-2 py-1 text-center">
+                          <span x-show="a.engagement_status === 'engaged'" class="text-success">done</span>
+                          <span x-show="a.engagement_status === 'none' || !a.engagement_status" class="text-kaia-muted">-</span>
+                          <span x-show="a.engagement_status === 'failed'" class="text-error">fail</span>
+                        </td>
+                        <td class="px-2 py-1 text-center">
+                          <span x-show="a.execute_status === 'success'" class="text-success font-bold">sent</span>
+                          <span x-show="a.execute_status === 'failed'" class="text-error font-bold">fail</span>
+                          <span x-show="a.execute_status === 'pending'" class="text-kaia-muted">대기</span>
+                          <span x-show="a.execute_status === 'processing'" class="text-warning animate-pulse">진행</span>
+                        </td>
+                        <td class="px-2 py-1 text-error max-w-[250px]">
+                          <p class="line-clamp-1" x-text="a.error_message || ''"></p>
+                        </td>
+                        <td class="px-2 py-1 text-right text-kaia-muted" x-text="a.executed_at ? a.executed_at.slice(11,19) : '-'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div x-show="activity.length === 0" class="text-kaia-muted py-4 text-center text-[12px]">배정된 데이터가 없습니다.</div>
+              </div>
+              <!-- SSE Live Events -->
+              <div x-show="liveEvents.length > 0" class="mt-2 pt-2 border-t border-dark-border/30">
+                <p class="text-[10px] text-kaia-muted mb-1">실시간 이벤트</p>
+                <div class="max-h-[100px] overflow-y-auto space-y-0.5 font-mono text-[11px]">
+                  <template x-for="(ev, idx) in liveEvents" :key="idx">
+                    <div :class="ev.type === 'dm_failed' ? 'text-error' : ev.type === 'dm_sent' ? 'text-success' : 'text-accent'">
+                      <span class="text-kaia-muted/50" x-text="ev.ts"></span>
+                      <span x-text="ev.msg"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Campaign Data Section (expandable) -->
+          <div class="mt-2">
+            <button @click="toggleTargets(c)" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
+              <span x-text="c._showTargets ? '▼' : '▶'"></span>
+              <span>캠페인 배정 데이터</span>
+              <span class="text-kaia-muted" x-text="'(' + (c._targetTotal || c.total_queued || 0) + '명)'"></span>
+            </button>
+            <div x-show="c._showTargets" class="mt-2 bg-dark-body rounded-lg border border-dark-border/50 overflow-hidden">
+              <div x-show="c._targetsLoading" class="text-center py-4 text-kaia-muted text-xs">로딩 중...</div>
+              <div x-show="!c._targetsLoading && (!c._targets || c._targets.length === 0)" class="text-center py-4 text-kaia-muted text-xs">배정된 타겟이 없습니다. 큐 생성을 먼저 실행하세요.</div>
+              <div x-show="!c._targetsLoading && c._targets && c._targets.length > 0" class="overflow-x-auto">
+                <table class="min-w-full data-table">
+                  <thead>
+                    <tr class="border-b border-dark-border">
+                      <th class="px-2 py-2 text-left">유저명</th>
+                      <th class="px-2 py-2 text-left">이름</th>
+                      <th class="px-2 py-2 text-center">플랫폼</th>
+                      <th class="px-2 py-2 text-center">국가</th>
+                      <th class="px-2 py-2 text-right">팔로워</th>
+                      <th class="px-2 py-2 text-right">참여율</th>
+                      <th class="px-2 py-2 text-center">등급</th>
+                      <th class="px-2 py-2 text-left">바이오</th>
+                      <th class="px-2 py-2 text-center">상태</th>
+                      <th class="px-2 py-2 text-center">참여</th>
+                      <th class="px-2 py-2 text-left">메시지</th>
+                      <th class="px-2 py-2 text-center">생성일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="t in c._targets" :key="t.id">
+                      <tr class="border-b border-dark-border/20 hover:bg-dark-hover/30">
+                        <td class="px-2 py-1.5">
+                          <div class="flex items-center gap-1.5">
+                            <img x-show="t.profile_pic_url" :src="t.profile_pic_url" class="w-5 h-5 rounded-full" loading="lazy">
+                            <span class="text-accent font-medium text-[12px]" x-text="'@' + (t.influencer_username || t.influencer_key?.split(':')[1] || '-')"></span>
+                          </div>
+                        </td>
+                        <td class="px-2 py-1.5 text-[12px] text-white" x-text="t.full_name || '-'"></td>
+                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="'badge-' + ((t.influencer_platform || c.platform) === 'instagram' ? 'ig' : (t.influencer_platform || c.platform) === 'twitter' ? 'tw' : 'tt')" x-text="t.influencer_platform || c.platform"></span></td>
+                        <td class="px-2 py-1.5 text-center text-[12px] text-white font-medium" x-text="t.detected_country || '-'"></td>
+                        <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.followers_count ? formatNumber(t.followers_count) : '-'"></td>
+                        <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.engagement_rate ? (t.engagement_rate * 100).toFixed(1) + '%' : '-'"></td>
+                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.scout_tier === 'S' ? 'badge-s' : t.scout_tier === 'A' ? 'badge-a' : t.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="t.scout_tier || '-'"></span></td>
+                        <td class="px-2 py-1.5 max-w-[150px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.bio || '-'"></p></td>
+                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.execute_status === 'success' ? 'badge-success' : t.execute_status === 'failed' ? 'badge-error' : t.execute_status === 'processing' ? 'badge-warning' : 'badge-c'" x-text="t.execute_status"></span></td>
+                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.engagement_status === 'done' ? 'badge-success' : t.engagement_status === 'none' ? 'badge-c' : 'badge-warning'" x-text="t.engagement_status || 'none'"></span></td>
+                        <td class="px-2 py-1.5 max-w-[180px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.message_rendered || '-'"></p></td>
+                        <td class="px-2 py-1.5 text-center text-[11px] text-kaia-muted" x-text="t.created_at ? t.created_at.slice(0,10) : '-'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <!-- Pagination -->
+                <div class="flex items-center justify-between px-3 py-2 border-t border-dark-border/50">
+                  <span class="text-[11px] text-kaia-muted">
+                    <span x-text="c._targets.length"></span> / <span x-text="c._targetTotal"></span>명 표시
+                  </span>
+                  <div class="flex gap-2">
+                    <button x-show="c._targetPage > 0" @click="loadTargetsPage(c, c._targetPage - 1)"
+                            class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">이전</button>
+                    <button x-show="(c._targetPage + 1) * 50 < c._targetTotal" @click="loadTargetsPage(c, c._targetPage + 1)"
+                            class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">다음</button>
+                    <button x-show="c._targetTotal > 50" @click="loadAllTargets(c)"
+                            class="text-[11px] text-kaia-text hover:text-white px-2 py-0.5 border border-dark-border rounded">전체 보기</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </template>
     </div>
+
+    <!-- Campaign Edit Modal -->
+    <div x-show="showEditModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showEditModal = false">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6 w-[600px] max-w-[90vw] max-h-[85vh] overflow-y-auto">
+        <h3 class="text-base font-heading font-semibold text-white mb-4">
+          캠페인 수정: <span class="text-accent" x-text="editCampaign ? editCampaign.name : ''"></span>
+        </h3>
+        <div class="grid grid-cols-2 gap-4" x-show="editCampaign">
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">캠페인 이름</label>
+            <input type="text" x-model="editCampaign.name" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">브랜드</label>
+            <input type="text" x-model="editCampaign.brand" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">플랫폼</label>
+            <select x-model="editCampaign.platform" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+              <option value="instagram">Instagram</option>
+              <option value="twitter">Twitter</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">타겟 국가</label>
+            <select x-model="editCampaign.target_country" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+              <option value="">전체 (필터 없음)</option>
+              <option value="US">미국 (US)</option><option value="KR">한국 (KR)</option><option value="JP">일본 (JP)</option>
+              <option value="CN">중국 (CN)</option><option value="TW">대만 (TW)</option><option value="HK">홍콩 (HK)</option>
+              <option value="SG">싱가포르 (SG)</option><option value="VN">베트남 (VN)</option><option value="TH">태국 (TH)</option>
+              <option value="ID">인도네시아 (ID)</option><option value="MY">말레이시아 (MY)</option><option value="PH">필리핀 (PH)</option>
+              <option value="IN">인도 (IN)</option><option value="AU">호주 (AU)</option><option value="GB">영국 (GB)</option>
+              <option value="DE">독일 (DE)</option><option value="FR">프랑스 (FR)</option><option value="BR">브라질 (BR)</option>
+              <option value="MN">몽골 (MN)</option><option value="MM">미얀마 (MM)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">일일 DM 한도</label>
+            <input type="number" x-model.number="editCampaign.daily_limit" min="1" max="200" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">발송 계정 유저명</label>
+            <input type="text" x-model="editCampaign.sender_username" placeholder="@username" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-kaia-muted mb-1">메시지 템플릿</label>
+            <textarea x-model="editCampaign.message_template" rows="3" class="w-full rounded-lg border px-3 py-1.5 text-sm font-mono"></textarea>
+            <p class="text-[11px] text-kaia-muted/50 mt-1">변수: {{username}}, {{full_name}}, {{followers_count}}, {{platform}}, {{brand}}</p>
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">최소 딜레이 (초)</label>
+            <input type="number" x-model.number="editCampaign.delay_min_sec" min="10" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">최대 딜레이 (초)</label>
+            <input type="number" x-model.number="editCampaign.delay_max_sec" min="30" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">최대 재시도</label>
+            <input type="number" x-model.number="editCampaign.max_retries" min="0" max="5" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">상태</label>
+            <select x-model="editCampaign.status" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button @click="showEditModal = false" class="px-4 py-2 text-sm text-kaia-text hover:text-white">취소</button>
+          <button @click="saveCampaignEdit()" class="btn-accent px-4 py-2 rounded-lg text-sm">저장</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Campaign Cookie Upload Modal -->
+    <div x-show="showCookieUpload" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showCookieUpload = false">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-6 w-[500px] max-w-[90vw]">
+        <h3 class="text-base font-heading font-semibold text-white mb-4">
+          쿠키 업로드: <span class="text-accent" x-text="cookieUploadCampaign ? cookieUploadCampaign.name : ''"></span>
+        </h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">발송 계정 유저명</label>
+            <input type="text" x-model="cookieSenderUsername" placeholder="@username" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">쿠키 JSON</label>
+            <textarea x-model="cookieJsonText" rows="6" placeholder='[{"name":"sessionid","value":"..."}]'
+                      class="w-full rounded-lg border px-3 py-2 text-xs font-mono"></textarea>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button @click="showCookieUpload = false" class="px-4 py-2 text-sm text-kaia-text hover:text-white">취소</button>
+            <button @click="submitCookieUpload()" class="btn-accent px-4 py-2 rounded-lg text-sm">업로드</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Accounts Tab -->
-  <div x-show="activeTab === 'accounts'" x-data="accountsPage()" x-init="load()">
+  <!-- Comment Templates Tab -->
+  <div x-show="activeTab === 'templates'" x-data="commentTemplatesPage()" x-init="load()">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900">DM Accounts</h2>
-      <button @click="showAddForm = !showAddForm"
-              class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-        <span x-text="showAddForm ? 'Cancel' : 'Add Account'"></span>
+      <h2 class="text-xl font-heading font-bold text-white">댓글 템플릿</h2>
+      <button @click="showAddForm = !showAddForm" class="btn-accent px-4 py-2 rounded-lg text-sm">
+        <span x-text="showAddForm ? '취소' : '템플릿 추가'"></span>
       </button>
     </div>
 
-    <!-- Add Account Form -->
-    <div x-show="showAddForm" class="bg-white rounded-lg shadow p-5 mb-6">
-      <div class="grid grid-cols-3 gap-4">
+    <!-- Add Template Form -->
+    <div x-show="showAddForm" class="bg-dark-card border border-dark-border rounded-lg p-5 mb-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
-          <select x-model="newAccount.platform" class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">캠페인</label>
+          <select x-model="newTemplate.campaignId" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+            <option value="">캠페인 선택...</option>
+            <template x-for="camp in campaigns" :key="camp.id">
+              <option :value="camp.id" x-text="camp.name + ' (' + camp.platform + ')'"></option>
+            </template>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-kaia-muted mb-1">플랫폼</label>
+          <select x-model="newTemplate.platform" class="w-full rounded-lg border px-3 py-1.5 text-sm">
             <option value="instagram">Instagram</option>
             <option value="twitter">Twitter</option>
             <option value="tiktok">TikTok</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Username</label>
-          <input type="text" x-model="newAccount.username" placeholder="@username"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">카테고리</label>
+          <input type="text" x-model="newTemplate.category" placeholder="beauty, fitness..." class="w-full rounded-lg border px-3 py-1.5 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Session File (optional)</label>
-          <input type="text" x-model="newAccount.sessionFile" placeholder="/path/to/session.json"
-                 class="w-full rounded-md border-gray-300 shadow-sm px-3 py-1.5 border text-sm">
+          <label class="block text-xs text-kaia-muted mb-1">변수 (쉼표 구분)</label>
+          <input type="text" x-model="newTemplate.variablesStr" placeholder="username, full_name" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+        </div>
+        <div class="col-span-2 md:col-span-4">
+          <label class="block text-xs text-kaia-muted mb-1">템플릿</label>
+          <textarea x-model="newTemplate.template" rows="3" placeholder="こんにちは！ dm確認お願いします。"
+                    class="w-full rounded-lg border px-3 py-1.5 text-sm font-mono"></textarea>
         </div>
       </div>
       <div class="mt-4 flex justify-end">
-        <button @click="addAccount()" class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700">
-          Add Account
-        </button>
+        <button @click="addTemplate()" class="btn-accent px-4 py-2 rounded-lg text-sm">템플릿 생성</button>
       </div>
     </div>
 
-    <!-- Accounts Table -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <div x-show="loading" class="text-center py-12 text-gray-400">Loading...</div>
-      <div x-show="!loading && accounts.length === 0" class="text-center py-12 text-gray-400">
-        No DM accounts configured. Click "Add Account" to get started.
-      </div>
-      <table x-show="!loading && accounts.length > 0" class="min-w-full divide-y divide-gray-200 text-[13px]">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Platform</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Username</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Daily Sent</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Daily Limit</th>
-            <th class="px-3 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Last Sent</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Status</th>
-            <th class="px-3 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Actions</th>
+    <!-- Templates Table -->
+    <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
+      <div x-show="!loading && templates.length === 0" class="text-center py-12 text-kaia-muted">댓글 템플릿이 없습니다.</div>
+      <table x-show="!loading && templates.length > 0" class="min-w-full data-table">
+        <thead>
+          <tr class="border-b border-dark-border">
+            <th class="px-3 py-2.5 text-left">캠페인</th>
+            <th class="px-3 py-2.5 text-left">플랫폼</th>
+            <th class="px-3 py-2.5 text-left">카테고리</th>
+            <th class="px-3 py-2.5 text-left">템플릿</th>
+            <th class="px-3 py-2.5 text-center">활성</th>
+            <th class="px-3 py-2.5 text-right">사용</th>
+            <th class="px-3 py-2.5 text-center">작업</th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <template x-for="a in accounts" :key="a.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 whitespace-nowrap">
-                <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium capitalize"
-                      :class="a.platform === 'instagram' ? 'bg-pink-50 text-pink-600' : a.platform === 'twitter' ? 'bg-sky-50 text-sky-600' : 'bg-gray-100 text-gray-600'"
-                      x-text="a.platform"></span>
-              </td>
-              <td class="px-3 py-2 font-medium text-indigo-700" x-text="'@' + a.username"></td>
+        <tbody>
+          <template x-for="t in templates" :key="t.id">
+            <tr class="border-b border-dark-border/30">
+              <td class="px-3 py-2 text-[12px]"><span x-show="t.campaign_name" class="text-accent font-medium" x-text="t.campaign_name"></span><span x-show="!t.campaign_name" class="text-kaia-muted">-</span></td>
+              <td class="px-3 py-2"><span class="badge" :class="'badge-' + (t.platform === 'instagram' ? 'ig' : t.platform === 'twitter' ? 'tw' : 'tt')" x-text="t.platform"></span></td>
+              <td class="px-3 py-2 text-white font-medium" x-text="t.category"></td>
+              <td class="px-3 py-2 max-w-[350px]"><p class="line-clamp-2 font-mono text-[12px]" x-text="t.template"></p></td>
+              <td class="px-3 py-2 text-center"><span class="badge" :class="t.is_active ? 'badge-success' : 'badge-c'" x-text="t.is_active ? 'ON' : 'OFF'"></span></td>
+              <td class="px-3 py-2 text-right num" x-text="t.usage_count"></td>
               <td class="px-3 py-2 text-center">
-                <span class="font-medium" x-text="a.daily_sent"></span>
-                <span class="text-gray-400">/ <span x-text="a.daily_limit"></span></span>
-              </td>
-              <td class="px-3 py-2 text-center">
-                <div class="w-16 mx-auto bg-gray-200 rounded-full h-1.5">
-                  <div class="bg-indigo-500 h-1.5 rounded-full" :style="'width: ' + Math.min(100, Math.round(a.daily_sent / a.daily_limit * 100)) + '%'"></div>
-                </div>
-              </td>
-              <td class="px-3 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="a.last_sent_at ? formatDate(a.last_sent_at) : 'Never'"></td>
-              <td class="px-3 py-2 text-center">
-                <span class="text-[11px] px-1.5 py-0.5 rounded-full font-medium"
-                      :class="a.status === 'active' ? 'bg-green-100 text-green-700' : a.status === 'blocked' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'"
-                      x-text="a.status"></span>
-              </td>
-              <td class="px-3 py-2 text-center">
-                <button @click="removeAccount(a.id)"
-                        class="text-[11px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-medium hover:bg-red-200">Del</button>
+                <button @click="removeTemplate(t.id)" class="badge badge-error cursor-pointer hover:opacity-80">삭제</button>
               </td>
             </tr>
           </template>

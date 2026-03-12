@@ -30,6 +30,7 @@ export interface SearchOptions extends ScrapingOptions {
   cursor?: string;
   sortBy?: 'recent' | 'top';
   since?: string;  // ISO timestamp for delta scraping
+  until?: string;  // ISO timestamp - skip posts newer than this
 }
 
 export type Platform = 'instagram' | 'twitter' | 'tiktok' | 'youtube' | 'xiaohongshu' | 'linkedin';
@@ -106,6 +107,7 @@ export interface Job {
   maxResults: number;
   resultCount: number;
   error?: string;
+  pairId?: string;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -126,6 +128,8 @@ export interface KeywordTarget {
   totalExtracted: number;
   maxResultsPerRun: number;
   isActive: boolean;
+  scrapeUntil?: string; // ISO date string - only scrape posts up to this date
+  groupKey?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -210,6 +214,89 @@ export interface DMAccount {
   dailyLimit: number;
   lastSentAt?: string;
   lastResetDate?: string;
-  status: 'active' | 'paused' | 'blocked';
+  status: 'active' | 'paused' | 'blocked' | 'cookie_expired';
+  cookieStatus?: 'valid' | 'expired' | 'unknown' | 'checking';
+  cookieLastCheckedAt?: string;
+  cookieExpiresAt?: string;
+  cookieFile?: string;
+  proxyConfig?: string;
   createdAt: string;
+}
+
+// ─── Extended DM Account with per-account targeting ───
+
+export interface DMAccountExtended extends DMAccount {
+  targetCountry?: string;
+  targetTiers?: string[];
+  targetMinFollowers?: number;
+  targetMaxFollowers?: number;
+  engageBeforeDm: boolean;
+  commentTemplateCategory?: string;
+}
+
+// ─── Comment Templates ───
+
+export interface CommentTemplate {
+  id: number;
+  platform: Platform;
+  category: string;
+  template: string;
+  variables: string[];
+  isActive: boolean;
+  usageCount: number;
+  createdAt: string;
+}
+
+// ─── Engagement Log ───
+
+export interface EngagementLog {
+  id: number;
+  influencerKey: string;
+  campaignId: string;
+  accountUsername: string;
+  platform: Platform;
+  action: 'like' | 'comment' | 'follow';
+  status: 'pending' | 'success' | 'failed';
+  postUrl?: string;
+  commentText?: string;
+  templateId?: number;
+  executedAt?: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+// ─── DM Rounds ───
+
+export interface DMRound {
+  id: number;
+  campaignId: string;
+  accountUsername: string;
+  roundNumber: number;
+  startedAt: string;
+  completedAt?: string;
+  targetCount: number;
+  sentCount: number;
+  failedCount: number;
+  engagedCount: number;
+}
+
+// ─── Cookie Health ───
+
+export interface CookieHealthStatus {
+  platform: string;
+  username: string;
+  status: 'valid' | 'expired' | 'unknown' | 'checking';
+  missingCookies: string[];
+  expiresAt?: string;
+  lastCheckedAt: string;
+}
+
+// ─── Keyword Target Group ───
+
+export interface KeywordTargetGroup {
+  groupKey: string; // "{region}:{keyword}"
+  region: string;
+  keyword: string;
+  platforms: Platform[];
+  targets: KeywordTarget[];
 }

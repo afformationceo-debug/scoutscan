@@ -6,7 +6,7 @@ import type { Job, JobStatus, JobType, Platform, Post, InfluencerProfile } from 
 const DB_DIR = join(process.cwd(), 'data');
 mkdirSync(DB_DIR, { recursive: true });
 
-const db = new Database(join(DB_DIR, 'scraper.db'));
+const db: InstanceType<typeof Database> = new Database(join(DB_DIR, 'scraper.db'));
 
 // WAL mode for better concurrent read performance
 db.pragma('journal_mode = WAL');
@@ -199,7 +199,100 @@ db.exec(`
     created_at      TEXT NOT NULL,
     UNIQUE(platform, username)
   );
+
+  -- Table 6: comment_templates
+  CREATE TABLE IF NOT EXISTS comment_templates (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform        TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    template        TEXT NOT NULL,
+    variables       TEXT DEFAULT '[]',
+    is_active       INTEGER DEFAULT 1,
+    usage_count     INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ct_platform ON comment_templates(platform);
+  CREATE INDEX IF NOT EXISTS idx_ct_category ON comment_templates(category);
+
+  -- Table 7: dm_engagement_log
+  CREATE TABLE IF NOT EXISTS dm_engagement_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    influencer_key    TEXT NOT NULL,
+    campaign_id       TEXT NOT NULL,
+    account_username  TEXT NOT NULL,
+    platform          TEXT NOT NULL,
+    action            TEXT NOT NULL,
+    status            TEXT DEFAULT 'pending',
+    post_url          TEXT,
+    comment_text      TEXT,
+    template_id       INTEGER,
+    executed_at       TEXT,
+    error_message     TEXT,
+    created_at        TEXT NOT NULL,
+    FOREIGN KEY (influencer_key) REFERENCES influencer_master(influencer_key),
+    FOREIGN KEY (campaign_id) REFERENCES dm_campaigns(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_del_campaign ON dm_engagement_log(campaign_id);
+  CREATE INDEX IF NOT EXISTS idx_del_influencer ON dm_engagement_log(influencer_key);
+
+  -- Table 8: dm_rounds
+  CREATE TABLE IF NOT EXISTS dm_rounds (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id       TEXT NOT NULL,
+    account_username  TEXT NOT NULL,
+    round_number      INTEGER NOT NULL DEFAULT 1,
+    started_at        TEXT NOT NULL,
+    completed_at      TEXT,
+    target_count      INTEGER DEFAULT 0,
+    sent_count        INTEGER DEFAULT 0,
+    failed_count      INTEGER DEFAULT 0,
+    engaged_count     INTEGER DEFAULT 0,
+    FOREIGN KEY (campaign_id) REFERENCES dm_campaigns(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_dr_campaign ON dm_rounds(campaign_id);
 `);
+
+// ─── ALTER TABLE migrations (idempotent) ───
+
+const alterMigrations = [
+  // dm_accounts extensions
+  `ALTER TABLE dm_accounts ADD COLUMN target_country TEXT`,
+  `ALTER TABLE dm_accounts ADD COLUMN target_tiers TEXT`,
+  `ALTER TABLE dm_accounts ADD COLUMN target_min_followers INTEGER`,
+  `ALTER TABLE dm_accounts ADD COLUMN target_max_followers INTEGER`,
+  `ALTER TABLE dm_accounts ADD COLUMN engage_before_dm INTEGER DEFAULT 0`,
+  `ALTER TABLE dm_accounts ADD COLUMN comment_template_category TEXT`,
+  // dm_accounts cookie management
+  `ALTER TABLE dm_accounts ADD COLUMN cookie_status TEXT DEFAULT 'unknown'`,
+  `ALTER TABLE dm_accounts ADD COLUMN cookie_last_checked_at TEXT`,
+  `ALTER TABLE dm_accounts ADD COLUMN cookie_expires_at TEXT`,
+  `ALTER TABLE dm_accounts ADD COLUMN cookie_file TEXT`,
+  `ALTER TABLE dm_accounts ADD COLUMN proxy_config TEXT`,
+  // dm_action_queue extensions
+  `ALTER TABLE dm_action_queue ADD COLUMN round_id INTEGER`,
+  `ALTER TABLE dm_action_queue ADD COLUMN engagement_status TEXT DEFAULT 'none'`,
+  // keyword_targets extensions
+  `ALTER TABLE keyword_targets ADD COLUMN group_key TEXT`,
+  `ALTER TABLE keyword_targets ADD COLUMN scrape_until TEXT`,
+  // dm_campaigns: campaign-level cookie & sender account
+  `ALTER TABLE dm_campaigns ADD COLUMN sender_username TEXT`,
+  `ALTER TABLE dm_campaigns ADD COLUMN cookie_json TEXT`,
+  `ALTER TABLE dm_campaigns ADD COLUMN cookie_status TEXT DEFAULT 'unknown'`,
+  `ALTER TABLE dm_campaigns ADD COLUMN cookie_last_checked_at TEXT`,
+  `ALTER TABLE dm_campaigns ADD COLUMN cookie_expires_at TEXT`,
+  // comment_templates: campaign association
+  `ALTER TABLE comment_templates ADD COLUMN campaign_id TEXT`,
+  // AI classification columns
+  `ALTER TABLE influencer_master ADD COLUMN ai_is_influencer INTEGER`,
+  `ALTER TABLE influencer_master ADD COLUMN ai_country TEXT`,
+  `ALTER TABLE influencer_master ADD COLUMN ai_confidence REAL`,
+  `ALTER TABLE influencer_master ADD COLUMN ai_reason TEXT`,
+  `ALTER TABLE influencer_master ADD COLUMN ai_classified_at TEXT`,
+];
+
+for (const sql of alterMigrations) {
+  try { db.exec(sql); } catch { /* column already exists */ }
+}
 
 // ─── Jobs CRUD ───
 
@@ -385,8 +478,9 @@ export function getJobProfiles(jobId: string): InfluencerProfile[] {
 // ─── Cross-job profile deduplication ───
 
 export function getExistingProfileUsernames(platform: string): Set<string> {
+  // Only consider profiles that have been properly enriched (have actual follower data)
   const rows = db.prepare(
-    `SELECT DISTINCT username FROM profiles WHERE platform = ?`
+    `SELECT DISTINCT username FROM profiles WHERE platform = ? AND followers_count > 0`
   ).all(platform) as any[];
   return new Set(rows.map(r => r.username));
 }

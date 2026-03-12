@@ -1,11 +1,16 @@
 <!-- Profiles Page -->
 <div x-data="profilesPage()">
-  <h2 class="text-2xl font-bold text-gray-900 mb-6">Profile Lookup</h2>
+  <h2 class="text-2xl font-heading font-bold text-white mb-6">프로필 조회</h2>
+
+  <!-- Guide Box -->
+  <div class="guide-box mb-6">
+    <p><strong>프로필 조회</strong>에서 특정 인플루언서의 상세 정보를 개별적으로 조회할 수 있습니다. 플랫폼을 선택하고 유저명을 입력한 뒤 <strong>조회</strong>를 누르세요.</p>
+  </div>
 
   <!-- Search Form -->
-  <div class="bg-white rounded-lg shadow p-6 mb-6">
-    <form @submit.prevent="lookupProfile()" class="flex gap-4">
-      <select x-model="platform" class="rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <form @submit.prevent="lookupProfile()" class="flex gap-3">
+      <select x-model="platform" class="rounded-lg border px-3 py-2 text-sm">
         <option value="instagram">Instagram</option>
         <option value="twitter">Twitter</option>
         <option value="tiktok">TikTok</option>
@@ -13,68 +18,70 @@
       </select>
       <div class="flex-1">
         <div class="flex">
-          <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">@</span>
-          <input type="text" x-model="username" placeholder="Enter username"
-                 class="flex-1 rounded-r-md border-gray-300 shadow-sm px-3 py-2 border" required>
+          <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-dark-border bg-dark-subtle text-kaia-muted text-sm">@</span>
+          <input type="text" x-model="username" placeholder="유저명 입력"
+                 class="flex-1 rounded-r-lg border px-3 py-2 text-sm !rounded-l-none" required>
         </div>
       </div>
-      <button type="submit" :disabled="isLoading"
-              class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50">
-        <span x-show="!isLoading">Lookup</span>
-        <span x-show="isLoading">Loading...</span>
+      <button type="submit" :disabled="isLoading" class="btn-accent px-6 py-2 rounded-lg text-sm">
+        <span x-show="!isLoading">조회</span>
+        <span x-show="isLoading" class="flex items-center gap-2">
+          <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          로딩 중...
+        </span>
       </button>
     </form>
   </div>
 
   <!-- Error -->
-  <div x-show="error" x-cloak class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+  <div x-show="error" x-cloak class="bg-dark-card border border-error/30 text-error px-4 py-3 rounded-lg mb-6 text-sm">
     <span x-text="error"></span>
   </div>
 
   <!-- Profile Cards -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     <template x-for="profile in profiles" :key="profile.id + profile.platform">
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="bg-indigo-600 px-4 py-3">
-          <span class="text-white text-sm capitalize" x-text="profile.platform"></span>
+      <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden hover:border-accent/30 transition-colors">
+        <div class="bg-accent/10 px-4 py-2 border-b border-dark-border">
+          <span class="text-accent text-sm font-medium capitalize" x-text="profile.platform"></span>
         </div>
         <div class="p-6">
           <div class="flex items-center mb-4">
-            <img :src="profile.profilePicUrl" class="w-16 h-16 rounded-full mr-4" alt="" loading="lazy">
+            <img :src="profile.profilePicUrl" class="w-14 h-14 rounded-full mr-4 border-2 border-dark-border" alt="" loading="lazy">
             <div>
-              <h3 class="font-bold text-lg" x-text="profile.fullName || profile.username"></h3>
-              <p class="text-gray-500 text-sm" x-text="'@' + profile.username"></p>
-              <span x-show="profile.isVerified" class="text-blue-500 text-xs">Verified</span>
+              <h3 class="font-bold text-white text-lg" x-text="profile.fullName || profile.username"></h3>
+              <p class="text-kaia-text text-sm" x-text="'@' + profile.username"></p>
+              <span x-show="profile.isVerified" class="badge badge-accent text-[10px]">인증됨</span>
             </div>
           </div>
-          <p class="text-gray-600 text-sm mb-4 line-clamp-3" x-text="profile.bio"></p>
-          <div class="grid grid-cols-3 gap-4 text-center border-t pt-4">
+          <p class="text-kaia-text text-sm mb-4 line-clamp-3" x-text="profile.bio"></p>
+          <div class="grid grid-cols-3 gap-4 text-center border-t border-dark-border pt-4">
             <div>
-              <p class="text-lg font-bold" x-text="formatNumber(profile.followersCount)"></p>
-              <p class="text-xs text-gray-500">Followers</p>
+              <p class="text-lg font-bold font-mono text-white" x-text="formatNumber(profile.followersCount)"></p>
+              <p class="text-[10px] text-kaia-muted uppercase">팔로워</p>
             </div>
             <div>
-              <p class="text-lg font-bold" x-text="formatNumber(profile.followingCount)"></p>
-              <p class="text-xs text-gray-500">Following</p>
+              <p class="text-lg font-bold font-mono text-white" x-text="formatNumber(profile.followingCount)"></p>
+              <p class="text-[10px] text-kaia-muted uppercase">팔로잉</p>
             </div>
             <div>
-              <p class="text-lg font-bold" x-text="formatNumber(profile.postsCount)"></p>
-              <p class="text-xs text-gray-500">Posts</p>
+              <p class="text-lg font-bold font-mono text-white" x-text="formatNumber(profile.postsCount)"></p>
+              <p class="text-[10px] text-kaia-muted uppercase">게시물</p>
             </div>
           </div>
           <div x-show="profile.engagementRate" class="mt-4 text-center">
-            <span class="text-sm text-gray-600">Engagement Rate: </span>
-            <span class="font-bold text-indigo-600" x-text="(profile.engagementRate * 100).toFixed(2) + '%'"></span>
+            <span class="text-sm text-kaia-muted">참여율: </span>
+            <span class="font-bold font-mono text-accent" x-text="(profile.engagementRate * 100).toFixed(2) + '%'"></span>
           </div>
           <div x-show="profile.externalUrl" class="mt-2 text-center">
-            <a :href="profile.externalUrl" target="_blank" class="text-sm text-indigo-600 hover:underline" x-text="profile.externalUrl"></a>
+            <a :href="profile.externalUrl" target="_blank" class="text-sm text-accent hover:text-accent-hover" x-text="profile.externalUrl"></a>
           </div>
         </div>
       </div>
     </template>
   </div>
 
-  <p x-show="profiles.length === 0 && !isLoading" class="text-gray-500 text-center py-12">
-    Enter a username above to lookup a profile.
+  <p x-show="profiles.length === 0 && !isLoading" class="text-kaia-muted text-center py-12">
+    위에서 유저명을 입력하여 프로필을 조회하세요.
   </p>
 </div>

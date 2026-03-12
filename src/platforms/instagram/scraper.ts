@@ -62,6 +62,7 @@ export class InstagramScraper implements PlatformScraper {
     const cleanTag = tag.replace(/^#/, '');
     const maxResults = options.maxResults || 100;
     const since = options.since || null;
+    const until = options.until || null;
     let consecutiveOld = 0;
     const MAX_CONSECUTIVE_OLD = 20;
     let yielded = 0;
@@ -103,29 +104,39 @@ export class InstagramScraper implements PlatformScraper {
 
         logger.info(`[Instagram] Navigating to hashtag page...`);
 
+        // Navigate to home first to establish session
         await page.goto('https://www.instagram.com/', {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
         await randomDelay(2000, 3000);
 
+        // Dismiss any popups
         try {
           const notNowBtn = await page.$('button:has-text("Not now"), button:has-text("Not Now"), [role="button"]:has-text("Not")');
           if (notNowBtn) await notNowBtn.click();
           await randomDelay(1000, 2000);
         } catch {}
 
-        await page.goto(`https://www.instagram.com/explore/tags/${encodeURIComponent(cleanTag)}/`, {
+        // Navigate directly to /popular/ URL (Instagram redirects /explore/tags/ here anyway)
+        const popularUrl = `https://www.instagram.com/popular/${encodeURIComponent(cleanTag)}/`;
+        logger.info(`[Instagram] Loading: ${popularUrl}`);
+        await page.goto(popularUrl, {
           waitUntil: 'domcontentloaded',
           timeout: 30000,
         });
 
+        // Dismiss any popups
         try {
           const notNowBtn = await page.$('button:has-text("Not now"), button:has-text("Not Now")');
           if (notNowBtn) await notNowBtn.click();
         } catch {}
 
-        await randomDelay(3000, 5000);
+        // Wait for page content to fully render
+        await randomDelay(4000, 6000);
+
+        const finalUrl = page.url();
+        logger.info(`[Instagram] Page loaded: ${finalUrl}`);
 
         const pageData = await this.extractEmbeddedData(page);
         if (pageData.length > 0) {
@@ -137,6 +148,9 @@ export class InstagramScraper implements PlatformScraper {
 
         while (collectedPosts.length > 0 && yielded < maxResults) {
           const post = collectedPosts.shift()!;
+          if (until && post.timestamp && post.timestamp > until) {
+            continue;
+          }
           if (since && post.timestamp && post.timestamp < since) {
             consecutiveOld++;
             if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
@@ -148,16 +162,16 @@ export class InstagramScraper implements PlatformScraper {
         }
         if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
 
-        // Scroll for more content
-        const maxScrolls = Math.ceil((maxResults - yielded) / 12);
+        // Phase 1: Scroll for more content (works when page has infinite scroll)
         let emptyScrolls = 0;
-        for (let i = 0; i < maxScrolls && yielded < maxResults; i++) {
-          await humanScroll(page, 800 + Math.random() * 400);
-          await randomDelay(2000, 4000);
+        for (let i = 0; i < 8 && yielded < maxResults; i++) {
+          await humanScroll(page, 1200 + Math.random() * 800);
+          await randomDelay(2500, 4500);
 
           const beforeYield = yielded;
           while (collectedPosts.length > 0 && yielded < maxResults) {
             const post = collectedPosts.shift()!;
+            if (until && post.timestamp && post.timestamp > until) continue;
             if (since && post.timestamp && post.timestamp < since) {
               consecutiveOld++;
               if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
@@ -167,25 +181,37 @@ export class InstagramScraper implements PlatformScraper {
             yield post;
             yielded++;
           }
-          if (consecutiveOld >= MAX_CONSECUTIVE_OLD) {
-            console.log(`[Instagram] Delta: ${MAX_CONSECUTIVE_OLD} consecutive old posts, stopping early`);
-            break;
-          }
+          if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
 
           if (yielded === beforeYield) {
             emptyScrolls++;
-            if (emptyScrolls >= 5) {
-              logger.info(`[Instagram] ${emptyScrolls} empty scrolls, stopping`);
-              break;
-            }
+            if (emptyScrolls >= 3) break;
           } else {
             emptyScrolls = 0;
           }
+        }
 
-          // Log progress every 50 posts
-          if (yielded % 50 === 0 && yielded > 0) {
-            logger.info(`[Instagram] Progress: ${yielded}/${maxResults} posts`);
+        // Phase 2: Direct GraphQL API pagination from page context
+        if (yielded < maxResults && consecutiveOld < MAX_CONSECUTIVE_OLD) {
+          logger.info(`[Instagram] Scroll gave ${yielded} posts, trying GraphQL API pagination...`);
+
+          const apiPosts = await this.fetchPopularPaginated(page, cleanTag, maxResults - yielded);
+          for (const post of apiPosts) {
+            if (yielded >= maxResults) break;
+            if (until && post.timestamp && post.timestamp > until) continue;
+            if (since && post.timestamp && post.timestamp < since) {
+              consecutiveOld++;
+              if (consecutiveOld >= MAX_CONSECUTIVE_OLD) break;
+              continue;
+            }
+            consecutiveOld = 0;
+            yield post;
+            yielded++;
           }
+        }
+
+        if (yielded > 0) {
+          logger.info(`[Instagram] Progress: ${yielded}/${maxResults} posts`);
         }
 
         await this.browser.closeContext(sessionId);
@@ -212,6 +238,187 @@ export class InstagramScraper implements PlatformScraper {
     }
 
     logger.info(`[Instagram] Hashtag search complete. Total: ${yielded} posts`);
+  }
+
+  /** Fetch more posts via GraphQL API directly from page context */
+  private async fetchPopularPaginated(page: any, tag: string, maxNeeded: number): Promise<Post[]> {
+    const allPosts: Post[] = [];
+    const seenCodes = new Set<string>();
+
+    try {
+      // Extract doc_id and CSRF token from page, then make paginated GraphQL requests
+      const results = await page.evaluate(async (args: { tag: string; maxNeeded: number }) => {
+        const posts: any[] = [];
+        const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+        const csrf = csrfMatch ? csrfMatch[1] : '';
+
+        // Try to find doc_id from existing script tags
+        let docId = '';
+        const scripts = document.querySelectorAll('script');
+        for (const s of scripts) {
+          const text = s.textContent || '';
+          // Look for doc_id pattern used for popular search queries
+          const match = text.match(/"xig_logged_out_popular_search_media_info"[^}]*?"doc_id"\s*:\s*"(\d+)"/);
+          if (match) { docId = match[1]; break; }
+        }
+
+        // Method 1: Try web search topsearch API
+        try {
+          const searchResp = await fetch(`/web/search/topsearch/?query=%23${encodeURIComponent(args.tag)}&context=hashtag`, {
+            headers: {
+              'X-CSRFToken': csrf,
+              'X-IG-App-ID': '936619743392459',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json',
+            },
+          });
+          if (searchResp.ok) {
+            const data = await searchResp.json();
+            // topsearch returns hashtags and users, with media in hashtag results
+            const hashtags = data?.hashtags || [];
+            for (const h of hashtags) {
+              if (h?.hashtag?.media_count && h?.hashtag?.search_result_subtitles) {
+                // Has media count but not individual posts
+              }
+            }
+          }
+        } catch {}
+
+        // Method 2: Try tag sections API (works for logged-in users)
+        try {
+          const sectionsResp = await fetch(`/api/v1/tags/${encodeURIComponent(args.tag)}/sections/`, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': csrf,
+              'X-IG-App-ID': '936619743392459',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'include_persistent=0&max_id=&page=0&surface=grid&tab=recent',
+          });
+          if (sectionsResp.ok) {
+            const ct = sectionsResp.headers.get('content-type') || '';
+            if (ct.includes('json')) {
+              const data = await sectionsResp.json();
+              const sections = data?.sections || [];
+              for (const section of sections) {
+                const medias = section?.layout_content?.medias || [];
+                for (const m of medias) {
+                  if (m?.media?.code) posts.push(m.media);
+                }
+              }
+              // Handle pagination with more_available and next_max_id
+              let maxId = data?.next_max_id;
+              let page = 1;
+              while (maxId && posts.length < args.maxNeeded && page < 5) {
+                const nextResp = await fetch(`/api/v1/tags/${encodeURIComponent(args.tag)}/sections/`, {
+                  method: 'POST',
+                  headers: {
+                    'X-CSRFToken': csrf,
+                    'X-IG-App-ID': '936619743392459',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  body: `include_persistent=0&max_id=${maxId}&page=${page}&surface=grid&tab=recent`,
+                });
+                if (!nextResp.ok) break;
+                const nct = nextResp.headers.get('content-type') || '';
+                if (!nct.includes('json')) break;
+                const nextData = await nextResp.json();
+                const nextSections = nextData?.sections || [];
+                for (const section of nextSections) {
+                  const medias = section?.layout_content?.medias || [];
+                  for (const m of medias) {
+                    if (m?.media?.code) posts.push(m.media);
+                  }
+                }
+                maxId = nextData?.next_max_id;
+                if (!nextData?.more_available) break;
+                page++;
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+              }
+            }
+          }
+        } catch {}
+
+        // Method 3: Try GraphQL API if we have doc_id
+        if (posts.length < args.maxNeeded && docId) {
+          try {
+            const variables = JSON.stringify({ tag_name: args.tag, first: 50 });
+            const graphqlResp = await fetch('/api/graphql', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrf,
+                'X-IG-App-ID': '936619743392459',
+              },
+              body: `doc_id=${docId}&variables=${encodeURIComponent(variables)}`,
+            });
+            if (graphqlResp.ok) {
+              const data = await graphqlResp.json();
+              const edges = data?.data?.xig_logged_out_popular_search_media_info?.edges || [];
+              for (const edge of edges) {
+                if (edge?.node?.code) posts.push(edge.node);
+              }
+            }
+          } catch {}
+        }
+
+        // Method 4: Extract shortcodes from page links and fetch individually
+        if (posts.length < args.maxNeeded) {
+          const links = document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]');
+          const shortcodes: string[] = [];
+          links.forEach(link => {
+            const href = link.getAttribute('href') || '';
+            const match = href.match(/\/(p|reel)\/([\w-]+)/);
+            if (match) shortcodes.push(match[2]);
+          });
+          for (const code of shortcodes) {
+            const exists = posts.some(p => p.code === code || p.shortcode === code);
+            if (!exists) {
+              posts.push({ code, _fromLink: true });
+            }
+          }
+        }
+
+        return posts;
+      }, { tag, maxNeeded });
+
+      for (const raw of results) {
+        const code = raw.code || raw.shortcode || '';
+        if (!code || seenCodes.has(code)) continue;
+        seenCodes.add(code);
+
+        if (raw._fromLink) {
+          // Minimal post from link extraction
+          allPosts.push({
+            id: code,
+            platform: 'instagram',
+            shortcode: code,
+            url: `https://www.instagram.com/p/${code}/`,
+            caption: '',
+            hashtags: [],
+            mentions: [],
+            likesCount: 0,
+            commentsCount: 0,
+            mediaType: 'image',
+            mediaUrls: [],
+            timestamp: new Date().toISOString(),
+            owner: { username: '', id: '' },
+          });
+        } else {
+          allPosts.push(this.parsePopularNode(raw));
+        }
+      }
+
+      if (allPosts.length > 0) {
+        logger.info(`[Instagram] GraphQL API pagination: got ${allPosts.length} additional posts`);
+      }
+    } catch (error) {
+      logger.warn(`[Instagram] GraphQL pagination failed: ${(error as Error).message}`);
+    }
+
+    return allPosts;
   }
 
   /** API-based fallback for hashtag search */
@@ -408,12 +615,18 @@ export class InstagramScraper implements PlatformScraper {
 
   /** Extract posts from intercepted API responses */
   private extractPostsFromResponse(url: string, body: string, posts: Post[]): void {
-    if (!url.includes('graphql') && !url.includes('/api/v1/') && !url.includes('/web/')) return;
+    if (!url.includes('graphql') && !url.includes('/api/v1/') && !url.includes('/api/') && !url.includes('/web/')) return;
 
     try {
       const data = JSON.parse(body);
 
-      // GraphQL hashtag response
+      // Popular page response (2026+): xig_logged_out_popular_search_media_info
+      const popularEdges = data?.data?.xig_logged_out_popular_search_media_info?.edges || [];
+      for (const edge of popularEdges) {
+        if (edge?.node?.code) posts.push(this.parsePopularNode(edge.node));
+      }
+
+      // GraphQL hashtag response (legacy)
       const edges = data?.data?.hashtag?.edge_hashtag_to_media?.edges
         || data?.data?.hashtag?.edge_hashtag_to_top_posts?.edges
         || [];
@@ -445,47 +658,58 @@ export class InstagramScraper implements PlatformScraper {
       for (const item of items) {
         if (item?.pk || item?.id) posts.push(this.parseMediaV1(item));
       }
+
+      // Generic: any response with edges containing code/shortcode nodes
+      if (posts.length === 0 && data?.data) {
+        for (const key of Object.keys(data.data)) {
+          const val = data.data[key];
+          if (val?.edges && Array.isArray(val.edges)) {
+            for (const edge of val.edges) {
+              if (edge?.node?.code) posts.push(this.parsePopularNode(edge.node));
+            }
+          }
+        }
+      }
     } catch { /* not JSON or unexpected format */ }
   }
 
   /** Extract data embedded in the HTML page source */
   private async extractEmbeddedData(page: any): Promise<Post[]> {
     try {
-      return await page.evaluate(() => {
+      const rawNodes = await page.evaluate(() => {
         const posts: any[] = [];
+        const seenCodes = new Set<string>();
 
-        // Try window.__additionalData
-        const addData = (window as any).__additionalDataLoaded;
-        if (typeof addData === 'function') {
-          // Already called, check cached
-        }
-
-        // Try _sharedData
+        // Try _sharedData (legacy)
         const shared = (window as any)._sharedData;
         if (shared?.entry_data?.TagPage) {
           const tagPage = shared.entry_data.TagPage[0];
           const edges = tagPage?.graphql?.hashtag?.edge_hashtag_to_media?.edges || [];
           for (const e of edges) {
-            if (e.node) posts.push(e.node);
+            if (e.node) {
+              const code = e.node.shortcode || e.node.code;
+              if (code && !seenCodes.has(code)) { seenCodes.add(code); posts.push(e.node); }
+            }
           }
         }
 
-        // Try require('ServerJS')... approach
+        // Search all JSON script tags for media nodes
         const scripts = document.querySelectorAll('script[type="application/json"]');
         for (const script of scripts) {
           try {
             const json = JSON.parse(script.textContent || '');
-            // Look for media nodes in the JSON tree
             const findMedia = (obj: any, depth = 0): void => {
-              if (depth > 5 || !obj || typeof obj !== 'object') return;
-              if (obj.shortcode && (obj.edge_media_preview_like || obj.like_count)) {
-                posts.push(obj);
+              if (depth > 8 || !obj || typeof obj !== 'object') return;
+              // Match: shortcode or code + some media indicator
+              const code = obj.shortcode || obj.code;
+              if (code && (obj.edge_media_preview_like || obj.like_count !== undefined || obj.caption || obj.__typename?.includes('Media'))) {
+                if (!seenCodes.has(code)) { seenCodes.add(code); posts.push(obj); }
                 return;
               }
               if (Array.isArray(obj)) {
-                obj.forEach(item => findMedia(item, depth + 1));
+                for (const item of obj) findMedia(item, depth + 1);
               } else {
-                Object.values(obj).forEach(val => findMedia(val, depth + 1));
+                for (const val of Object.values(obj)) findMedia(val, depth + 1);
               }
             };
             findMedia(json);
@@ -493,6 +717,17 @@ export class InstagramScraper implements PlatformScraper {
         }
 
         return posts;
+      });
+
+      // Parse raw nodes into Post objects
+      return rawNodes.map((node: any) => {
+        if (node.shortcode && (node.edge_media_preview_like || node.edge_liked_by)) {
+          return this.parseNode(node);
+        }
+        if (node.code) {
+          return this.parsePopularNode(node);
+        }
+        return this.parseMediaV1(node);
       });
     } catch {
       return [];
@@ -566,6 +801,46 @@ export class InstagramScraper implements PlatformScraper {
         id: media.user?.pk?.toString() || '',
         fullName: media.user?.full_name,
         profilePicUrl: media.user?.profile_pic_url,
+      },
+    };
+  }
+
+  /** Parse Popular/Polaris page node (2026+ format) */
+  private parsePopularNode(node: any): Post {
+    const caption = node.caption?.text || '';
+    const hashtags = caption.match(/#[\w\u0080-\uffff]+/g) || [];
+    const mentions = (caption.match(/@[\w.]+/g) || []).map((m: string) => m.toLowerCase());
+
+    let mediaType: Post['mediaType'] = 'image';
+    const typeName = node.__typename || '';
+    if (typeName.includes('Video') || node.is_video || node.media_type === 2) mediaType = 'video';
+    if (typeName.includes('Sidecar') || node.media_type === 8) mediaType = 'carousel';
+    if (node.product_type === 'clips' || typeName.includes('Reel')) mediaType = 'reel';
+
+    const code = node.code || node.shortcode || '';
+    const takenAt = node.taken_at_timestamp || node.taken_at;
+
+    return {
+      id: node.id || node.pk?.toString() || code,
+      platform: 'instagram',
+      shortcode: code,
+      url: `https://www.instagram.com/p/${code}/`,
+      caption,
+      hashtags: hashtags.map((h: string) => h.toLowerCase()),
+      mentions,
+      likesCount: node.like_count ?? node.edge_media_preview_like?.count ?? 0,
+      commentsCount: node.comment_count ?? node.edge_media_to_comment?.count ?? 0,
+      viewsCount: node.play_count || node.video_view_count || node.view_count,
+      mediaType,
+      mediaUrls: [node.display_url || node.thumbnail_url || node.image_versions2?.candidates?.[0]?.url].filter(Boolean),
+      timestamp: takenAt
+        ? new Date(takenAt * 1000).toISOString()
+        : new Date().toISOString(),
+      owner: {
+        username: node.user?.username || node.owner?.username || '',
+        id: node.user?.pk?.toString() || node.owner?.id || '',
+        fullName: node.user?.full_name || node.owner?.full_name,
+        profilePicUrl: node.user?.profile_pic_url || node.owner?.profile_pic_url,
       },
     };
   }

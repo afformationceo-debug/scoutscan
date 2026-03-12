@@ -1,11 +1,16 @@
 <!-- Search Page -->
 <div x-data="searchPage()" x-init="init()">
-  <h2 class="text-2xl font-bold text-gray-900 mb-6">Hashtag Search</h2>
+  <h2 class="text-2xl font-heading font-bold text-white mb-6">해시태그 검색</h2>
+
+  <!-- Guide Box -->
+  <div class="guide-box mb-6">
+    <p><strong>해시태그 검색</strong>으로 특정 해시태그의 포스트와 인플루언서 프로필을 수집합니다. 플랫폼을 선택하고 해시태그를 입력한 뒤 <strong>검색</strong>을 누르세요. 프로필 분석을 체크하면 작성자 프로필까지 자동으로 수집합니다.</p>
+  </div>
 
   <!-- Search Form -->
-  <div class="bg-white rounded-lg shadow p-6 mb-6">
-    <form @submit.prevent="startSearch()" class="flex gap-4 flex-wrap items-end">
-      <select x-model="platform" class="rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <form @submit.prevent="startSearch()" class="flex gap-3 flex-wrap items-end">
+      <select x-model="platform" class="rounded-lg border px-3 py-2 text-sm">
         <option value="instagram">Instagram</option>
         <option value="twitter">Twitter</option>
         <option value="tiktok">TikTok</option>
@@ -13,150 +18,133 @@
       </select>
       <div class="flex-1 min-w-[200px]">
         <div class="flex">
-          <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500">#</span>
-          <input type="text" x-model="hashtag" placeholder="Enter hashtag"
-                 class="flex-1 rounded-r-md border-gray-300 shadow-sm px-3 py-2 border" required>
+          <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-dark-border bg-dark-subtle text-[#888] text-sm">#</span>
+          <input type="text" x-model="hashtag" placeholder="해시태그 입력"
+                 class="flex-1 rounded-r-lg border px-3 py-2 text-sm !rounded-l-none" required>
         </div>
       </div>
-      <input type="number" x-model.number="maxResults" min="1" max="10000" placeholder="Max"
-             class="w-28 rounded-md border-gray-300 shadow-sm px-3 py-2 border">
+      <input type="number" x-model.number="maxResults" min="1" max="10000" placeholder="최대"
+             class="w-28 rounded-lg border px-3 py-2 text-sm">
       <label class="flex items-center gap-2 cursor-pointer select-none">
         <input type="checkbox" x-model="enrichProfiles"
-               class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-        <span class="text-sm text-gray-700">Enrich Profiles</span>
+               class="rounded border-dark-border text-accent focus:ring-accent">
+        <span class="text-sm text-[#A0A0A0]">프로필 분석</span>
       </label>
-      <button type="submit" :disabled="isSearching"
-              class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50">
-        <span x-show="!isSearching">Search</span>
+      <button type="submit" :disabled="isSearching" class="btn-accent px-6 py-2 rounded-lg text-sm">
+        <span x-show="!isSearching">검색</span>
         <span x-show="isSearching" class="flex items-center gap-2">
           <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-          Searching...
+          검색 중...
         </span>
       </button>
     </form>
   </div>
 
-  <!-- Progress Panel (visible during scraping) -->
-  <div x-show="isSearching" x-cloak class="bg-white rounded-lg shadow p-5 mb-6 space-y-4">
-    <!-- Phase 1: Posts -->
+  <!-- Progress Panel -->
+  <div x-show="isSearching" x-cloak class="bg-dark-card border border-dark-border rounded-lg p-5 mb-6 space-y-4">
     <div>
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-sm font-semibold text-gray-700">Phase 1: Collecting Posts</span>
-        <span class="text-sm text-gray-500">
-          <span class="font-medium text-indigo-600" x-text="progressCount"></span> / <span x-text="maxResults"></span>
-          <span class="text-xs text-gray-400 ml-2" x-text="'(' + Math.round(progressCount / maxResults * 100) + '%)'"></span>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-[#A0A0A0]">1단계: 포스트 수집 중</span>
+        <span class="text-sm font-mono">
+          <span class="text-accent" x-text="progressCount"></span><span class="text-[#888]"> / <span x-text="maxResults"></span></span>
+          <span class="text-[#888] text-xs ml-2" x-text="'(' + Math.round(progressCount / maxResults * 100) + '%)'"></span>
         </span>
       </div>
-      <div class="w-full bg-gray-200 rounded-full h-2.5">
-        <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
-             :style="'width: ' + Math.min(100, (progressCount / maxResults) * 100) + '%'"></div>
+      <div class="progress-bar h-1.5">
+        <div class="progress-bar-fill h-1.5" :style="'width: ' + Math.min(100, (progressCount / maxResults) * 100) + '%'"></div>
       </div>
     </div>
-
-    <!-- Phase 2: Profiles -->
     <div x-show="profilePhase">
-      <div class="flex items-center justify-between mb-1">
-        <span class="text-sm font-semibold text-gray-700">Phase 2: Enriching Profiles</span>
-        <span class="text-sm text-gray-500">
-          <span class="font-medium text-emerald-600" x-text="profileCount"></span> / <span x-text="profileTotal"></span>
-          <span x-show="profileSkipped > 0" class="text-xs text-gray-400 ml-2" x-text="'(skipped ' + profileSkipped + ' existing)'"></span>
-          <span class="text-xs text-gray-400 ml-1" x-show="profileTotal > 0" x-text="'(' + Math.round(profileCount / profileTotal * 100) + '%)'"></span>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-medium text-[#A0A0A0]">2단계: 프로필 분석 중</span>
+        <span class="text-sm font-mono">
+          <span class="text-success" x-text="profileCount"></span><span class="text-[#888]"> / <span x-text="profileTotal"></span></span>
+          <span x-show="profileSkipped > 0" class="text-[#888] text-xs ml-2" x-text="'(skipped ' + profileSkipped + ')'"></span>
         </span>
       </div>
-      <div class="w-full bg-gray-200 rounded-full h-2.5">
-        <div class="bg-emerald-500 h-2.5 rounded-full transition-all duration-300"
-             :style="'width: ' + (profileTotal > 0 ? Math.min(100, (profileCount / profileTotal) * 100) : 0) + '%'"></div>
+      <div class="progress-bar h-1.5">
+        <div class="h-1.5 rounded-full bg-success transition-all" :style="'width: ' + (profileTotal > 0 ? Math.min(100, (profileCount / profileTotal) * 100) : 0) + '%'"></div>
       </div>
-      <!-- Profile errors / retry info -->
-      <div x-show="profileErrors > 0" class="mt-1 text-xs text-amber-600">
-        <span x-text="profileErrors"></span> failed
-        <span x-show="profileRetrying"> &middot; Retrying...</span>
-        <span x-show="profilePaused" class="text-red-500"> &middot; Paused (recovering from blocks)...</span>
+      <div x-show="profileErrors > 0" class="mt-1 text-xs text-warning">
+        <span x-text="profileErrors"></span> 실패
+        <span x-show="profileRetrying"> · 재시도 중...</span>
+        <span x-show="profilePaused" class="text-error"> · 일시정지 (복구 중)...</span>
       </div>
     </div>
-
     <!-- Live Activity Log -->
-    <div class="mt-2 bg-gray-50 rounded-md p-3 max-h-32 overflow-y-auto text-xs font-mono text-gray-600" x-ref="activityLog">
+    <div class="mt-2 bg-dark-body rounded-lg p-3 max-h-32 overflow-y-auto text-xs font-mono text-[#888]" x-ref="activityLog">
       <template x-for="(log, idx) in activityLogs.slice(-15)" :key="idx">
         <div x-text="log" class="py-0.5"></div>
       </template>
-      <div x-show="activityLogs.length === 0" class="text-gray-400">Waiting for events...</div>
+      <div x-show="activityLogs.length === 0" class="text-[#666]">이벤트 대기 중...</div>
     </div>
   </div>
 
   <!-- Tab Navigation + Results -->
-  <div x-show="posts.length > 0 || profiles.length > 0" class="bg-white rounded-lg shadow overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+  <div x-show="posts.length > 0 || profiles.length > 0" class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+    <div class="px-6 py-3 border-b border-dark-border flex items-center justify-between">
       <div class="flex gap-1">
         <button @click="activeTab = 'posts'"
-                :class="activeTab === 'posts' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
-          Posts (<span x-text="posts.length"></span>)
+                :class="activeTab === 'posts' ? 'btn-accent' : 'bg-dark-hover text-[#A0A0A0] hover:text-white'"
+                class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
+          포스트 (<span x-text="posts.length"></span>)
         </button>
         <button @click="activeTab = 'profiles'"
-                :class="activeTab === 'profiles' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                class="px-4 py-2 rounded-md text-sm font-medium transition-colors">
-          Profiles (<span x-text="profiles.length"></span>)
+                :class="activeTab === 'profiles' ? 'btn-accent' : 'bg-dark-hover text-[#A0A0A0] hover:text-white'"
+                class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
+          프로필 (<span x-text="profiles.length"></span>)
         </button>
       </div>
       <div class="flex gap-2">
-        <select x-show="activeTab === 'posts'" x-model="sortBy" @change="sortPosts()" class="text-sm rounded-md border-gray-300 px-2 py-1 border">
-          <option value="likes">Sort by Likes</option>
-          <option value="comments">Sort by Comments</option>
-          <option value="views">Sort by Views</option>
+        <select x-show="activeTab === 'posts'" x-model="sortBy" @change="sortPosts()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="likes">좋아요순</option>
+          <option value="comments">댓글순</option>
+          <option value="views">조회수순</option>
         </select>
-        <button x-show="currentJobId" @click="exportJob(currentJobId, 'csv')"
-                class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Export CSV</button>
-        <button x-show="currentJobId" @click="exportJob(currentJobId, 'xlsx')"
-                class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">Export XLSX</button>
+        <button x-show="currentJobId" @click="exportJob(currentJobId, 'csv')" class="text-xs text-[#A0A0A0] hover:text-accent px-2">CSV</button>
+        <button x-show="currentJobId" @click="exportJob(currentJobId, 'xlsx')" class="text-xs text-[#A0A0A0] hover:text-accent px-2">XLSX</button>
       </div>
     </div>
 
     <!-- Posts Tab -->
     <div x-show="activeTab === 'posts'" class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-gray-200 text-[13px]">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Caption</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Hashtags</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600" @click="sortBy='likes'; sortPosts()">Likes</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600" @click="sortBy='comments'; sortPosts()">Comments</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600" @click="sortBy='views'; sortPosts()">Views</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase">Link</th>
+      <table class="min-w-full data-table">
+        <thead>
+          <tr class="border-b border-dark-border">
+            <th class="px-3 py-2.5 text-left">작성자</th>
+            <th class="px-3 py-2.5 text-left">캡션</th>
+            <th class="px-3 py-2.5 text-left">해시태그</th>
+            <th class="px-3 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='likes'; sortPosts()">좋아요</th>
+            <th class="px-3 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='comments'; sortPosts()">댓글</th>
+            <th class="px-3 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='views'; sortPosts()">조회수</th>
+            <th class="px-3 py-2.5 text-left">유형</th>
+            <th class="px-3 py-2.5 text-left">날짜</th>
+            <th class="px-3 py-2.5 text-left">링크</th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody>
           <template x-for="post in posts" :key="post.id">
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 whitespace-nowrap">
-                <span class="font-medium text-indigo-700" x-text="'@' + post.owner.username"></span>
-              </td>
-              <td class="px-3 py-2 max-w-[280px]">
-                <p class="line-clamp-2 text-gray-700" x-text="post.caption?.substring(0, 120)"></p>
-              </td>
+            <tr class="border-b border-dark-border/30">
+              <td class="px-3 py-2 whitespace-nowrap text-accent font-medium" x-text="'@' + post.owner.username"></td>
+              <td class="px-3 py-2 max-w-[280px]"><p class="line-clamp-2 text-[#A0A0A0]" x-text="post.caption?.substring(0, 120)"></p></td>
               <td class="px-3 py-2 max-w-[160px]">
                 <div class="flex flex-wrap gap-0.5">
                   <template x-for="tag in (post.hashtags || []).slice(0, 3)" :key="tag">
-                    <span class="inline-block bg-indigo-50 text-indigo-600 text-[11px] px-1 py-0.5 rounded" x-text="tag"></span>
+                    <span class="badge badge-accent text-[10px]" x-text="tag"></span>
                   </template>
-                  <span x-show="(post.hashtags || []).length > 3" class="text-[11px] text-gray-400" x-text="'+' + ((post.hashtags || []).length - 3)"></span>
+                  <span x-show="(post.hashtags || []).length > 3" class="text-[10px] text-[#888]" x-text="'+' + ((post.hashtags || []).length - 3)"></span>
                 </div>
               </td>
-              <td class="px-3 py-2 font-medium" x-text="formatNumber(post.likesCount)"></td>
-              <td class="px-3 py-2 font-medium" x-text="formatNumber(post.commentsCount)"></td>
-              <td class="px-3 py-2" x-text="post.viewsCount ? formatNumber(post.viewsCount) : '-'"></td>
+              <td class="px-3 py-2 text-right num text-white" x-text="formatNumber(post.likesCount)"></td>
+              <td class="px-3 py-2 text-right num" x-text="formatNumber(post.commentsCount)"></td>
+              <td class="px-3 py-2 text-right num" x-text="post.viewsCount ? formatNumber(post.viewsCount) : '-'"></td>
               <td class="px-3 py-2">
-                <span class="px-1.5 py-0.5 text-[11px] rounded-full"
-                      :class="post.mediaType === 'video' ? 'bg-red-50 text-red-600' : post.mediaType === 'reel' ? 'bg-purple-50 text-purple-600' : post.mediaType === 'carousel' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-600'"
+                <span class="badge"
+                      :class="post.mediaType === 'video' ? 'badge-error' : post.mediaType === 'reel' ? 'badge-info' : post.mediaType === 'carousel' ? 'badge-info' : 'badge-c'"
                       x-text="post.mediaType"></span>
               </td>
-              <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap" x-text="formatDate(post.timestamp)"></td>
-              <td class="px-3 py-2">
-                <a :href="post.url" target="_blank" class="text-indigo-600 hover:text-indigo-800 hover:underline">Open</a>
-              </td>
+              <td class="px-3 py-2 text-xs text-[#888] whitespace-nowrap" x-text="formatDate(post.timestamp)"></td>
+              <td class="px-3 py-2"><a :href="post.url" target="_blank" class="text-accent text-xs hover:text-accent-hover">열기</a></td>
             </tr>
           </template>
         </tbody>
@@ -165,73 +153,64 @@
 
     <!-- Profiles Tab -->
     <div x-show="activeTab === 'profiles'" class="overflow-x-auto">
-      <div x-show="profiles.length === 0" class="text-center text-gray-400 py-8">
-        <template x-if="isSearching && profilePhase">
-          <p>Enriching profiles...</p>
-        </template>
-        <template x-if="!isSearching && !profilePhase">
-          <p>No profiles collected. Enable "Enrich Profiles" to collect author profiles.</p>
-        </template>
+      <div x-show="profiles.length === 0" class="text-center text-[#888] py-8">
+        <template x-if="isSearching && profilePhase"><p>프로필 분석 중...</p></template>
+        <template x-if="!isSearching && !profilePhase"><p>수집된 프로필이 없습니다. "프로필 분석"을 활성화하세요.</p></template>
       </div>
-      <table x-show="profiles.length > 0" class="min-w-full divide-y divide-gray-200 text-[13px]">
-        <thead class="bg-gray-50 sticky top-0">
-          <tr>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Username</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Name</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Bio</th>
-            <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase">Followers</th>
-            <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase">Following</th>
-            <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase">Posts</th>
-            <th class="px-2 py-2.5 text-right text-[11px] font-medium text-gray-500 uppercase">Eng%</th>
-            <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">V</th>
-            <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Biz</th>
-            <th class="px-2 py-2.5 text-center text-[11px] font-medium text-gray-500 uppercase">Pvt</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Category</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Email</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">URL</th>
-            <th class="px-2 py-2.5 text-left text-[11px] font-medium text-gray-500 uppercase">Scraped</th>
+      <table x-show="profiles.length > 0" class="min-w-full data-table">
+        <thead>
+          <tr class="border-b border-dark-border">
+            <th class="px-2 py-2.5 text-left">유저명</th>
+            <th class="px-2 py-2.5 text-left">이름</th>
+            <th class="px-2 py-2.5 text-left">바이오</th>
+            <th class="px-2 py-2.5 text-right">팔로워</th>
+            <th class="px-2 py-2.5 text-right">팔로잉</th>
+            <th class="px-2 py-2.5 text-right">게시물</th>
+            <th class="px-2 py-2.5 text-right">참여율</th>
+            <th class="px-2 py-2.5 text-center">인증</th>
+            <th class="px-2 py-2.5 text-center">비즈</th>
+            <th class="px-2 py-2.5 text-center">비공개</th>
+            <th class="px-2 py-2.5 text-left">카테고리</th>
+            <th class="px-2 py-2.5 text-left">이메일</th>
+            <th class="px-2 py-2.5 text-left">URL</th>
+            <th class="px-2 py-2.5 text-left">수집일</th>
           </tr>
         </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
+        <tbody>
           <template x-for="profile in profiles" :key="profile.username">
-            <tr class="hover:bg-gray-50">
-              <td class="px-2 py-2 font-medium text-indigo-700 whitespace-nowrap" x-text="'@' + profile.username"></td>
-              <td class="px-2 py-2 text-gray-900 whitespace-nowrap max-w-[140px] truncate" x-text="profile.fullName || '-'"></td>
-              <td class="px-2 py-2 text-gray-600 max-w-[200px]">
-                <p class="line-clamp-2 text-[12px]" x-text="profile.bio || '-'"></p>
-              </td>
-              <td class="px-2 py-2 text-right font-medium whitespace-nowrap" x-text="formatNumber(profile.followersCount)"></td>
-              <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(profile.followingCount)"></td>
-              <td class="px-2 py-2 text-right whitespace-nowrap" x-text="formatNumber(profile.postsCount)"></td>
-              <td class="px-2 py-2 text-right whitespace-nowrap">
+            <tr class="border-b border-dark-border/30">
+              <td class="px-2 py-2 text-accent font-medium whitespace-nowrap" x-text="'@' + profile.username"></td>
+              <td class="px-2 py-2 text-white whitespace-nowrap max-w-[140px] truncate" x-text="profile.fullName || '-'"></td>
+              <td class="px-2 py-2 max-w-[200px]"><p class="line-clamp-2 text-[12px] text-[#A0A0A0]" x-text="profile.bio || '-'"></p></td>
+              <td class="px-2 py-2 text-right num text-white" x-text="formatNumber(profile.followersCount)"></td>
+              <td class="px-2 py-2 text-right num" x-text="formatNumber(profile.followingCount)"></td>
+              <td class="px-2 py-2 text-right num" x-text="formatNumber(profile.postsCount)"></td>
+              <td class="px-2 py-2 text-right num">
                 <span x-text="profile.engagementRate != null ? profile.engagementRate.toFixed(2) + '%' : '-'"
-                      :class="profile.engagementRate >= 3 ? 'text-green-600 font-medium' : profile.engagementRate >= 1 ? 'text-indigo-600' : 'text-gray-500'"></span>
+                      :class="profile.engagementRate >= 3 ? 'text-success' : profile.engagementRate >= 1 ? 'text-accent' : 'text-[#888]'"></span>
               </td>
               <td class="px-2 py-2 text-center">
-                <span x-show="profile.isVerified" class="text-blue-500 font-bold text-[11px]">Y</span>
-                <span x-show="!profile.isVerified" class="text-gray-300 text-[11px]">-</span>
+                <span x-show="profile.isVerified" class="text-accent text-[11px] font-bold">Y</span>
+                <span x-show="!profile.isVerified" class="text-[#333] text-[11px]">-</span>
               </td>
               <td class="px-2 py-2 text-center">
-                <span x-show="profile.isBusinessAccount" class="text-amber-600 font-bold text-[11px]">Y</span>
-                <span x-show="!profile.isBusinessAccount" class="text-gray-300 text-[11px]">-</span>
+                <span x-show="profile.isBusinessAccount" class="text-warning text-[11px] font-bold">Y</span>
+                <span x-show="!profile.isBusinessAccount" class="text-[#333] text-[11px]">-</span>
               </td>
               <td class="px-2 py-2 text-center">
-                <span x-show="profile.isPrivate" class="text-red-500 font-bold text-[11px]">Y</span>
-                <span x-show="!profile.isPrivate" class="text-gray-300 text-[11px]">-</span>
+                <span x-show="profile.isPrivate" class="text-error text-[11px] font-bold">Y</span>
+                <span x-show="!profile.isPrivate" class="text-[#333] text-[11px]">-</span>
               </td>
-              <td class="px-2 py-2 text-gray-600 whitespace-nowrap text-[12px]" x-text="(profile.category && profile.category !== 'None') ? profile.category : '-'"></td>
+              <td class="px-2 py-2 text-[12px]" x-text="(profile.category && profile.category !== 'None') ? profile.category : '-'"></td>
               <td class="px-2 py-2 whitespace-nowrap text-[12px]">
-                <a x-show="profile.contactEmail" :href="'mailto:' + profile.contactEmail"
-                   class="text-indigo-500 hover:underline" x-text="profile.contactEmail"></a>
-                <span x-show="!profile.contactEmail" class="text-gray-300">-</span>
+                <a x-show="profile.contactEmail" :href="'mailto:' + profile.contactEmail" class="text-accent hover:underline" x-text="profile.contactEmail"></a>
+                <span x-show="!profile.contactEmail" class="text-[#333]">-</span>
               </td>
               <td class="px-2 py-2 max-w-[160px] text-[12px]">
-                <a x-show="profile.externalUrl" :href="profile.externalUrl" target="_blank"
-                   class="text-indigo-500 hover:underline truncate block"
-                   x-text="profile.externalUrl?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
-                <span x-show="!profile.externalUrl" class="text-gray-300">-</span>
+                <a x-show="profile.externalUrl" :href="profile.externalUrl" target="_blank" class="text-accent hover:underline truncate block" x-text="profile.externalUrl?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
+                <span x-show="!profile.externalUrl" class="text-[#333]">-</span>
               </td>
-              <td class="px-2 py-2 text-[11px] text-gray-500 whitespace-nowrap" x-text="formatDate(profile.scrapedAt)"></td>
+              <td class="px-2 py-2 text-[11px] text-[#888] whitespace-nowrap" x-text="formatDate(profile.scrapedAt)"></td>
             </tr>
           </template>
         </tbody>
@@ -239,7 +218,7 @@
     </div>
   </div>
 
-  <p x-show="!isSearching && posts.length === 0 && profiles.length === 0 && !currentJobId" class="text-gray-500 text-center py-12">
-    Enter a hashtag above to start searching.
+  <p x-show="!isSearching && posts.length === 0 && profiles.length === 0 && !currentJobId" class="text-[#888] text-center py-12">
+    위에서 해시태그를 입력하여 검색을 시작하세요.
   </p>
 </div>

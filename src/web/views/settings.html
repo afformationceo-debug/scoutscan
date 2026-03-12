@@ -1,44 +1,106 @@
 <!-- Settings Page -->
 <div x-data="settingsPage()" x-init="load()">
-  <h2 class="text-2xl font-bold text-gray-900 mb-6">Settings</h2>
+  <h2 class="text-2xl font-heading font-bold text-white mb-6">설정</h2>
 
-  <!-- Platform Cookie Status -->
-  <div class="bg-white rounded-lg shadow p-6 mb-6">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">Platform Cookie Status</h3>
-    <p class="text-sm text-gray-500 mb-4">
-      To enable scraping, export your browser cookies for each platform using a browser extension
-      (e.g., EditThisCookie) and save them as JSON files in the <code class="bg-gray-100 px-1 rounded">cookies/</code> directory.
+  <!-- Guide Box -->
+  <div class="guide-box mb-6">
+    <p><strong>설정</strong>에서는 스크래핑용 플랫폼 쿠키와 캠페인별 DM 발송 쿠키를 확인합니다. 스크래핑을 시작하려면 먼저 해당 플랫폼의 쿠키를 등록해야 합니다. <strong>EditThisCookie</strong> 등의 확장 프로그램으로 쿠키를 추출하여 저장하세요.</p>
+  </div>
+
+  <!-- Platform Cookie Status (Scraping) -->
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <h3 class="text-base font-heading font-semibold text-white mb-4">플랫폼 쿠키 상태 <span class="text-xs text-kaia-muted font-normal">(스크래핑용)</span></h3>
+    <p class="text-sm text-kaia-text mb-4">
+      브라우저 확장 프로그램으로 각 플랫폼의 쿠키를 추출하여
+      <code class="bg-dark-subtle px-1.5 py-0.5 rounded text-accent font-mono text-xs">cookies/</code> 디렉토리에 JSON 파일로 저장하세요.
     </p>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
       <template x-for="p in platforms" :key="p.platform">
-        <div class="border rounded-lg p-4" :class="p.hasCookies ? 'border-green-300 bg-green-50' : 'border-gray-200'">
+        <div class="border rounded-lg p-4 transition-colors"
+             :class="p.hasCookies ? 'border-success/30 bg-success/5' : 'border-dark-border'">
           <div class="flex items-center justify-between mb-2">
-            <h4 class="font-semibold capitalize" x-text="p.platform"></h4>
-            <span class="text-2xl" x-text="p.hasCookies ? '&#10003;' : '&#10007;'"
-                  :class="p.hasCookies ? 'text-green-600' : 'text-red-400'"></span>
+            <h4 class="font-semibold capitalize text-white text-sm" x-text="p.platform"></h4>
+            <span class="text-lg" x-text="p.hasCookies ? '\u2713' : '\u2717'"
+                  :class="p.hasCookies ? 'text-success' : 'text-error'"></span>
           </div>
-          <p class="text-sm text-gray-600" x-text="p.hasCookies ? p.cookieCount + ' cookies loaded' : 'No cookies found'"></p>
-          <p class="text-xs text-gray-400 mt-1" x-text="'File: cookies/' + p.platform + '.json'"></p>
+          <p class="text-sm text-kaia-text" x-text="p.hasCookies ? p.cookieCount + '개 쿠키 로드됨' : '쿠키 없음'"></p>
+          <p class="text-xs text-kaia-muted mt-1 font-mono" x-text="'cookies/' + p.platform + '.json'"></p>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Campaign Cookie Status (DM) -->
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <h3 class="text-base font-heading font-semibold text-white mb-4">캠페인 DM 쿠키 <span class="text-xs text-kaia-muted font-normal">(캠페인별 발송 계정)</span></h3>
+    <p class="text-sm text-kaia-text mb-4">
+      각 캠페인에 등록된 발송 계정 쿠키 상태입니다.
+      <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 관리</a>에서 쿠키를 업로드하세요.
+    </p>
+
+    <div x-show="campaignCookies.length === 0" class="text-center py-8 text-kaia-muted">
+      등록된 캠페인이 없습니다. <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 생성</a>을 먼저 진행하세요.
+    </div>
+
+    <div x-show="campaignCookies.length > 0" class="space-y-2">
+      <template x-for="c in campaignCookies" :key="c.id">
+        <div class="border rounded-lg p-4 transition-colors flex items-center justify-between"
+             :class="c.cookie_status === 'valid' ? 'border-success/30 bg-success/5' : c.cookie_status === 'expired' ? 'border-error/30 bg-error/5' : 'border-dark-border'">
+          <div class="flex items-center gap-3">
+            <span class="inline-block w-3 h-3 rounded-full"
+                  :class="c.cookie_status === 'valid' ? 'bg-success' : c.cookie_status === 'expired' ? 'bg-error' : 'bg-kaia-muted'"></span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="badge text-[10px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : 'tt')" x-text="c.platform"></span>
+                <span class="text-white font-medium text-sm" x-text="c.name"></span>
+                <span x-show="c.sender_username" class="text-accent text-sm" x-text="'@' + c.sender_username"></span>
+                <span class="badge text-[10px]"
+                      :class="c.cookie_status === 'valid' ? 'badge-success' : c.cookie_status === 'expired' ? 'badge-error' : 'badge-c'"
+                      x-text="c.has_cookie ? (c.cookie_status || 'unknown') : 'no cookie'"></span>
+              </div>
+              <p class="text-[11px] text-kaia-muted mt-0.5">
+                <span x-show="c.target_country" x-text="'국가: ' + c.target_country"></span>
+                <span class="ml-2">한도: <span x-text="c.daily_limit"></span>/일</span>
+                <span x-show="c.cookie_last_checked_at" class="ml-2">확인: <span x-text="formatDate(c.cookie_last_checked_at)"></span></span>
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="checkCampaignCookie(c)" class="text-xs text-kaia-text hover:text-white px-2 py-1 rounded border border-dark-border">확인</button>
+          </div>
         </div>
       </template>
     </div>
   </div>
 
   <!-- Instructions -->
-  <div class="bg-white rounded-lg shadow p-6">
-    <h3 class="text-lg font-semibold text-gray-900 mb-4">How to Add Cookies</h3>
-    <ol class="list-decimal list-inside space-y-2 text-sm text-gray-600">
-      <li>Install a cookie export browser extension (e.g., <strong>EditThisCookie</strong> for Chrome)</li>
-      <li>Log in to the target platform (Instagram, Twitter, etc.)</li>
-      <li>Click the extension and export cookies as JSON</li>
-      <li>Save the JSON file as <code class="bg-gray-100 px-1 rounded">cookies/&lt;platform&gt;.json</code></li>
-      <li>Refresh this page to verify the cookies are loaded</li>
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6">
+    <h3 class="text-base font-heading font-semibold text-white mb-4">쿠키 추가 방법</h3>
+    <ol class="list-decimal list-inside space-y-2 text-sm text-kaia-text">
+      <li>쿠키 추출 브라우저 확장 프로그램을 설치하세요 (예: Chrome용 <strong class="text-white">EditThisCookie</strong>, Firefox용 <strong class="text-white">Cookie-Editor</strong>)</li>
+      <li>대상 플랫폼(Instagram, Twitter, TikTok)에 로그인하세요</li>
+      <li>확장 프로그램에서 쿠키를 JSON으로 내보내세요</li>
+      <li>
+        <strong class="text-white">스크래핑용:</strong>
+        <code class="bg-dark-subtle px-1.5 py-0.5 rounded text-accent font-mono text-xs">cookies/&lt;플랫폼&gt;.json</code> 으로 저장
+      </li>
+      <li>
+        <strong class="text-white">DM 캠페인용:</strong>
+        <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 관리</a>에서 Cookie 버튼으로 직접 업로드
+      </li>
+      <li>이 페이지를 새로고침하여 쿠키가 로드되었는지 확인하세요</li>
     </ol>
+    <div class="mt-4 p-3 bg-dark-body rounded-lg">
+      <p class="text-xs text-kaia-muted/50 mb-1 font-semibold">플랫폼별 필수 쿠키:</p>
+      <div class="text-xs font-mono text-kaia-text space-y-0.5">
+        <p><span class="text-white">Instagram:</span> sessionid, csrftoken, ds_user_id</p>
+        <p><span class="text-white">Twitter:</span> auth_token, ct0, twid</p>
+        <p><span class="text-white">TikTok:</span> sessionid, tt_csrf_token, msToken, ttwid</p>
+      </div>
+    </div>
     <div class="mt-4">
-      <button @click="load()" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm">
-        Refresh Status
-      </button>
+      <button @click="load()" class="btn-accent px-4 py-2 rounded-lg text-sm">상태 새로고침</button>
     </div>
   </div>
 </div>

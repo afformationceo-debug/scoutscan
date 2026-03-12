@@ -10,7 +10,7 @@ function formatNumber(num) {
 function formatDate(dateStr) {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('ko-KR') + ' ' + d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 }
 
 function exportJob(jobId, format) {
@@ -97,7 +97,7 @@ function searchPage() {
     activityLogs: [],
 
     addLog(msg) {
-      const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       this.activityLogs.push(`[${ts}] ${msg}`);
       if (this.activityLogs.length > 100) this.activityLogs.shift();
       this.$nextTick(() => {
@@ -132,7 +132,7 @@ function searchPage() {
       this.activeTab = 'posts';
       this.isSearching = true;
       this.activityLogs = [];
-      this.addLog(`Starting search: #${this.hashtag} (max ${this.maxResults})`);
+      this.addLog(`검색 시작: #${this.hashtag} (최대 ${this.maxResults}개)`);
 
       const res = await fetch('/api/jobs/hashtag', {
         method: 'POST',
@@ -172,7 +172,7 @@ function searchPage() {
         } else {
           this.progressCount = data.count;
           if (data.count % 50 === 0 || data.count === 1) {
-            this.addLog(`Posts collected: ${data.count} / ${data.total}`);
+            this.addLog(`포스트 수집: ${data.count} / ${data.total}`);
           }
         }
         this.isSearching = true;
@@ -183,7 +183,7 @@ function searchPage() {
         this.profilePhase = true;
         this.profileTotal = data.total;
         this.profileSkipped = data.skipped || 0;
-        this.addLog(`Phase 2: ${data.total} profiles to enrich` + (data.skipped ? ` (${data.skipped} skipped - already exist)` : ''));
+        this.addLog(`2단계: ${data.total}개 프로필 분석 시작` + (data.skipped ? ` (${data.skipped}개 건너뜀 - 이미 존재)` : ''));
       });
 
       this.eventSource.addEventListener('profile', (e) => {
@@ -191,34 +191,34 @@ function searchPage() {
         this.profiles.push(profile);
         this.profileCount++;
         if (this.profileCount % 10 === 0 || this.profileCount === 1) {
-          this.addLog(`Profile enriched: @${profile.username} (${this.profileCount}/${this.profileTotal})`);
+          this.addLog(`프로필 분석 완료: @${profile.username} (${this.profileCount}/${this.profileTotal})`);
         }
       });
 
       this.eventSource.addEventListener('profile_error', (e) => {
         const data = JSON.parse(e.data);
         this.profileErrors++;
-        this.addLog(`Profile failed: @${data.username} - ${data.error}`);
+        this.addLog(`프로필 실패: @${data.username} - ${data.error}`);
       });
 
       this.eventSource.addEventListener('profile_pause', (e) => {
         this.profilePaused = true;
         const data = JSON.parse(e.data);
-        this.addLog(`Pausing ${data.pauseSeconds}s to recover from consecutive failures...`);
+        this.addLog(`연속 실패로 ${data.pauseSeconds}초 대기 중...`);
         setTimeout(() => { this.profilePaused = false; }, (data.pauseSeconds || 30) * 1000);
       });
 
       this.eventSource.addEventListener('profile_retry', (e) => {
         const data = JSON.parse(e.data);
         this.profileRetrying = true;
-        this.addLog(`Retrying ${data.count} failed profiles...`);
+        this.addLog(`실패한 ${data.count}개 프로필 재시도 중...`);
       });
 
       this.eventSource.addEventListener('complete', (e) => {
         const data = JSON.parse(e.data);
         this.isSearching = false;
         this.profileRetrying = false;
-        this.addLog(`Complete! Posts: ${data.postsCount || data.resultCount}, Profiles: ${data.profilesCount || 0}`);
+        this.addLog(`완료! 포스트: ${data.postsCount || data.resultCount}개, 프로필: ${data.profilesCount || 0}개`);
         this.eventSource.close();
         this.eventSource = null;
       });
@@ -226,7 +226,7 @@ function searchPage() {
       this.eventSource.addEventListener('error', (e) => {
         if (e.data) {
           const data = JSON.parse(e.data);
-          this.addLog(`Error: ${data.message}`);
+          this.addLog(`오류: ${data.message}`);
           console.error('SSE error:', data.message);
         }
         this.isSearching = false;
@@ -238,10 +238,10 @@ function searchPage() {
         const data = JSON.parse(e.data);
         if (data.status === 'completed' || data.status === 'failed') {
           this.isSearching = false;
-          if (data.status === 'failed') this.addLog(`Job failed: ${data.error || 'Unknown error'}`);
+          if (data.status === 'failed') this.addLog(`작업 실패: ${data.error || '알 수 없는 오류'}`);
         } else if (data.status === 'running') {
           this.isSearching = true;
-          this.addLog('Job started running...');
+          this.addLog('작업 실행 중...');
         }
       });
     },
@@ -287,6 +287,35 @@ function keywordsPage() {
       keyword: '',
       scrapingCycleHours: 72,
       maxResultsPerRun: 200,
+      scrapeUntil: '',
+    },
+    estimatedTime: '~17분',
+    estimatedPostTime: '~10분',
+    estimatedProfileTime: '~7분',
+
+    updatePairId() {
+      const kw = this.newTarget.keyword.replace(/^#/, '').trim();
+      if (this.newTarget.platform && this.newTarget.region && kw) {
+        this.newTarget.pairId = `${this.newTarget.platform}:${this.newTarget.region}:${kw}`;
+      } else {
+        this.newTarget.pairId = '';
+      }
+    },
+
+    updateEstimate() {
+      const max = this.newTarget.maxResultsPerRun || 200;
+      // Post collection: ~3s per post (anti-bot delays included)
+      const postSec = max * 3;
+      // Profile enrichment: ~75% unique authors, ~2.5s per profile
+      const uniqueProfiles = Math.round(max * 0.75);
+      const profileSec = uniqueProfiles * 2.5;
+      const totalSec = postSec + profileSec;
+      const totalMin = Math.ceil(totalSec / 60);
+      const postMin = Math.ceil(postSec / 60);
+      const profileMin = Math.ceil(profileSec / 60);
+      this.estimatedTime = `~${totalMin}분`;
+      this.estimatedPostTime = `~${postMin}분`;
+      this.estimatedProfileTime = `~${profileMin}분`;
     },
 
     async load() {
@@ -298,17 +327,38 @@ function keywordsPage() {
     },
 
     async addKeyword() {
-      if (!this.newTarget.pairId || !this.newTarget.keyword || !this.newTarget.region) {
-        alert('Please fill in Pair ID, Region, and Keyword');
+      if (!this.newTarget.region || !this.newTarget.keyword) {
+        alert('국가와 키워드를 입력하세요');
         return;
       }
-      await fetch('/api/keywords', {
+      this.updatePairId();
+      if (!this.newTarget.pairId) {
+        alert('플랫폼, 국가, 키워드를 모두 입력하세요');
+        return;
+      }
+      const payload = {
+        pairId: this.newTarget.pairId,
+        platform: this.newTarget.platform,
+        region: this.newTarget.region,
+        keyword: this.newTarget.keyword,
+        scrapingCycleHours: this.newTarget.scrapingCycleHours,
+        maxResultsPerRun: this.newTarget.maxResultsPerRun,
+      };
+      if (this.newTarget.scrapeUntil) {
+        payload.scrapeUntil = new Date(this.newTarget.scrapeUntil + 'T23:59:59Z').toISOString();
+      }
+      const res = await fetch('/api/keywords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.newTarget),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
+      if (data.error) {
+        alert('오류: ' + data.error);
+        return;
+      }
       this.showAddForm = false;
-      this.newTarget = { pairId: '', platform: 'instagram', region: '', keyword: '', scrapingCycleHours: 72, maxResultsPerRun: 200 };
+      this.newTarget = { pairId: '', platform: 'instagram', region: '', keyword: '', scrapingCycleHours: 72, maxResultsPerRun: 200, scrapeUntil: '' };
       this.load();
     },
 
@@ -328,18 +378,72 @@ function keywordsPage() {
         if (data.error) {
           alert(data.error);
         } else {
-          alert(`Scraping started for ${target.pairId}`);
+          alert(`${target.pairId} 스크래핑이 시작되었습니다`);
           this.load();
         }
       } catch (err) {
-        alert('Failed to start: ' + err.message);
+        alert('시작 실패: ' + err.message);
       }
     },
 
     async removeKeyword(id) {
-      if (!confirm('Delete this keyword target?')) return;
+      if (!confirm('이 키워드 타겟을 삭제하시겠습니까?')) return;
       await fetch(`/api/keywords/${id}`, { method: 'DELETE' });
       this.load();
+    },
+  };
+}
+
+// ─── AI Classification Banner Component ───
+
+function aiClassifyBanner() {
+  return {
+    aiTotal: 0,
+    aiClassified: 0,
+    aiUnclassified: 0,
+    aiInfluencers: 0,
+    aiBusinesses: 0,
+    aiRunning: false,
+    aiMessage: '',
+
+    async loadStatus() {
+      try {
+        const res = await fetch('/api/master/ai-status');
+        const data = await res.json();
+        this.aiTotal = data.total;
+        this.aiClassified = data.classified;
+        this.aiUnclassified = data.unclassified;
+        this.aiInfluencers = data.influencers;
+        this.aiBusinesses = data.businesses;
+      } catch { /* ignore */ }
+    },
+
+    async runClassify(reClassify = false) {
+      this.aiRunning = true;
+      this.aiMessage = '';
+      try {
+        const res = await fetch('/api/master/ai-classify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reClassify }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          this.aiMessage = 'Error: ' + data.error;
+        } else {
+          this.aiMessage = `${data.classified}개 프로필 분류 완료, ${data.assigned}개 캠페인 배정`;
+          this.loadStatus();
+          // Reload the profiles table if dataPage is loaded
+          if (typeof this.$root !== 'undefined') {
+            const dp = document.querySelector('[x-data="dataPage()"]');
+            if (dp && dp.__x) dp.__x.$data.load();
+          }
+        }
+      } catch (err) {
+        this.aiMessage = 'Error: ' + err.message;
+      } finally {
+        this.aiRunning = false;
+      }
     },
   };
 }
@@ -354,6 +458,7 @@ function dataPage() {
     totalAll: 0,
     platform: '',
     search: '',
+    aiType: '',
     sortBy: 'followers',
     order: 'desc',
     limit: 100,
@@ -379,6 +484,7 @@ function dataPage() {
       });
       if (this.platform) params.set('platform', this.platform);
       if (this.search) params.set('search', this.search);
+      if (this.aiType) params.set('aiType', this.aiType);
 
       const [profileRes, statsRes, missingRes] = await Promise.all([
         fetch(`/api/master/influencers?${params}`),
@@ -403,7 +509,7 @@ function dataPage() {
     },
 
     addEnrichLog(msg) {
-      const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ts = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       this.enrichLogs.push(`[${ts}] ${msg}`);
       if (this.enrichLogs.length > 100) this.enrichLogs.shift();
       this.$nextTick(() => {
@@ -424,7 +530,7 @@ function dataPage() {
       this.enrichPaused = false;
       this.enrichRetrying = false;
       this.enrichLogs = [];
-      this.addEnrichLog(`Starting re-enrichment for ${targetPlatform}...`);
+      this.addEnrichLog(`${targetPlatform} 재분석 시작...`);
 
       const res = await fetch('/api/jobs/re-enrich', {
         method: 'POST',
@@ -434,12 +540,12 @@ function dataPage() {
       const data = await res.json();
 
       if (!data.jobId) {
-        this.addEnrichLog(`Error: ${data.error}`);
+        this.addEnrichLog(`오류: ${data.error}`);
         this.enriching = false;
         return;
       }
 
-      this.addEnrichLog(`Job started: ${data.missingCount} profiles to enrich`);
+      this.addEnrichLog(`작업 시작: ${data.missingCount}개 프로필 분석 예정`);
       this.connectEnrichSSE(data.jobId);
     },
 
@@ -450,14 +556,14 @@ function dataPage() {
       this.enrichEventSource.addEventListener('profile_start', (e) => {
         const data = JSON.parse(e.data);
         this.enrichTotal = data.total;
-        this.addEnrichLog(`${data.total} profiles to enrich`);
+        this.addEnrichLog(`${data.total}개 프로필 분석 예정`);
       });
 
       this.enrichEventSource.addEventListener('profile', (e) => {
         const profile = JSON.parse(e.data);
         this.enrichCount++;
         if (this.enrichCount % 5 === 0 || this.enrichCount === 1) {
-          this.addEnrichLog(`Enriched @${profile.username} (${this.enrichCount}/${this.enrichTotal})`);
+          this.addEnrichLog(`분석 완료 @${profile.username} (${this.enrichCount}/${this.enrichTotal})`);
         }
       });
 
@@ -470,27 +576,27 @@ function dataPage() {
       this.enrichEventSource.addEventListener('profile_error', (e) => {
         const data = JSON.parse(e.data);
         this.enrichErrors++;
-        this.addEnrichLog(`Failed @${data.username}: ${data.error}`);
+        this.addEnrichLog(`실패 @${data.username}: ${data.error}`);
       });
 
       this.enrichEventSource.addEventListener('profile_pause', (e) => {
         this.enrichPaused = true;
         const data = JSON.parse(e.data);
-        this.addEnrichLog(`Pausing ${data.pauseSeconds}s...`);
+        this.addEnrichLog(`${data.pauseSeconds}초 대기 중...`);
         setTimeout(() => { this.enrichPaused = false; }, (data.pauseSeconds || 30) * 1000);
       });
 
       this.enrichEventSource.addEventListener('profile_retry', (e) => {
         const data = JSON.parse(e.data);
         this.enrichRetrying = true;
-        this.addEnrichLog(`Retrying ${data.count} failed profiles...`);
+        this.addEnrichLog(`실패한 ${data.count}개 프로필 재시도 중...`);
       });
 
       this.enrichEventSource.addEventListener('complete', (e) => {
         const data = JSON.parse(e.data);
         this.enriching = false;
         this.enrichRetrying = false;
-        this.addEnrichLog(`Complete! ${data.profilesCount} profiles enriched.`);
+        this.addEnrichLog(`완료! ${data.profilesCount}개 프로필 분석됨.`);
         this.enrichEventSource.close();
         this.enrichEventSource = null;
         // Reload data
@@ -500,7 +606,7 @@ function dataPage() {
       this.enrichEventSource.addEventListener('error', (e) => {
         if (e.data) {
           const data = JSON.parse(e.data);
-          this.addEnrichLog(`Error: ${data.message}`);
+          this.addEnrichLog(`오류: ${data.message}`);
         }
         this.enriching = false;
         this.enrichEventSource.close();
@@ -510,7 +616,7 @@ function dataPage() {
 
     exportAll(format) {
       // TODO: implement master export
-      alert('Export coming soon. Use per-job export from History page for now.');
+      alert('내보내기 기능 준비 중입니다. 작업 이력 페이지에서 개별 작업 내보내기를 이용하세요.');
     },
   };
 }
@@ -522,52 +628,106 @@ function campaignsPage() {
     campaigns: [],
     loading: false,
     showCreateForm: false,
+    showCookieUpload: false,
+    showEditModal: false,
+    editCampaign: null,
+    cookieUploadCampaign: null,
+    cookieSenderUsername: '',
+    cookieJsonText: '',
     newCampaign: {
       name: '',
       brand: '',
       platform: 'instagram',
       targetCountry: '',
-      targetTiersStr: 'S,A',
       dailyLimit: 40,
       messageTemplate: '',
+      senderUsername: '',
+      cookieJson: '',
     },
+
+    _refreshInterval: null,
 
     async load() {
       this.loading = true;
       const res = await fetch('/api/campaigns');
       const data = await res.json();
-      this.campaigns = data.campaigns;
+      this.campaigns = data.campaigns.map(c => {
+        // Preserve existing expand state
+        const existing = this.campaigns.find(e => e.id === c.id);
+        return {
+          ...c,
+          _showTargets: existing ? existing._showTargets : false,
+          _targets: existing ? existing._targets : [],
+          _targetTotal: existing ? existing._targetTotal : 0,
+          _targetsLoading: false,
+          _targetPage: existing ? existing._targetPage : 0,
+        };
+      });
       this.loading = false;
+
+      // Auto-refresh every 10s if any campaign is active
+      if (!this._refreshInterval && this.campaigns.some(c => c.status === 'active')) {
+        this._refreshInterval = setInterval(() => this.refreshStats(), 10000);
+      }
+    },
+
+    async refreshStats() {
+      try {
+        const res = await fetch('/api/campaigns');
+        const data = await res.json();
+        for (const updated of data.campaigns) {
+          const existing = this.campaigns.find(c => c.id === updated.id);
+          if (existing) {
+            existing.total_sent = updated.total_sent;
+            existing.total_failed = updated.total_failed;
+            existing.total_queued = updated.total_queued;
+            existing.total_replied = updated.total_replied;
+            existing.status = updated.status;
+            existing.cookie_status = updated.cookie_status;
+          }
+        }
+        // Stop refresh if no active campaigns
+        if (!this.campaigns.some(c => c.status === 'active') && this._refreshInterval) {
+          clearInterval(this._refreshInterval);
+          this._refreshInterval = null;
+        }
+      } catch { /* ignore */ }
     },
 
     async createCampaign() {
       if (!this.newCampaign.name || !this.newCampaign.messageTemplate) {
-        alert('Please fill in Campaign Name and Message Template');
+        alert('캠페인 이름과 메시지 템플릿을 입력하세요');
         return;
       }
-      const targetTiers = this.newCampaign.targetTiersStr.split(',').map(s => s.trim()).filter(Boolean);
-      await fetch('/api/campaigns', {
+      const payload = {
+        name: this.newCampaign.name,
+        brand: this.newCampaign.brand || undefined,
+        platform: this.newCampaign.platform,
+        targetCountry: this.newCampaign.targetCountry || undefined,
+        dailyLimit: this.newCampaign.dailyLimit,
+        messageTemplate: this.newCampaign.messageTemplate,
+        senderUsername: this.newCampaign.senderUsername.replace(/^@/, '') || undefined,
+        cookieJson: this.newCampaign.cookieJson || undefined,
+      };
+      const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: this.newCampaign.name,
-          brand: this.newCampaign.brand || undefined,
-          platform: this.newCampaign.platform,
-          targetCountry: this.newCampaign.targetCountry || undefined,
-          targetTiers: targetTiers.length > 0 ? targetTiers : undefined,
-          dailyLimit: this.newCampaign.dailyLimit,
-          messageTemplate: this.newCampaign.messageTemplate,
-        }),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
+      if (data.error) {
+        alert('오류: ' + data.error);
+        return;
+      }
       this.showCreateForm = false;
-      this.newCampaign = { name: '', brand: '', platform: 'instagram', targetCountry: '', targetTiersStr: 'S,A', dailyLimit: 40, messageTemplate: '' };
+      this.newCampaign = { name: '', brand: '', platform: 'instagram', targetCountry: '', dailyLimit: 40, messageTemplate: '', senderUsername: '', cookieJson: '' };
       this.load();
     },
 
     async generateQueue(campaignId) {
       const res = await fetch(`/api/campaigns/${campaignId}/queue`, { method: 'POST' });
       const data = await res.json();
-      alert(data.message || data.error);
+      alert(data.message || data.error || '완료');
       this.load();
     },
 
@@ -580,6 +740,129 @@ function campaignsPage() {
       await fetch(`/api/campaigns/${campaignId}/pause`, { method: 'POST' });
       this.load();
     },
+
+    openEditModal(campaign) {
+      this.editCampaign = { ...campaign, target_country: (campaign.target_country || '').toUpperCase() };
+      this.showEditModal = true;
+    },
+
+    async saveCampaignEdit() {
+      if (!this.editCampaign) return;
+      const payload = {
+        name: this.editCampaign.name,
+        brand: this.editCampaign.brand || null,
+        platform: this.editCampaign.platform,
+        targetCountry: this.editCampaign.target_country || null,
+        dailyLimit: this.editCampaign.daily_limit,
+        messageTemplate: this.editCampaign.message_template,
+        senderUsername: this.editCampaign.sender_username || null,
+        delayMinSec: this.editCampaign.delay_min_sec,
+        delayMaxSec: this.editCampaign.delay_max_sec,
+        maxRetries: this.editCampaign.max_retries,
+        status: this.editCampaign.status,
+      };
+      const res = await fetch(`/api/campaigns/${this.editCampaign.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.error) { alert('오류: ' + data.error); return; }
+      this.showEditModal = false;
+      this.load();
+    },
+
+    async toggleTargets(campaign) {
+      campaign._showTargets = !campaign._showTargets;
+      if (campaign._showTargets && (!campaign._targets || campaign._targets.length === 0)) {
+        campaign._targetsLoading = true;
+        try {
+          const res = await fetch(`/api/campaigns/${campaign.id}/targets?limit=50&offset=0`);
+          const data = await res.json();
+          campaign._targets = data.targets;
+          campaign._targetTotal = data.total;
+          campaign._targetPage = 0;
+        } catch { /* ignore */ }
+        campaign._targetsLoading = false;
+      }
+    },
+
+    async loadTargetsPage(campaign, page) {
+      campaign._targetsLoading = true;
+      try {
+        const offset = page * 50;
+        const res = await fetch(`/api/campaigns/${campaign.id}/targets?limit=50&offset=${offset}`);
+        const data = await res.json();
+        campaign._targets = data.targets;
+        campaign._targetTotal = data.total;
+        campaign._targetPage = page;
+      } catch { /* ignore */ }
+      campaign._targetsLoading = false;
+    },
+
+    async loadAllTargets(campaign) {
+      campaign._targetsLoading = true;
+      try {
+        const res = await fetch(`/api/campaigns/${campaign.id}/targets?limit=10000&offset=0`);
+        const data = await res.json();
+        campaign._targets = data.targets;
+        campaign._targetTotal = data.total;
+        campaign._targetPage = 0;
+      } catch { /* ignore */ }
+      campaign._targetsLoading = false;
+    },
+
+    uploadCookieDialog(campaign) {
+      this.cookieUploadCampaign = campaign;
+      this.cookieSenderUsername = campaign.sender_username || '';
+      this.cookieJsonText = '';
+      this.showCookieUpload = true;
+    },
+
+    async submitCookieUpload() {
+      if (!this.cookieUploadCampaign || !this.cookieJsonText) {
+        alert('쿠키 JSON 데이터를 입력하세요');
+        return;
+      }
+      if (!this.cookieSenderUsername) {
+        alert('발송 계정 유저명을 입력하세요');
+        return;
+      }
+      try {
+        JSON.parse(this.cookieJsonText);
+      } catch {
+        alert('잘못된 JSON 형식입니다');
+        return;
+      }
+      const res = await fetch(`/api/campaigns/${this.cookieUploadCampaign.id}/upload-cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: this.cookieJsonText, senderUsername: this.cookieSenderUsername.replace(/^@/, '') }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert('오류: ' + data.error);
+      } else {
+        alert(`쿠키 업로드 완료. 상태: ${data.status}` + (data.missingCookies?.length ? ` (누락: ${data.missingCookies.join(', ')})` : ''));
+        this.showCookieUpload = false;
+        this.load();
+      }
+    },
+
+    async checkCookieNow(campaign) {
+      if (!campaign.sender_username) {
+        alert('발송 계정이 설정되지 않았습니다. Cookie 버튼으로 쿠키를 먼저 업로드하세요.');
+        return;
+      }
+      const res = await fetch(`/api/campaigns/${campaign.id}/check-cookies`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status) {
+        alert(`쿠키 상태: ${data.status}` + (data.missingCookies?.length ? `\n누락: ${data.missingCookies.join(', ')}` : ''));
+      } else if (data.error) {
+        alert(data.error);
+      }
+      this.load();
+    },
   };
 }
 
@@ -590,6 +873,10 @@ function accountsPage() {
     accounts: [],
     loading: false,
     showAddForm: false,
+    showCookieUpload: false,
+    cookieUploadAccount: null,
+    cookieJsonText: '',
+    cookieFileData: null,
     newAccount: { platform: 'instagram', username: '', sessionFile: '' },
 
     async load() {
@@ -601,7 +888,7 @@ function accountsPage() {
     },
 
     async addAccount() {
-      if (!this.newAccount.username) { alert('Username required'); return; }
+      if (!this.newAccount.username) { alert('유저명을 입력하세요'); return; }
       await fetch('/api/dm-accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -613,8 +900,60 @@ function accountsPage() {
     },
 
     async removeAccount(id) {
-      if (!confirm('Delete this DM account?')) return;
+      if (!confirm('이 DM 계정을 삭제하시겠습니까?')) return;
       await fetch(`/api/dm-accounts/${id}`, { method: 'DELETE' });
+      this.load();
+    },
+
+    uploadCookieDialog(account) {
+      this.cookieUploadAccount = account;
+      this.cookieJsonText = '';
+      this.cookieFileData = null;
+      this.showCookieUpload = true;
+    },
+
+    handleCookieFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        this.cookieJsonText = e.target.result;
+      };
+      reader.readAsText(file);
+    },
+
+    async submitCookieUpload() {
+      if (!this.cookieUploadAccount || !this.cookieJsonText) {
+        alert('쿠키 JSON 데이터를 입력하세요');
+        return;
+      }
+      try {
+        JSON.parse(this.cookieJsonText); // validate JSON
+      } catch {
+        alert('잘못된 JSON 형식입니다');
+        return;
+      }
+      const res = await fetch(`/api/dm-accounts/${this.cookieUploadAccount.id}/upload-cookies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: this.cookieJsonText }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert('오류: ' + data.error);
+      } else {
+        alert(`쿠키 업로드 완료. 상태: ${data.status}` + (data.missingCookies?.length ? ` (누락: ${data.missingCookies.join(', ')})` : ''));
+        this.showCookieUpload = false;
+        this.load();
+      }
+    },
+
+    async checkCookieNow(account) {
+      const res = await fetch(`/api/cookie-health/${account.platform}/${account.username}/check`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status) {
+        alert(`쿠키 상태: ${data.status}` + (data.missingCookies?.length ? `\n누락: ${data.missingCookies.join(', ')}` : ''));
+      }
       this.load();
     },
   };
@@ -657,7 +996,7 @@ function profilesPage() {
         if (profileData.profiles.length > 0) {
           this.profiles.unshift(...profileData.profiles);
         } else {
-          this.error = 'Profile not found or scraping failed.';
+          this.error = '프로필을 찾을 수 없거나 스크래핑에 실패했습니다.';
         }
       } catch (err) {
         this.error = err.message;
@@ -671,10 +1010,10 @@ function profilesPage() {
         const res = await fetch(`/api/jobs/${jobId}`);
         const job = await res.json();
         if (job.status === 'completed') return;
-        if (job.status === 'failed') throw new Error(job.error || 'Job failed');
+        if (job.status === 'failed') throw new Error(job.error || '작업 실패');
         await new Promise(r => setTimeout(r, 2000));
       }
-      throw new Error('Job timed out');
+      throw new Error('작업 시간 초과');
     },
   };
 }
@@ -725,9 +1064,168 @@ function historyPage() {
     },
 
     async remove(jobId) {
-      if (!confirm('Delete this job and all its data?')) return;
+      if (!confirm('이 작업과 모든 데이터를 삭제하시겠습니까?')) return;
       await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
       this.load();
+    },
+  };
+}
+
+// ─── Comment Templates Page Component ───
+
+function commentTemplatesPage() {
+  return {
+    templates: [],
+    campaigns: [],
+    loading: false,
+    showAddForm: false,
+    newTemplate: { platform: 'instagram', category: '', template: '', variablesStr: '', campaignId: '' },
+
+    async load() {
+      this.loading = true;
+      const [tRes, cRes] = await Promise.all([
+        fetch('/api/comment-templates'),
+        fetch('/api/campaigns'),
+      ]);
+      const tData = await tRes.json();
+      const cData = await cRes.json();
+      this.templates = tData.templates;
+      this.campaigns = cData.campaigns;
+      this.loading = false;
+    },
+
+    async addTemplate() {
+      if (!this.newTemplate.category || !this.newTemplate.template) {
+        alert('카테고리와 템플릿을 입력하세요');
+        return;
+      }
+      const variables = this.newTemplate.variablesStr.split(',').map(s => s.trim()).filter(Boolean);
+      await fetch('/api/comment-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: this.newTemplate.platform,
+          category: this.newTemplate.category,
+          template: this.newTemplate.template,
+          variables,
+          campaignId: this.newTemplate.campaignId || undefined,
+        }),
+      });
+      this.showAddForm = false;
+      this.newTemplate = { platform: 'instagram', category: '', template: '', variablesStr: '', campaignId: '' };
+      this.load();
+    },
+
+    async removeTemplate(id) {
+      if (!confirm('이 템플릿을 삭제하시겠습니까?')) return;
+      await fetch(`/api/comment-templates/${id}`, { method: 'DELETE' });
+      this.load();
+    },
+  };
+}
+
+// ─── Campaign Live View Component (DB + SSE) ───
+
+function campaignLive(campaignId) {
+  return {
+    activity: [],
+    summary: {},
+    liveEvents: [],
+    eventSource: null,
+    _pollInterval: null,
+    _countdownInterval: null,
+    currentStatus: '',
+    currentPhase: '',
+    countdown: 0,
+
+    async init() {
+      await this.loadActivity();
+      this.connectSSE();
+      this._pollInterval = setInterval(() => this.loadActivity(), 8000);
+    },
+
+    async loadActivity() {
+      try {
+        const res = await fetch(`/api/campaigns/${campaignId}/activity?limit=50`);
+        const data = await res.json();
+        this.activity = data.activity;
+        this.summary = data.summary;
+      } catch { /* ignore */ }
+    },
+
+    startCountdown(seconds) {
+      if (this._countdownInterval) clearInterval(this._countdownInterval);
+      this.countdown = seconds;
+      this._countdownInterval = setInterval(() => {
+        this.countdown--;
+        if (this.countdown <= 0) {
+          clearInterval(this._countdownInterval);
+          this._countdownInterval = null;
+          this.currentStatus = '';
+          this.currentPhase = '';
+        }
+      }, 1000);
+    },
+
+    connectSSE() {
+      if (this.eventSource) this.eventSource.close();
+      this.eventSource = new EventSource(`/api/campaigns/${campaignId}/stream`);
+
+      const ts = () => new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const addLive = (type, data, msg) => {
+        this.liveEvents.unshift({ type, ...data, ts: ts(), msg });
+        if (this.liveEvents.length > 50) this.liveEvents.pop();
+        this.loadActivity();
+      };
+
+      this.eventSource.addEventListener('status', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = d.message;
+        this.currentPhase = d.phase;
+        if (d.delaySec) this.startCountdown(d.delaySec);
+        else if (d.cooldownMin) this.startCountdown(d.cooldownMin * 60);
+        else { this.countdown = 0; }
+      });
+
+      this.eventSource.addEventListener('dm_sent', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `@${d.recipient}에게 DM 발송 완료!`;
+        this.currentPhase = 'sent';
+        this.countdown = 0;
+        addLive('dm_sent', d, `DM 발송 → @${d.recipient} (#${d.sentCount})`);
+      });
+      this.eventSource.addEventListener('dm_failed', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `@${d.recipient} 실패: ${d.error || ''}`;
+        this.currentPhase = 'failed';
+        this.countdown = 0;
+        addLive('dm_failed', d, `실패 → @${d.recipient}: ${d.error || ''}`);
+      });
+      this.eventSource.addEventListener('engagement', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `@${d.recipient} 참여 완료${d.liked ? ' (좋아요)' : ''}${d.commented ? ' (댓글)' : ''}`;
+        this.currentPhase = 'engaged';
+        addLive('engagement', d, `참여 @${d.recipient}`);
+      });
+      this.eventSource.addEventListener('round_complete', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `라운드 완료: 발송 ${d.sentCount}, 실패 ${d.failedCount}`;
+        this.currentPhase = 'round';
+        addLive('round_complete', d, `라운드 완료`);
+      });
+
+      this.eventSource.addEventListener('error', () => {
+        if (this.eventSource) this.eventSource.close();
+        this.eventSource = null;
+        setTimeout(() => { if (!this.eventSource) this.connectSSE(); }, 5000);
+      });
+    },
+
+    destroy() {
+      if (this.eventSource) { this.eventSource.close(); this.eventSource = null; }
+      if (this._pollInterval) { clearInterval(this._pollInterval); this._pollInterval = null; }
+      if (this._countdownInterval) { clearInterval(this._countdownInterval); this._countdownInterval = null; }
     },
   };
 }
@@ -737,11 +1235,83 @@ function historyPage() {
 function settingsPage() {
   return {
     platforms: [],
+    campaignCookies: [],
 
     async load() {
-      const res = await fetch('/api/platforms');
+      const [platformRes, campaignRes] = await Promise.all([
+        fetch('/api/platforms'),
+        fetch('/api/campaigns'),
+      ]);
+      const platformData = await platformRes.json();
+      const campaignData = await campaignRes.json();
+      this.platforms = platformData.platforms;
+      this.campaignCookies = campaignData.campaigns || [];
+    },
+
+    async checkCampaignCookie(campaign) {
+      if (!campaign.sender_username) {
+        alert('발송 계정이 설정되지 않았습니다.');
+        return;
+      }
+      const res = await fetch(`/api/campaigns/${campaign.id}/check-cookies`, { method: 'POST' });
       const data = await res.json();
-      this.platforms = data.platforms;
+      if (data.status) {
+        alert(`쿠키 상태: ${data.status}` + (data.missingCookies?.length ? `\n누락: ${data.missingCookies.join(', ')}` : ''));
+      } else if (data.error) {
+        alert(data.error);
+      }
+      this.load();
+    },
+  };
+}
+
+// ─── Cookie Health Banner Component (Dashboard) ───
+
+function cookieHealthBanner() {
+  return {
+    expiredAccounts: [],
+    eventSource: null,
+
+    async init() {
+      // Load initial state
+      try {
+        const res = await fetch('/api/cookie-health');
+        const data = await res.json();
+        this.expiredAccounts = (data.accounts || []).filter(a => a.cookie_status === 'expired');
+      } catch { /* ignore */ }
+
+      // Subscribe to SSE for real-time updates
+      this.eventSource = new EventSource('/api/cookie-health/stream');
+
+      this.eventSource.addEventListener('status_change', (e) => {
+        const status = JSON.parse(e.data);
+        // Update or add to list
+        const idx = this.expiredAccounts.findIndex(a => a.platform === status.platform && a.username === status.username);
+        if (status.status === 'expired') {
+          if (idx === -1) {
+            this.expiredAccounts.push(status);
+          } else {
+            this.expiredAccounts[idx] = status;
+          }
+        } else {
+          // Remove if no longer expired
+          if (idx !== -1) {
+            this.expiredAccounts.splice(idx, 1);
+          }
+        }
+      });
+
+      this.eventSource.addEventListener('expired', (e) => {
+        const data = JSON.parse(e.data);
+        const exists = this.expiredAccounts.some(a => a.platform === data.platform && a.username === data.username);
+        if (!exists) {
+          this.expiredAccounts.push({ platform: data.platform, username: data.username, status: 'expired', missingCookies: [] });
+        }
+      });
+
+      this.eventSource.addEventListener('error', () => {
+        // SSE connection error — will auto-reconnect
+      });
     },
   };
 }

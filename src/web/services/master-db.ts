@@ -109,9 +109,15 @@ export function getInfluencers(opts: {
   const params: any[] = [];
 
   if (opts.platform) { conditions.push('platform = ?'); params.push(opts.platform); }
-  if (opts.country) { conditions.push('detected_country = ?'); params.push(opts.country); }
+  if (opts.country) {
+    // Use AI country if available, fall back to geo-detected
+    conditions.push('UPPER(COALESCE(ai_country, detected_country)) = UPPER(?)');
+    params.push(opts.country);
+  }
   if (opts.tier) { conditions.push('scout_tier = ?'); params.push(opts.tier); }
   if (opts.dmStatus) { conditions.push('dm_status = ?'); params.push(opts.dmStatus); }
+  if ((opts as any).aiType === 'influencer') { conditions.push('ai_is_influencer = 1'); }
+  if ((opts as any).aiType === 'business') { conditions.push('ai_is_influencer = 0 AND ai_classified_at IS NOT NULL'); }
   if (opts.search) {
     conditions.push('(username LIKE ? OR full_name LIKE ? OR bio LIKE ?)');
     const s = `%${opts.search}%`;
@@ -222,16 +228,17 @@ export function updateInfluencerGeo(platform: string, username: string, geo: { c
 export function createKeywordTarget(target: {
   pairId: string; platform: string; region: string; keyword: string;
   scrapingCycleHours?: number; maxResultsPerRun?: number; isActive?: boolean; nextScrapeAt?: string;
+  groupKey?: string; scrapeUntil?: string;
 }): number {
   const now = new Date().toISOString();
   const result = db.prepare(`
-    INSERT INTO keyword_targets (pair_id, platform, region, keyword, scraping_cycle_hours, max_results_per_run, is_active, next_scrape_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO keyword_targets (pair_id, platform, region, keyword, scraping_cycle_hours, max_results_per_run, is_active, next_scrape_at, group_key, scrape_until, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     target.pairId, target.platform, target.region, target.keyword,
     target.scrapingCycleHours ?? 72, target.maxResultsPerRun ?? 200,
     target.isActive !== false ? 1 : 0,
-    target.nextScrapeAt || now, now, now
+    target.nextScrapeAt || now, target.groupKey || null, target.scrapeUntil || null, now, now
   );
   return result.lastInsertRowid as number;
 }
@@ -257,6 +264,7 @@ export function updateKeywordTarget(id: number, updates: Partial<KeywordTarget>)
   if (updates.lastScrapedAt !== undefined) { fields.push('last_scraped_at = ?'); params.push(updates.lastScrapedAt); }
   if (updates.lastPostTimestamp !== undefined) { fields.push('last_post_timestamp = ?'); params.push(updates.lastPostTimestamp); }
   if (updates.totalExtracted !== undefined) { fields.push('total_extracted = ?'); params.push(updates.totalExtracted); }
+  if (updates.scrapeUntil !== undefined) { fields.push('scrape_until = ?'); params.push(updates.scrapeUntil || null); }
 
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
@@ -284,6 +292,8 @@ function rowToKeywordTarget(row: any): KeywordTarget {
     totalExtracted: row.total_extracted,
     maxResultsPerRun: row.max_results_per_run,
     isActive: !!row.is_active,
+    groupKey: row.group_key || undefined,
+    scrapeUntil: row.scrape_until || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -297,13 +307,14 @@ export function createCampaign(campaign: {
   minFollowers?: number; maxFollowers?: number;
   messageTemplate: string; dailyLimit?: number; maxRetries?: number;
   delayMinSec?: number; delayMaxSec?: number; status?: string;
+  senderUsername?: string; cookieJson?: string;
 }): void {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO dm_campaigns (id, name, brand, platform, target_country, target_tiers,
       min_followers, max_followers, message_template, daily_limit, max_retries,
-      delay_min_sec, delay_max_sec, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      delay_min_sec, delay_max_sec, status, sender_username, cookie_json, cookie_status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     campaign.id, campaign.name, campaign.brand || null, campaign.platform,
     campaign.targetCountry || null,
@@ -311,7 +322,10 @@ export function createCampaign(campaign: {
     campaign.minFollowers || null, campaign.maxFollowers || null,
     campaign.messageTemplate, campaign.dailyLimit ?? 40, campaign.maxRetries ?? 2,
     campaign.delayMinSec ?? 45, campaign.delayMaxSec ?? 120,
-    campaign.status || 'draft', now, now
+    campaign.status || 'draft',
+    campaign.senderUsername || null, campaign.cookieJson || null,
+    campaign.cookieJson ? 'unknown' : 'unknown',
+    now, now
   );
 }
 
@@ -320,7 +334,46 @@ export function listCampaigns(): any[] {
   return rows.map(r => ({
     ...r,
     target_tiers: r.target_tiers ? JSON.parse(r.target_tiers) : undefined,
+    cookie_json: undefined, // Don't send full cookie to frontend
+    has_cookie: !!r.cookie_json,
   }));
+}
+
+export function getCampaign(id: string): any {
+  const row = db.prepare(`SELECT * FROM dm_campaigns WHERE id = ?`).get(id) as any;
+  if (!row) return undefined;
+  return {
+    ...row,
+    target_tiers: row.target_tiers ? JSON.parse(row.target_tiers) : undefined,
+    has_cookie: !!row.cookie_json,
+  };
+}
+
+export function getCampaignCookieJson(id: string): string | null {
+  const row = db.prepare(`SELECT cookie_json FROM dm_campaigns WHERE id = ?`).get(id) as any;
+  return row?.cookie_json || null;
+}
+
+export function updateCampaignCookie(id: string, cookieJson: string, status: string, expiresAt?: string): void {
+  db.prepare(`
+    UPDATE dm_campaigns SET cookie_json = ?, cookie_status = ?, cookie_last_checked_at = ?, cookie_expires_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(cookieJson, status, new Date().toISOString(), expiresAt || null, new Date().toISOString(), id);
+}
+
+export function getCampaignTargets(campaignId: string, opts: { limit?: number; offset?: number } = {}): { targets: any[]; total: number } {
+  const limit = opts.limit || 100;
+  const offset = opts.offset || 0;
+  const total = (db.prepare(`SELECT COUNT(*) as count FROM dm_action_queue WHERE campaign_id = ?`).get(campaignId) as any).count;
+  const rows = db.prepare(`
+    SELECT q.*, m.full_name, m.followers_count, m.engagement_rate, m.detected_country, m.scout_tier, m.profile_pic_url, m.bio, m.username as influencer_username, m.platform as influencer_platform
+    FROM dm_action_queue q
+    LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
+    WHERE q.campaign_id = ?
+    ORDER BY q.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(campaignId, limit, offset) as any[];
+  return { targets: rows, total };
 }
 
 // ─── dm_accounts CRUD ───
@@ -345,4 +398,96 @@ export function resetDailyLimits(): number {
     `UPDATE dm_accounts SET daily_sent = 0, last_reset_date = ? WHERE last_reset_date IS NULL OR last_reset_date < ?`
   ).run(today, today);
   return result.changes || 0;
+}
+
+// ─── Comment Templates CRUD ───
+
+export function createCommentTemplate(tmpl: { platform: string; category: string; template: string; variables?: string[]; campaignId?: string }): number {
+  const result = db.prepare(`
+    INSERT INTO comment_templates (platform, category, template, variables, campaign_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tmpl.platform, tmpl.category, tmpl.template, JSON.stringify(tmpl.variables || []), tmpl.campaignId || null, new Date().toISOString());
+  return result.lastInsertRowid as number;
+}
+
+export function listCommentTemplates(platform?: string, category?: string): any[] {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  if (platform) { conditions.push('ct.platform = ?'); params.push(platform); }
+  if (category) { conditions.push('ct.category = ?'); params.push(category); }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return db.prepare(`
+    SELECT ct.*, dc.name as campaign_name
+    FROM comment_templates ct
+    LEFT JOIN dm_campaigns dc ON ct.campaign_id = dc.id
+    ${where}
+    ORDER BY ct.category, ct.id
+  `).all(...params) as any[];
+}
+
+export function updateCommentTemplate(id: number, updates: { platform?: string; category?: string; template?: string; variables?: string[]; campaignId?: string }): void {
+  const fields: string[] = [];
+  const params: any[] = [];
+  if (updates.platform) { fields.push('platform = ?'); params.push(updates.platform); }
+  if (updates.category) { fields.push('category = ?'); params.push(updates.category); }
+  if (updates.template) { fields.push('template = ?'); params.push(updates.template); }
+  if (updates.variables) { fields.push('variables = ?'); params.push(JSON.stringify(updates.variables)); }
+  if (updates.campaignId !== undefined) { fields.push('campaign_id = ?'); params.push(updates.campaignId || null); }
+  if (fields.length > 0) {
+    params.push(id);
+    db.prepare(`UPDATE comment_templates SET ${fields.join(', ')} WHERE id = ?`).run(...params);
+  }
+}
+
+export function deleteCommentTemplate(id: number): void {
+  db.prepare('DELETE FROM comment_templates WHERE id = ?').run(id);
+}
+
+// ─── Engagement Log queries ───
+
+export function getEngagementLogs(campaignId: string, limit = 100): any[] {
+  return db.prepare(
+    `SELECT * FROM dm_engagement_log WHERE campaign_id = ? ORDER BY created_at DESC LIMIT ?`
+  ).all(campaignId, limit) as any[];
+}
+
+// ─── DM Rounds CRUD ───
+
+export function createDMRound(campaignId: string, accountUsername: string, targetCount: number): number {
+  const roundNumber = ((db.prepare(
+    `SELECT MAX(round_number) as max_round FROM dm_rounds WHERE campaign_id = ? AND account_username = ?`
+  ).get(campaignId, accountUsername) as any)?.max_round || 0) + 1;
+
+  const result = db.prepare(`
+    INSERT INTO dm_rounds (campaign_id, account_username, round_number, started_at, target_count)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(campaignId, accountUsername, roundNumber, new Date().toISOString(), targetCount);
+  return result.lastInsertRowid as number;
+}
+
+export function completeDMRound(roundId: number, sentCount: number, failedCount: number, engagedCount: number): void {
+  db.prepare(`
+    UPDATE dm_rounds SET completed_at = ?, sent_count = ?, failed_count = ?, engaged_count = ? WHERE id = ?
+  `).run(new Date().toISOString(), sentCount, failedCount, engagedCount, roundId);
+}
+
+export function getCampaignRounds(campaignId: string): any[] {
+  return db.prepare(
+    `SELECT * FROM dm_rounds WHERE campaign_id = ? ORDER BY round_number DESC`
+  ).all(campaignId) as any[];
+}
+
+// ─── DM Account Extended update ───
+
+export function updateDMAccount(id: number, updates: Record<string, any>): void {
+  const fields: string[] = [];
+  const params: any[] = [];
+  for (const [key, val] of Object.entries(updates)) {
+    const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    params.push(typeof val === 'object' ? JSON.stringify(val) : val);
+  }
+  if (fields.length === 0) return;
+  params.push(id);
+  db.prepare(`UPDATE dm_accounts SET ${fields.join(', ')} WHERE id = ?`).run(...params);
 }

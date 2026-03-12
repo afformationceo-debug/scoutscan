@@ -41,7 +41,10 @@ export class TwitterScraper implements PlatformScraper {
   async *searchByHashtag(tag: string, options: SearchOptions = {}): AsyncGenerator<Post> {
     const cleanTag = tag.replace(/^#/, '');
     const maxResults = options.maxResults || 50;
+    const until = options.until || null;
+    const since = options.since || null;
     let yielded = 0;
+    let consecutiveOld = 0;
 
     logger.info(`[Twitter] Searching: #${cleanTag}`, { maxResults });
 
@@ -82,7 +85,18 @@ export class TwitterScraper implements PlatformScraper {
 
       // Yield initial posts
       while (collectedPosts.length > 0 && yielded < maxResults) {
-        yield collectedPosts.shift()!;
+        const post = collectedPosts.shift()!;
+        if (until && post.timestamp && post.timestamp > until) {
+          continue;
+        }
+        // Delta scraping: skip posts older than 'since'
+        if (since && post.timestamp && post.timestamp < since) {
+          consecutiveOld++;
+          if (consecutiveOld >= 20) break;
+          continue;
+        }
+        consecutiveOld = 0;
+        yield post;
         yielded++;
       }
 
@@ -93,10 +107,22 @@ export class TwitterScraper implements PlatformScraper {
         await randomDelay(2000, 4000);
 
         while (collectedPosts.length > 0 && yielded < maxResults) {
-          yield collectedPosts.shift()!;
+          const post = collectedPosts.shift()!;
+          if (until && post.timestamp && post.timestamp > until) {
+            continue;
+          }
+          // Delta scraping: skip posts older than 'since'
+          if (since && post.timestamp && post.timestamp < since) {
+            consecutiveOld++;
+            if (consecutiveOld >= 20) break;
+            continue;
+          }
+          consecutiveOld = 0;
+          yield post;
           yielded++;
         }
 
+        if (consecutiveOld >= 20) break;
         if (i > 3 && collectedPosts.length === 0) break;
       }
 
