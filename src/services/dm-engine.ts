@@ -35,6 +35,14 @@ export class DMEngine {
       db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
         .run('active', new Date().toISOString(), campaignId);
 
+      // Reset any stuck 'processing' items back to 'pending' (from previous interrupted runs)
+      const stuckReset = db.prepare(
+        `UPDATE dm_action_queue SET execute_status = 'pending', account_username = NULL WHERE campaign_id = ? AND execute_status = 'processing'`
+      ).run(campaignId);
+      if (stuckReset.changes > 0) {
+        console.log(`[DMEngine] Reset ${stuckReset.changes} stuck processing items to pending`);
+      }
+
       // Get all active accounts for this campaign's platform
       const accounts = db.prepare(
         `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' ORDER BY daily_sent ASC`

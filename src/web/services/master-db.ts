@@ -1,4 +1,6 @@
 import { db } from './db.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type { InfluencerProfile, KeywordTarget, DMCampaign, DMAccount } from '../../core/types.js';
 
 // ─── Scout Tier Calculation ───
@@ -331,21 +333,45 @@ export function createCampaign(campaign: {
 
 export function listCampaigns(): any[] {
   const rows = db.prepare(`SELECT * FROM dm_campaigns ORDER BY created_at DESC`).all() as any[];
-  return rows.map(r => ({
-    ...r,
-    target_tiers: r.target_tiers ? JSON.parse(r.target_tiers) : undefined,
-    cookie_json: undefined, // Don't send full cookie to frontend
-    has_cookie: !!r.cookie_json,
-  }));
+  const cookieDir = join(process.cwd(), 'cookies');
+  return rows.map(r => {
+    // Check cookie availability: DB cookie_json OR per-account cookie file
+    let hasCookie = !!r.cookie_json;
+    if (!hasCookie && r.sender_username && r.platform) {
+      const accountCookiePath = join(cookieDir, r.platform, `${r.sender_username}.json`);
+      hasCookie = existsSync(accountCookiePath);
+    }
+    // Also check platform-level cookie file
+    if (!hasCookie && r.platform) {
+      const platformCookiePath = join(cookieDir, `${r.platform}.json`);
+      hasCookie = existsSync(platformCookiePath);
+    }
+    return {
+      ...r,
+      target_tiers: r.target_tiers ? JSON.parse(r.target_tiers) : undefined,
+      cookie_json: undefined,
+      has_cookie: hasCookie,
+      cookie_status: hasCookie ? (r.cookie_status || 'valid') : 'unknown',
+    };
+  });
 }
 
 export function getCampaign(id: string): any {
   const row = db.prepare(`SELECT * FROM dm_campaigns WHERE id = ?`).get(id) as any;
   if (!row) return undefined;
+  const cookieDir = join(process.cwd(), 'cookies');
+  let hasCookie = !!row.cookie_json;
+  if (!hasCookie && row.sender_username && row.platform) {
+    hasCookie = existsSync(join(cookieDir, row.platform, `${row.sender_username}.json`));
+  }
+  if (!hasCookie && row.platform) {
+    hasCookie = existsSync(join(cookieDir, `${row.platform}.json`));
+  }
   return {
     ...row,
     target_tiers: row.target_tiers ? JSON.parse(row.target_tiers) : undefined,
-    has_cookie: !!row.cookie_json,
+    has_cookie: hasCookie,
+    cookie_status: hasCookie ? (row.cookie_status || 'valid') : 'unknown',
   };
 }
 

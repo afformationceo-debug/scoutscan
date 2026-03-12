@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { jobManager } from '../services/job-manager.js';
 import { sseManager } from '../services/sse-manager.js';
+import { db } from '../services/db.js';
 
 const sse = new Hono();
 
@@ -45,6 +46,20 @@ sse.get('/campaigns/:id/stream', (c) => {
   const stream = new ReadableStream({
     start(controller) {
       const clientId = sseManager.addClient('campaign:' + campaignId, controller);
+
+      // Send immediate connection confirmation with current campaign state
+      try {
+        const campaign = db.prepare('SELECT status, total_sent, total_failed, total_queued FROM dm_campaigns WHERE id = ?').get(campaignId) as any;
+        if (campaign) {
+          const initPayload = `event: status\ndata: ${JSON.stringify({
+            phase: campaign.status === 'active' ? 'processing' : 'idle',
+            message: campaign.status === 'active' ? '캠페인 진행 중...' : `캠페인 상태: ${campaign.status}`,
+            sentCount: campaign.total_sent,
+            failedCount: campaign.total_failed,
+          })}\n\n`;
+          controller.enqueue(new TextEncoder().encode(initPayload));
+        }
+      } catch { /* ignore init errors */ }
 
       const keepalive = setInterval(() => {
         try {
