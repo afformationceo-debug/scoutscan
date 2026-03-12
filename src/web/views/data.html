@@ -515,11 +515,21 @@
               </div>
               <!-- Current Status Banner (countdown, processing state) -->
               <div x-show="currentStatus" class="mb-2 px-3 py-2 rounded-md text-[12px] font-mono"
-                   :class="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown' ? 'bg-warning/10 text-warning' : currentPhase === 'processing' ? 'bg-accent/10 text-accent' : 'bg-dark-hover text-kaia-text'">
+                   :class="{
+                     'bg-warning/10 text-warning': currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown',
+                     'bg-accent/10 text-accent': currentPhase === 'processing' || currentPhase === 'sent',
+                     'bg-blue-500/10 text-blue-400': currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page'),
+                     'bg-purple-500/10 text-purple-400': currentPhase === 'engage_start' || currentPhase === 'engaged',
+                     'bg-error/10 text-error': currentPhase === 'failed' || currentPhase === 'error',
+                     'bg-dark-hover text-kaia-text': !['delay','engage_wait','cooldown','processing','sent','dm_step','navigate','search_type','search_wait','search_result','select_user','open_chat','msg_wait','msg_type','msg_send','msg_confirm','browser_init','page_create','engage_start','engaged','failed','error'].includes(currentPhase)
+                   }">
                 <div class="flex items-center gap-2">
                   <span x-show="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown'" class="animate-spin text-[10px]">&#9201;</span>
-                  <span x-show="currentPhase === 'processing'" class="animate-pulse">&#9889;</span>
-                  <span x-text="currentStatus"></span>
+                  <span x-show="currentPhase === 'processing' || currentPhase === 'sent'" class="animate-pulse">&#9889;</span>
+                  <span x-show="currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page')" class="animate-pulse text-[10px]">&#128640;</span>
+                  <span x-show="currentPhase === 'engage_start' || currentPhase === 'engaged'" class="animate-pulse text-[10px]">&#10084;</span>
+                  <span x-show="currentPhase === 'failed' || currentPhase === 'error'" class="text-[10px]">&#10060;</span>
+                  <span x-text="currentStatus" class="flex-1"></span>
                   <span x-show="countdown > 0" class="ml-auto font-bold text-white" x-text="countdown + '초'"></span>
                 </div>
               </div>
@@ -568,10 +578,17 @@
               </div>
               <!-- SSE Live Events -->
               <div x-show="liveEvents.length > 0" class="mt-2 pt-2 border-t border-dark-border/30">
-                <p class="text-[10px] text-kaia-muted mb-1">실시간 이벤트</p>
-                <div class="max-h-[100px] overflow-y-auto space-y-0.5 font-mono text-[11px]">
+                <p class="text-[10px] text-kaia-muted mb-1">실시간 로그 (<span x-text="liveEvents.length"></span>건)</p>
+                <div class="max-h-[200px] overflow-y-auto space-y-0.5 font-mono text-[11px]">
                   <template x-for="(ev, idx) in liveEvents" :key="idx">
-                    <div :class="ev.type === 'dm_failed' ? 'text-error' : ev.type === 'dm_sent' ? 'text-success' : 'text-accent'">
+                    <div :class="{
+                      'text-error': ev.type === 'dm_failed',
+                      'text-success': ev.type === 'dm_sent',
+                      'text-blue-400': ev.type === 'step',
+                      'text-purple-400': ev.type === 'engagement',
+                      'text-warning': ev.type === 'round_complete',
+                      'text-accent': !['dm_failed','dm_sent','step','engagement','round_complete'].includes(ev.type)
+                    }">
                       <span class="text-kaia-muted/50" x-text="ev.ts"></span>
                       <span x-text="ev.msg"></span>
                     </div>

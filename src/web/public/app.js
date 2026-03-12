@@ -1215,6 +1215,14 @@ function campaignLive(campaignId) {
         addLive('round_complete', d, `라운드 완료`);
       });
 
+      // Detailed step-by-step progress (DM sending sub-steps)
+      this.eventSource.addEventListener('step', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `@${d.recipient}: ${d.detail}`;
+        this.currentPhase = d.step || 'dm_step';
+        addLive('step', d, `@${d.recipient} → ${d.detail}`);
+      });
+
       this.eventSource.addEventListener('error', () => {
         if (this.eventSource) this.eventSource.close();
         this.eventSource = null;

@@ -2,7 +2,7 @@ import { db } from '../web/services/db.js';
 import { createDMRound, completeDMRound } from '../web/services/master-db.js';
 import { sseManager } from '../web/services/sse-manager.js';
 import { BrowserContextPool } from './browser-context-pool.js';
-import { sendInstagramDM } from './dm-platforms/instagram-dm.js';
+import { sendInstagramDM, type DMProgressCallback } from './dm-platforms/instagram-dm.js';
 import { sendTwitterDM } from './dm-platforms/twitter-dm.js';
 import { sendTikTokDM } from './dm-platforms/tiktok-dm.js';
 import pLimit from 'p-limit';
@@ -146,6 +146,13 @@ export class DMEngine {
         const engageBeforeDm = account.engage_before_dm || 0;
         if (engageBeforeDm && this._engagementEngine) {
           try {
+            sseManager.broadcast('campaign:' + campaignId, 'step', {
+              phase: 'engage_start',
+              step: 'engage_start',
+              recipient: item.recipient_username,
+              account: account.username,
+              detail: `@${item.recipient_username} 프로필 방문 → 좋아요/댓글 진행 중...`,
+            });
             const engResult = await this._engagementEngine.engageWithInfluencer(
               campaign.platform,
               account.username,
@@ -185,7 +192,7 @@ export class DMEngine {
 
         // Step 2: Send DM — all platforms use browser-based DM modules
         try {
-          await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered);
+          await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered, campaignId);
 
           // Success
           const now = new Date().toISOString();
@@ -286,10 +293,23 @@ export class DMEngine {
   }
 
   /** Route DM to the correct platform module */
-  private async sendDM(platform: string, account: any, recipientUsername: string, message: string): Promise<void> {
+  private async sendDM(platform: string, account: any, recipientUsername: string, message: string, campaignId?: string): Promise<void> {
+    // Create progress callback that broadcasts each step via SSE
+    const onProgress: DMProgressCallback = campaignId
+      ? (step, detail) => {
+          sseManager.broadcast('campaign:' + campaignId, 'step', {
+            phase: 'dm_step',
+            step,
+            recipient: recipientUsername,
+            account: account.username,
+            detail,
+          });
+        }
+      : () => {};
+
     switch (platform) {
       case 'instagram':
-        await sendInstagramDM(this.pool, account, recipientUsername, message);
+        await sendInstagramDM(this.pool, account, recipientUsername, message, onProgress);
         break;
       case 'twitter':
         await sendTwitterDM(this.pool, account, recipientUsername, message);
