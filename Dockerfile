@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install Playwright system dependencies + Chromium
+# Install Playwright system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget gnupg ca-certificates fonts-noto-cjk fonts-noto-color-emoji \
     libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
@@ -11,33 +11,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Install dependencies
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && \
     npx playwright install chromium && \
+    npm install tsx && \
     npm cache clean --force
 
-# Install tsx for running TypeScript directly
-RUN npm install tsx
-
-# Copy source code
+# Copy source
 COPY src/ ./src/
-COPY tsconfig.json ./
-COPY CLAUDE.md ./
-COPY start.sh ./
-
-# Copy seed data (initial DB + cookies for first deploy)
+COPY tsconfig.json CLAUDE.md start.sh ./
 COPY seed/ ./seed/
 
-# Create data and cookies directories (volumes will mount here)
-RUN mkdir -p data cookies/instagram
+# Create directories
+RUN mkdir -p data cookies/instagram && chmod +x start.sh
 
-# Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
-
-# Start via seed script
 CMD ["bash", "start.sh"]
