@@ -298,9 +298,14 @@ Return ONLY a JSON array with exactly one object per profile, in order:
         VALUES (?, ?, ?, ?, ?)
       `);
 
+      const updateCampaignIdStmt = db.prepare(
+        `UPDATE influencer_master SET dm_campaign_id = ? WHERE influencer_key = ? AND (dm_campaign_id IS NULL OR dm_campaign_id = '')`
+      );
+
       for (const inf of candidates) {
         const message = this.renderTemplate(campaign.message_template, inf);
         insertStmt.run(inf.influencer_key, campaign.id, inf.platform, message, now);
+        updateCampaignIdStmt.run(campaign.id, inf.influencer_key);
         totalAssigned++;
       }
 

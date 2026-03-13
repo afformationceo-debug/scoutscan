@@ -441,10 +441,15 @@ export class DMEngine {
       VALUES (?, ?, ?, ?, ?)
     `);
 
+    const updateCampaignIdStmt = db.prepare(
+      `UPDATE influencer_master SET dm_campaign_id = ? WHERE influencer_key = ? AND (dm_campaign_id IS NULL OR dm_campaign_id = '')`
+    );
+
     let queued = 0;
     for (const inf of influencers) {
       const message = this.renderTemplate(campaign.message_template, inf);
       insertStmt.run(inf.influencer_key, campaignId, inf.platform, message, now);
+      updateCampaignIdStmt.run(campaignId, inf.influencer_key);
       queued++;
     }
 
