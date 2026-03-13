@@ -1262,6 +1262,9 @@ function campaignsPage() {
         alert('오류: ' + data.error);
         return;
       }
+      if (data.autoQueued > 0) {
+        alert(`캠페인 생성 완료! 기존 프로필에서 ${data.autoQueued}명이 자동 배정되었습니다.`);
+      }
       this.showCreateForm = false;
       this.newCampaign = { name: '', brand: '', platform: 'instagram', targetCountry: '', dailyLimit: 40, messageTemplate: '', senderUsername: '', cookieJson: '' };
       this.load();

@@ -470,7 +470,13 @@ api.post('/campaigns', async (c) => {
     db.prepare(`UPDATE dm_campaigns SET cookie_status = ? WHERE id = ?`).run(cookieStatus, id);
   }
 
-  return c.json({ id, message: 'Campaign created' }, 201);
+  // Auto-generate queue from existing profiles
+  let autoQueued = 0;
+  try {
+    autoQueued = getDmEngine().generateQueue(id);
+  } catch { /* ignore - no matching profiles yet */ }
+
+  return c.json({ id, autoQueued, message: autoQueued > 0 ? `캠페인 생성 완료! 기존 프로필에서 ${autoQueued}명 자동 배정됨` : '캠페인 생성 완료' }, 201);
 });
 
 api.get('/campaigns', (c) => {
