@@ -132,6 +132,7 @@ export interface KeywordTarget {
   groupKey?: string;
   lastJobId?: string;
   lastJobStatus?: string;
+  lastJobResult?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -433,8 +433,8 @@ function keywordsPage() {
       try {
         const state = {};
         for (const [k, v] of Object.entries(this._runningJobs)) {
-          if (v.status === 'running') {
-            state[k] = { jobId: v.jobId, status: v.status, phase: v.phase, counts: { ...v.counts }, percent: v.percent, startedAt: v.startedAt };
+          if (v.status === 'running' || v.status === 'completed' || v.status === 'failed') {
+            state[k] = { jobId: v.jobId, status: v.status, phase: v.phase, counts: { ...v.counts }, percent: v.percent, startedAt: v.startedAt, completedAt: v.completedAt };
           }
         }
         sessionStorage.setItem('_runningJobs', JSON.stringify(state));
@@ -447,10 +447,13 @@ function keywordsPage() {
         if (!saved) return;
         const state = JSON.parse(saved);
         for (const [pairId, v] of Object.entries(state)) {
-          if (v.status === 'running' && v.jobId && !this._runningJobs[pairId]) {
-            // Restore UI state, then reconnect SSE
-            this._runningJobs[pairId] = { ...v, sse: null };
-            this._connectJobSSE(pairId, v.jobId);
+          if (!this._runningJobs[pairId]) {
+            if (v.status === 'running' && v.jobId) {
+              this._runningJobs[pairId] = { ...v, sse: null };
+              this._connectJobSSE(pairId, v.jobId);
+            } else if (v.status === 'completed' || v.status === 'failed') {
+              this._runningJobs[pairId] = { ...v, sse: null };
+            }
           }
         }
       } catch {}
@@ -571,13 +574,9 @@ function keywordsPage() {
           job.status = 'completed';
           job.phase = `완료 — ${d.postsCount || 0}P, ${d.profilesCount || 0}명 추출`;
           job.percent = 100;
+          job.completedAt = new Date().toISOString();
           job.sse?.close();
           this._saveRunningState();
-          // Clear after 10s so completed state stays visible briefly
-          setTimeout(() => {
-            delete this._runningJobs[pairId];
-            this._saveRunningState();
-          }, 10000);
           this.load();
         } catch {}
       });
@@ -763,6 +762,66 @@ function keywordsPage() {
       } catch (err) {
         alert('시작 실패: ' + err.message);
       }
+    },
+
+    // Inline editing
+    _editing: null,  // { id, field, value }
+
+    startEdit(target, field) {
+      this._editing = {
+        id: target.id,
+        pairId: target.pairId,
+        field,
+        value: field === 'scrapeUntil' ? (target.scrapeUntil ? target.scrapeUntil.split('T')[0] : '') :
+               field === 'scrapingCycleHours' ? target.scrapingCycleHours :
+               field === 'maxResultsPerRun' ? target.maxResultsPerRun : '',
+      };
+    },
+
+    isEditing(target, field) {
+      return this._editing && this._editing.id === target.id && this._editing.field === field;
+    },
+
+    async saveEdit() {
+      if (!this._editing) return;
+      const { id, field, value } = this._editing;
+      const payload = {};
+      if (field === 'scrapingCycleHours') payload.scrapingCycleHours = parseInt(value) || 72;
+      else if (field === 'maxResultsPerRun') payload.maxResultsPerRun = parseInt(value) || 200;
+      else if (field === 'scrapeUntil') payload.scrapeUntil = value ? new Date(value + 'T23:59:59Z').toISOString() : '';
+
+      await fetch(`/api/keywords/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      this._editing = null;
+      this.load();
+    },
+
+    cancelEdit() {
+      this._editing = null;
+    },
+
+    getLastResult(target) {
+      // Show from session (current run) or from DB (last_job_result)
+      const progress = this._runningJobs[target.pairId];
+      if (progress) return progress;
+      if (target.lastJobResult) {
+        try {
+          const r = JSON.parse(target.lastJobResult);
+          return {
+            status: target.lastJobStatus || 'completed',
+            phase: target.lastJobStatus === 'failed'
+              ? `오류: ${(r.error || '').substring(0, 50)}`
+              : `완료 — ${r.posts || 0}P, ${r.profiles || 0}명 추출`,
+            percent: target.lastJobStatus === 'completed' ? 100 : 0,
+            counts: { posts: r.posts || 0, profiles: r.profiles || 0 },
+            completedAt: r.completedAt || r.failedAt,
+          };
+        } catch { return null; }
+      }
+      return null;
     },
 
     async removeKeyword(id) {

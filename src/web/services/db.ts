@@ -293,6 +293,7 @@ const alterMigrations = [
   // keyword_targets job tracking
   `ALTER TABLE keyword_targets ADD COLUMN last_job_id TEXT`,
   `ALTER TABLE keyword_targets ADD COLUMN last_job_status TEXT DEFAULT 'idle'`,
+  `ALTER TABLE keyword_targets ADD COLUMN last_job_result TEXT`,
   // AI classification columns
   `ALTER TABLE influencer_master ADD COLUMN ai_is_influencer INTEGER`,
   `ALTER TABLE influencer_master ADD COLUMN ai_country TEXT`,

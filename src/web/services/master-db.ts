@@ -331,6 +331,7 @@ function rowToKeywordTarget(row: any): KeywordTarget {
     scrapeUntil: row.scrape_until || undefined,
     lastJobId: row.last_job_id || undefined,
     lastJobStatus: row.last_job_status || 'idle',
+    lastJobResult: row.last_job_result || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

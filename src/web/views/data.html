@@ -389,62 +389,91 @@
               <td class="px-3 py-2"><span class="badge" :class="'badge-' + (t.platform === 'instagram' ? 'ig' : t.platform === 'twitter' ? 'tw' : t.platform === 'tiktok' ? 'tt' : t.platform === 'youtube' ? 'yt' : 'xhs')" x-text="t.platform"></span></td>
               <td class="px-3 py-2 text-white font-medium" x-text="t.region"></td>
               <td class="px-3 py-2 text-white" x-text="t.keyword"></td>
-              <td class="px-3 py-2 text-center num" x-text="t.scrapingCycleHours + 'h'"></td>
-              <td class="px-3 py-2 text-center num" x-text="t.maxResultsPerRun"></td>
-              <td class="px-3 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.scrapeUntil ? t.scrapeUntil.split('T')[0] : '-'"></td>
+              <!-- Editable: 주기 -->
+              <td class="px-3 py-2 text-center num cursor-pointer group" @dblclick="startEdit(t, 'scrapingCycleHours')">
+                <template x-if="!isEditing(t, 'scrapingCycleHours')">
+                  <span class="group-hover:text-accent transition-colors" x-text="t.scrapingCycleHours + 'h'" :title="'더블클릭하여 수정'"></span>
+                </template>
+                <template x-if="isEditing(t, 'scrapingCycleHours')">
+                  <input type="number" x-model="_editing.value" min="1" max="720" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="w-16 text-center rounded border px-1 py-0.5 text-xs" x-ref="editInput" x-init="$nextTick(() => $refs.editInput?.focus())">
+                </template>
+              </td>
+              <!-- Editable: 최대/회 -->
+              <td class="px-3 py-2 text-center num cursor-pointer group" @dblclick="startEdit(t, 'maxResultsPerRun')">
+                <template x-if="!isEditing(t, 'maxResultsPerRun')">
+                  <span class="group-hover:text-accent transition-colors" x-text="t.maxResultsPerRun" :title="'더블클릭하여 수정'"></span>
+                </template>
+                <template x-if="isEditing(t, 'maxResultsPerRun')">
+                  <input type="number" x-model="_editing.value" min="10" max="5000" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="w-16 text-center rounded border px-1 py-0.5 text-xs" x-ref="editInput2" x-init="$nextTick(() => $refs.editInput2?.focus())">
+                </template>
+              </td>
+              <!-- Editable: Until -->
+              <td class="px-3 py-2 text-[11px] text-kaia-muted whitespace-nowrap cursor-pointer group" @dblclick="startEdit(t, 'scrapeUntil')">
+                <template x-if="!isEditing(t, 'scrapeUntil')">
+                  <span class="group-hover:text-accent transition-colors" x-text="t.scrapeUntil ? t.scrapeUntil.split('T')[0] : '-'" :title="'더블클릭하여 수정'"></span>
+                </template>
+                <template x-if="isEditing(t, 'scrapeUntil')">
+                  <input type="date" x-model="_editing.value" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="rounded border px-1 py-0.5 text-xs" x-ref="editInput3" x-init="$nextTick(() => $refs.editInput3?.focus())">
+                </template>
+              </td>
               <td class="px-3 py-2 text-right num text-white">
                 <span x-text="formatNumber(t._liveExtracted || t.totalExtracted)"></span>
                 <span x-show="getJobProgress(t.pairId) && getJobProgress(t.pairId).counts.posts > 0 && getJobProgress(t.pairId).status === 'running'"
                       class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + getJobProgress(t.pairId).counts.posts"></span>
               </td>
-              <!-- INLINE PROGRESS / LAST SCRAPED -->
+              <!-- INLINE PROGRESS / LAST RESULT (persistent) -->
               <td class="px-3 py-2" colspan="1">
-                <template x-if="getJobProgress(t.pairId)">
+                <template x-if="getLastResult(t)">
                   <div class="min-w-[200px]">
                     <div class="flex items-center gap-1.5 mb-1">
                       <span class="inline-block w-1.5 h-1.5 rounded-full"
                             :class="{
-                              'bg-accent animate-pulse': getJobProgress(t.pairId).status === 'running',
-                              'bg-success': getJobProgress(t.pairId).status === 'completed',
-                              'bg-error': getJobProgress(t.pairId).status === 'failed'
+                              'bg-accent animate-pulse': getLastResult(t).status === 'running',
+                              'bg-success': getLastResult(t).status === 'completed',
+                              'bg-error': getLastResult(t).status === 'failed'
                             }"></span>
                       <span class="text-[11px] font-medium flex-1"
                             :class="{
-                              'text-accent': getJobProgress(t.pairId).status === 'running',
-                              'text-success': getJobProgress(t.pairId).status === 'completed',
-                              'text-error': getJobProgress(t.pairId).status === 'failed'
+                              'text-accent': getLastResult(t).status === 'running',
+                              'text-success': getLastResult(t).status === 'completed',
+                              'text-error': getLastResult(t).status === 'failed'
                             }"
-                            x-text="getJobProgress(t.pairId).phase"></span>
-                      <span x-show="getJobProgress(t.pairId).status === 'running'"
+                            x-text="getLastResult(t).phase"></span>
+                      <span x-show="getLastResult(t).status === 'running'"
                             class="text-[9px] text-kaia-muted" x-text="_getElapsed(t.pairId)"></span>
+                      <span x-show="getLastResult(t).completedAt"
+                            class="text-[9px] text-kaia-muted/50" x-text="formatDate(getLastResult(t).completedAt)"></span>
                     </div>
                     <div class="h-1.5 rounded-full bg-dark-body overflow-hidden">
                       <div class="h-1.5 rounded-full transition-all duration-300"
                            :class="{
-                             'bg-gradient-to-r from-accent to-accent/60': getJobProgress(t.pairId).status === 'running',
-                             'bg-success': getJobProgress(t.pairId).status === 'completed',
-                             'bg-error': getJobProgress(t.pairId).status === 'failed'
+                             'bg-gradient-to-r from-accent to-accent/60': getLastResult(t).status === 'running',
+                             'bg-success': getLastResult(t).status === 'completed',
+                             'bg-error': getLastResult(t).status === 'failed'
                            }"
-                           :style="'width: ' + getJobProgress(t.pairId).percent + '%'"></div>
+                           :style="'width: ' + getLastResult(t).percent + '%'"></div>
                     </div>
                     <div class="flex gap-3 mt-1 text-[10px]">
-                      <span x-show="getJobProgress(t.pairId).counts.posts > 0" class="text-info">
-                        <span class="text-kaia-muted/60">포스트</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.posts + (getJobProgress(t.pairId).counts.total ? '/' + getJobProgress(t.pairId).counts.total : '')"></span>
+                      <span x-show="getLastResult(t).counts?.posts > 0" class="text-info">
+                        <span class="text-kaia-muted/60">포스트</span> <span class="font-mono text-white" x-text="getLastResult(t).counts.posts + (getLastResult(t).counts.total ? '/' + getLastResult(t).counts.total : '')"></span>
                       </span>
-                      <span x-show="getJobProgress(t.pairId).counts.profiles > 0" class="text-accent">
-                        <span class="text-kaia-muted/60">프로필</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.profiles + (getJobProgress(t.pairId).counts.profilesTotal ? '/' + getJobProgress(t.pairId).counts.profilesTotal : '')"></span>
+                      <span x-show="getLastResult(t).counts?.profiles > 0" class="text-accent">
+                        <span class="text-kaia-muted/60">프로필</span> <span class="font-mono text-white" x-text="getLastResult(t).counts.profiles + (getLastResult(t).counts.profilesTotal ? '/' + getLastResult(t).counts.profilesTotal : '')"></span>
                       </span>
-                      <span x-show="getJobProgress(t.pairId).counts.skipped > 0" class="text-kaia-muted">
-                        스킵 <span class="font-mono" x-text="getJobProgress(t.pairId).counts.skipped"></span>
+                      <span x-show="getLastResult(t).counts?.skipped > 0" class="text-kaia-muted">
+                        스킵 <span class="font-mono" x-text="getLastResult(t).counts.skipped"></span>
                       </span>
-                      <span x-show="getJobProgress(t.pairId).counts.ai > 0" class="text-warning">
-                        <span class="text-kaia-muted/60">AI</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.ai + (getJobProgress(t.pairId).counts.aiTotal ? '/' + getJobProgress(t.pairId).counts.aiTotal : '')"></span>
+                      <span x-show="getLastResult(t).counts?.ai > 0" class="text-warning">
+                        <span class="text-kaia-muted/60">AI</span> <span class="font-mono text-white" x-text="getLastResult(t).counts.ai + (getLastResult(t).counts.aiTotal ? '/' + getLastResult(t).counts.aiTotal : '')"></span>
                       </span>
                     </div>
                   </div>
                 </template>
-                <template x-if="!getJobProgress(t.pairId)">
-                  <span class="text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.lastScrapedAt ? formatDate(t.lastScrapedAt) : '없음'"></span>
+                <template x-if="!getLastResult(t)">
+                  <span class="text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.lastScrapedAt ? formatDate(t.lastScrapedAt) : '실행 기록 없음'"></span>
                 </template>
               </td>
               <td class="px-3 py-2 text-[11px] whitespace-nowrap"

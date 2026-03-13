@@ -271,7 +271,8 @@ class JobManager extends EventEmitter {
         if (target) {
           updateKeywordTarget(target.id, { totalExtracted: (target.totalExtracted || 0) + count });
         }
-        db.prepare(`UPDATE keyword_targets SET last_job_status = 'completed' WHERE pair_id = ?`).run(pairId);
+        const resultJson = JSON.stringify({ posts: count, profiles: profilesCount, completedAt: new Date().toISOString() });
+        db.prepare(`UPDATE keyword_targets SET last_job_status = 'completed', last_job_result = ? WHERE pair_id = ?`).run(resultJson, pairId);
       }
 
       // Post-completion: auto-replenish DM queues with newly scraped profiles
@@ -285,7 +286,8 @@ class JobManager extends EventEmitter {
       updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: count });
       this.sendSSE(jobId, 'error', { message: (error as Error).message });
       if (pairId) {
-        db.prepare(`UPDATE keyword_targets SET last_job_status = 'failed' WHERE pair_id = ?`).run(pairId);
+        const failJson = JSON.stringify({ error: (error as Error).message, failedAt: new Date().toISOString() });
+        db.prepare(`UPDATE keyword_targets SET last_job_status = 'failed', last_job_result = ? WHERE pair_id = ?`).run(failJson, pairId);
       }
     } finally {
       await engine.close();
