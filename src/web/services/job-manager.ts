@@ -152,6 +152,15 @@ class JobManager extends EventEmitter {
         this.sendSSE(jobId, 'post', post);
         this.sendSSE(jobId, 'progress', { phase: 'posts', count, total: maxResults });
 
+        // Broadcast every 10th post globally (avoid flooding)
+        if (count % 10 === 0 || count === 1) {
+          sseManager.broadcast('global', 'scraping_progress', {
+            jobId, platform, keyword: hashtag, pairId,
+            phase: 'posts', count, total: maxResults,
+            lastPost: { username: post.owner?.username, likes: post.likesCount },
+          });
+        }
+
         if (count >= maxResults) break;
       }
 
@@ -172,6 +181,10 @@ class JobManager extends EventEmitter {
         }
 
         this.sendSSE(jobId, 'profile_start', { total: newUsernames.length, skipped });
+        sseManager.broadcast('global', 'scraping_progress', {
+          jobId, platform, keyword: hashtag, pairId,
+          phase: 'profiles_start', total: newUsernames.length, skipped,
+        });
 
         const limit = pLimit(3);
         let consecutiveFailures = 0;
@@ -189,11 +202,23 @@ class JobManager extends EventEmitter {
               consecutiveFailures = 0;
               this.sendSSE(jobId, 'profile', profile);
               this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+              // Broadcast every profile to global feed
+              sseManager.broadcast('global', 'profile_enriched', {
+                jobId, platform, keyword: hashtag, pairId,
+                username: profile.username,
+                fullName: profile.fullName,
+                followers: profile.followersCount,
+                count: profilesCount, total: newUsernames.length,
+              });
             } catch (err) {
               consecutiveFailures++;
               failedUsernames.push(username);
               console.warn(`[enrichment] Failed @${username} (${consecutiveFailures} consecutive): ${(err as Error).message}`);
               this.sendSSE(jobId, 'profile_error', { username, error: (err as Error).message, consecutiveFailures });
+              sseManager.broadcast('global', 'profile_error', {
+                jobId, platform, keyword: hashtag, pairId,
+                username, error: (err as Error).message,
+              });
 
               if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                 console.warn(`[enrichment] ${MAX_CONSECUTIVE_FAILURES} consecutive failures, pausing 30s to recover...`);
@@ -241,15 +266,27 @@ class JobManager extends EventEmitter {
         if (aiKey) {
           try {
             this.sendSSE(jobId, 'progress', { phase: 'ai_classify', count: 0, total: profilesCount });
+            sseManager.broadcast('global', 'ai_classify_start', {
+              jobId, platform, keyword: hashtag, pairId, total: profilesCount,
+            });
             const classifier = new AIClassifier(aiKey);
             const aiCount = await classifier.classifyAll({
               onProgress: (done, total) => {
                 this.sendSSE(jobId, 'progress', { phase: 'ai_classify', count: done, total });
+                // Broadcast AI progress every 10 profiles
+                if (done % 10 === 0 || done === total) {
+                  sseManager.broadcast('global', 'ai_classify_progress', {
+                    jobId, platform, keyword: hashtag, pairId, count: done, total,
+                  });
+                }
               },
             });
             const assigned = classifier.autoAssignToCampaigns();
             console.log(`[JobManager] AI classified ${aiCount} profiles, assigned ${assigned} to campaigns`);
             this.sendSSE(jobId, 'ai_complete', { classified: aiCount, assigned });
+            sseManager.broadcast('global', 'ai_classify_complete', {
+              jobId, platform, keyword: hashtag, pairId, classified: aiCount, assigned,
+            });
             if (assigned > 0) {
               sseManager.broadcast('global', 'auto_assign', { assigned, message: `${assigned} profiles auto-assigned to campaigns` });
             }

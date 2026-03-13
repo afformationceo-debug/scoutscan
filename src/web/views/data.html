@@ -1,5 +1,5 @@
 <!-- Master Data Page -->
-<div x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || 'profiles' }">
+<div x-cloak x-data="{ activeTab: new URLSearchParams(window.location.search).get('tab') || 'profiles' }">
   <!-- Tab Navigation -->
   <div class="flex items-center gap-0 mb-6 border-b border-dark-border">
     <button @click="activeTab = 'profiles'" :class="activeTab === 'profiles' ? 'tab-active' : ''" class="tab-btn">프로필</button>

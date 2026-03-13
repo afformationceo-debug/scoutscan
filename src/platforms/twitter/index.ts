@@ -45,8 +45,9 @@ export class TwitterScraper implements PlatformScraper {
     const since = options.since || null;
     let yielded = 0;
     let consecutiveOld = 0;
+    let interceptedCount = 0;
 
-    logger.info(`[Twitter] Searching: #${cleanTag}`, { maxResults });
+    logger.info(`[Twitter] Searching: ${cleanTag}`, { maxResults });
 
     try {
       await this.browser.launch({ headless: true });
@@ -62,26 +63,49 @@ export class TwitterScraper implements PlatformScraper {
         const cookies = this.cookieManager.loadCookies('twitter');
         await this.browser.setCookies(sessionId, this.cookieManager.toPlaywrightCookies(cookies));
         logger.info(`[Twitter] Loaded ${cookies.length} saved cookies`);
+      } else {
+        logger.warn(`[Twitter] No cookies found — Twitter requires login for search. Results may be empty.`);
       }
 
       const page = await this.browser.createPage(sessionId, {
         blockMedia: true,
         blockFonts: true,
         interceptResponses: (url, body) => {
-          if (url.includes('/graphql/') || url.includes('/api/')) {
+          // Intercept all potential Twitter API responses (GraphQL, REST API, adaptive search)
+          if (url.includes('/graphql/') || url.includes('/api/') || url.includes('/i/api/') || url.includes('SearchTimeline') || url.includes('adaptive.json')) {
+            interceptedCount++;
+            const before = collectedPosts.length;
             this.extractTweets(body, collectedPosts);
+            const extracted = collectedPosts.length - before;
+            if (extracted > 0) {
+              logger.info(`[Twitter] Intercepted ${extracted} tweets from: ${url.split('?')[0].slice(-60)}`);
+            }
           }
         },
       });
 
-      // Navigate to Twitter search (hashtag)
-      const searchUrl = `https://x.com/search?q=%23${encodeURIComponent(cleanTag)}&src=typed_query&f=live`;
+      // Navigate to Twitter search — use keyword search (NOT hashtag-only)
+      // For pure hashtag searches, include #; for keywords, use plain text
+      const isHashtag = /^[a-zA-Z0-9_\u3000-\u9FFF\uAC00-\uD7AF]+$/.test(cleanTag) && cleanTag.length < 30;
+      const query = encodeURIComponent(cleanTag);
+      const searchUrl = `https://x.com/search?q=${query}&src=typed_query&f=live`;
+      logger.info(`[Twitter] Search URL: ${searchUrl}`);
       await page.goto(searchUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
 
       await randomDelay(4000, 6000);
+
+      // Check if we got redirected to login
+      const currentUrl = page.url();
+      if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login')) {
+        logger.error(`[Twitter] Redirected to login page — cookies are invalid or missing. Please update Twitter cookies in settings.`);
+        await this.browser.closeContext(sessionId);
+        return;
+      }
+
+      logger.info(`[Twitter] Page loaded. Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets so far`);
 
       // Yield initial posts
       while (collectedPosts.length > 0 && yielded < maxResults) {
@@ -123,8 +147,22 @@ export class TwitterScraper implements PlatformScraper {
         }
 
         if (consecutiveOld >= 20) break;
-        if (i > 3 && collectedPosts.length === 0) break;
+        if (i > 3 && collectedPosts.length === 0) {
+          logger.info(`[Twitter] No more tweets found after ${i + 1} scrolls (intercepted ${interceptedCount} responses total)`);
+          break;
+        }
       }
+
+      // Save cookies after search (may have refreshed auth tokens)
+      try {
+        const freshCookies = await this.browser.getCookies(sessionId);
+        if (freshCookies.length > 0) {
+          this.cookieManager.saveCookies('twitter', freshCookies.map(c => ({
+            name: c.name, value: c.value, domain: c.domain,
+            path: (c as any).path || '/', expires: (c as any).expires,
+          })));
+        }
+      } catch {}
 
       await this.browser.closeContext(sessionId);
     } catch (error) {
@@ -133,7 +171,7 @@ export class TwitterScraper implements PlatformScraper {
       await this.browser.closeAll();
     }
 
-    logger.info(`[Twitter] Search complete. Total: ${yielded} tweets`);
+    logger.info(`[Twitter] Search complete. Total: ${yielded} tweets (intercepted ${interceptedCount} API responses)`);
   }
 
   async getProfile(username: string, options?: ScrapingOptions): Promise<InfluencerProfile> {
@@ -211,7 +249,7 @@ export class TwitterScraper implements PlatformScraper {
 
       // Traverse the response to find tweet objects
       const findTweets = (obj: any, depth = 0): void => {
-        if (depth > 8 || !obj || typeof obj !== 'object') return;
+        if (depth > 10 || !obj || typeof obj !== 'object') return;
 
         // Check if this is a tweet result
         if (obj.__typename === 'Tweet' || obj.tweet_results || obj.legacy?.full_text) {
@@ -235,6 +273,12 @@ export class TwitterScraper implements PlatformScraper {
           return;
         }
 
+        // Also check for modules (Twitter sometimes nests in modules)
+        if (obj.items) {
+          for (const item of obj.items) findTweets(item, depth + 1);
+          return;
+        }
+
         if (Array.isArray(obj)) {
           for (const item of obj) findTweets(item, depth + 1);
         } else {
@@ -243,7 +287,12 @@ export class TwitterScraper implements PlatformScraper {
       };
 
       findTweets(data);
-    } catch { /* not parseable */ }
+    } catch (err) {
+      // Only log if body looks like it might be relevant (not tiny error responses)
+      if (body.length > 100) {
+        logger.debug(`[Twitter] Failed to parse intercepted response (${body.length} bytes): ${(err as Error).message}`);
+      }
+    }
   }
 
   /** Parse a tweet object into Post format */

@@ -171,6 +171,10 @@ export class DMEngine {
           message: `@${item.recipient_username} 처리 중...`,
           recipient: item.recipient_username,
         });
+        sseManager.broadcast('global', 'dm_processing', {
+          campaign: campaign.name, platform: campaign.platform,
+          account: account.username, recipient: item.recipient_username,
+        });
 
         // Step 1: Engagement before DM (if enabled)
         const engageBeforeDm = account.engage_before_dm || 0;
