@@ -1689,9 +1689,27 @@ function liveDashboard() {
 
     async init() {
       await this.loadData();
+      await this.loadRecentActivity();
       this.connectSSE();
       // Auto-refresh every 30 seconds
       this._refreshInterval = setInterval(() => this.loadData(), 30000);
+    },
+
+    async loadRecentActivity() {
+      try {
+        const res = await fetch('/api/dashboard/activity?limit=30');
+        const data = await res.json();
+        if (data.activities && data.activities.length > 0) {
+          const ts = (iso) => new Date(iso).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          this.activities = data.activities.map(a => ({
+            type: a.type,
+            message: a.message,
+            ts: ts(a.ts),
+          }));
+        }
+      } catch (err) {
+        console.warn('[liveDashboard] loadRecentActivity error:', err);
+      }
     },
 
     async loadData() {
