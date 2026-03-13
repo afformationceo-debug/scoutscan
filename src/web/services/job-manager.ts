@@ -10,6 +10,7 @@ import { upsertInfluencer, updateInfluencerGeo, getKeywordTarget, updateKeywordT
 import { registry } from '../../services/registry.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
 import { AIClassifier } from '../../services/ai-classifier.js';
+import { sseManager } from './sse-manager.js';
 
 interface SSEClient {
   id: string;
@@ -246,6 +247,9 @@ class JobManager extends EventEmitter {
             const assigned = classifier.autoAssignToCampaigns();
             console.log(`[JobManager] AI classified ${aiCount} profiles, assigned ${assigned} to campaigns`);
             this.sendSSE(jobId, 'ai_complete', { classified: aiCount, assigned });
+            if (assigned > 0) {
+              sseManager.broadcast('global', 'auto_assign', { assigned, message: `${assigned} profiles auto-assigned to campaigns` });
+            }
           } catch (err) {
             console.warn(`[JobManager] AI classification failed:`, (err as Error).message);
           }

@@ -331,8 +331,12 @@ export function createCampaign(campaign: {
   );
 }
 
-export function listCampaigns(): any[] {
-  const rows = db.prepare(`SELECT * FROM dm_campaigns ORDER BY created_at DESC`).all() as any[];
+export function listCampaigns(limit?: number, offset?: number): any[] {
+  let sql = `SELECT * FROM dm_campaigns ORDER BY created_at DESC`;
+  if (limit && limit > 0) {
+    sql += ` LIMIT ${limit} OFFSET ${offset || 0}`;
+  }
+  const rows = db.prepare(sql).all() as any[];
   const cookieDir = join(process.cwd(), 'cookies');
   return rows.map(r => {
     // Check cookie availability: DB cookie_json OR per-account cookie file
@@ -392,7 +396,10 @@ export function getCampaignTargets(campaignId: string, opts: { limit?: number; o
   const offset = opts.offset || 0;
   const total = (db.prepare(`SELECT COUNT(*) as count FROM dm_action_queue WHERE campaign_id = ?`).get(campaignId) as any).count;
   const rows = db.prepare(`
-    SELECT q.*, m.full_name, m.followers_count, m.engagement_rate, m.detected_country, m.scout_tier, m.profile_pic_url, m.bio, m.username as influencer_username, m.platform as influencer_platform
+    SELECT q.id, q.influencer_key, q.campaign_id, q.platform, q.account_username, q.message_rendered,
+           q.execute_status, q.error_message, q.scheduled_at, q.executed_at, q.retry_count, q.created_at,
+           q.round_id, q.engagement_status, q.liked_post_url, q.comment_text, q.commented_post_url,
+           m.full_name, m.followers_count, m.engagement_rate, m.detected_country, m.scout_tier, m.profile_pic_url, m.bio, m.username as influencer_username, m.platform as influencer_platform
     FROM dm_action_queue q
     LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
     WHERE q.campaign_id = ?

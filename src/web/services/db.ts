@@ -288,6 +288,10 @@ const alterMigrations = [
   `ALTER TABLE influencer_master ADD COLUMN ai_confidence REAL`,
   `ALTER TABLE influencer_master ADD COLUMN ai_reason TEXT`,
   `ALTER TABLE influencer_master ADD COLUMN ai_classified_at TEXT`,
+  // dm_action_queue engagement detail columns
+  `ALTER TABLE dm_action_queue ADD COLUMN liked_post_url TEXT`,
+  `ALTER TABLE dm_action_queue ADD COLUMN comment_text TEXT`,
+  `ALTER TABLE dm_action_queue ADD COLUMN commented_post_url TEXT`,
 ];
 
 for (const sql of alterMigrations) {

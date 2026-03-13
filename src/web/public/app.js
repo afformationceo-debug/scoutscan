@@ -299,6 +299,108 @@ function keywordsPage() {
     estimatedPostTime: '~10분',
     estimatedProfileTime: '~7분',
 
+    // Real-time scraping progress
+    activeJobId: null,
+    jobStatus: 'running',
+    jobPhaseLabel: '',
+    jobCounts: { posts: 0, profiles: 0, ai: 0, assigned: 0 },
+    jobPhasePercent: { posts: 0, profiles: 0, ai: 0 },
+    jobLogs: [],
+    _jobSSE: null,
+
+    startJobMonitor(jobId) {
+      this.activeJobId = jobId;
+      this.jobStatus = 'running';
+      this.jobPhaseLabel = '시작 중...';
+      this.jobCounts = { posts: 0, profiles: 0, ai: 0, assigned: 0 };
+      this.jobPhasePercent = { posts: 0, profiles: 0, ai: 0 };
+      this.jobLogs = [];
+      if (this._jobSSE) this._jobSSE.close();
+
+      const ts = () => new Date().toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const addLog = (type, msg) => {
+        this.jobLogs.unshift({ type, msg, ts: ts() });
+        if (this.jobLogs.length > 100) this.jobLogs.pop();
+      };
+
+      this._jobSSE = new EventSource(`/sse/jobs/${jobId}/stream`);
+
+      this._jobSSE.addEventListener('progress', (e) => {
+        const d = JSON.parse(e.data);
+        if (d.phase === 'posts') {
+          this.jobCounts.posts = d.count;
+          this.jobPhasePercent.posts = d.total ? Math.round((d.count / d.total) * 33) : 15;
+          this.jobPhaseLabel = `포스트 수집 중... ${d.count}/${d.total || '?'}`;
+        } else if (d.phase === 'profiles') {
+          this.jobPhasePercent.posts = 33;
+          this.jobCounts.profiles = d.count;
+          this.jobPhasePercent.profiles = d.total ? Math.round((d.count / d.total) * 34) : 15;
+          this.jobPhaseLabel = `프로필 분석 중... ${d.count}/${d.total || '?'}`;
+        } else if (d.phase === 'ai_classify') {
+          this.jobPhasePercent.posts = 33;
+          this.jobPhasePercent.profiles = 34;
+          this.jobCounts.ai = d.count;
+          this.jobPhasePercent.ai = d.total ? Math.round((d.count / d.total) * 33) : 15;
+          this.jobPhaseLabel = `AI 분류 중... ${d.count}/${d.total || '?'}`;
+        }
+      });
+
+      this._jobSSE.addEventListener('post', (e) => {
+        const d = JSON.parse(e.data);
+        addLog('post', `포스트 수집: @${d.author_username || '?'} ♥${d.likes || 0}`);
+      });
+
+      this._jobSSE.addEventListener('profile', (e) => {
+        const d = JSON.parse(e.data);
+        addLog('profile', `프로필: @${d.username} (${formatNumber(d.followers_count || 0)} followers)`);
+      });
+
+      this._jobSSE.addEventListener('profile_start', (e) => {
+        const d = JSON.parse(e.data);
+        addLog('ai', `프로필 분석 시작: ${d.total}명 (기존 ${d.skipped}명 스킵)`);
+      });
+
+      this._jobSSE.addEventListener('profile_error', (e) => {
+        const d = JSON.parse(e.data);
+        addLog('error', `프로필 실패: @${d.username} - ${d.error}`);
+      });
+
+      this._jobSSE.addEventListener('ai_complete', (e) => {
+        const d = JSON.parse(e.data);
+        this.jobCounts.ai = d.classified;
+        this.jobCounts.assigned = d.assigned;
+        this.jobPhasePercent.ai = 33;
+        addLog('ai', `AI 분류 완료: ${d.classified}명 분류, ${d.assigned}명 캠페인 배정`);
+      });
+
+      this._jobSSE.addEventListener('complete', (e) => {
+        const d = JSON.parse(e.data);
+        this.jobStatus = 'completed';
+        this.jobPhaseLabel = `완료! 포스트 ${d.postsCount}, 프로필 ${d.profilesCount}`;
+        this.jobPhasePercent = { posts: 33, profiles: 34, ai: 33 };
+        addLog('complete', `스크래핑 완료: 포스트 ${d.postsCount}개, 프로필 ${d.profilesCount}명`);
+        this._jobSSE.close();
+        this.load(); // Refresh table
+      });
+
+      this._jobSSE.addEventListener('error', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          this.jobStatus = 'failed';
+          this.jobPhaseLabel = `오류: ${d.message}`;
+          addLog('error', d.message);
+        } catch {
+          // SSE connection error
+        }
+      });
+
+      this._jobSSE.onerror = () => {
+        if (this.jobStatus === 'running') {
+          this.jobPhaseLabel = '연결 재시도 중...';
+        }
+      };
+    },
+
     updatePairId() {
       const kw = this.newTarget.keyword.replace(/^#/, '').trim();
       if (this.newTarget.platform && this.newTarget.region && kw) {
@@ -384,7 +486,7 @@ function keywordsPage() {
         if (data.error) {
           alert(data.error);
         } else {
-          alert(`${target.pairId} 스크래핑이 시작되었습니다`);
+          this.startJobMonitor(data.jobId);
           this.load();
         }
       } catch (err) {
@@ -640,6 +742,24 @@ function campaignsPage() {
     cookieUploadCampaign: null,
     cookieSenderUsername: '',
     cookieJsonText: '',
+    campaignSearch: '',
+    campaignPage: 0,
+    campaignsPerPage: 20,
+    get filteredCampaigns() {
+      if (!this.campaignSearch) return this.campaigns;
+      const q = this.campaignSearch.toLowerCase();
+      return this.campaigns.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.brand || '').toLowerCase().includes(q) ||
+        (c.platform || '').toLowerCase().includes(q) ||
+        (c.target_country || '').toLowerCase().includes(q)
+      );
+    },
+    get paginatedCampaigns() {
+      const start = this.campaignPage * this.campaignsPerPage;
+      return this.filteredCampaigns.slice(start, start + this.campaignsPerPage);
+    },
+    filterCampaigns() { this.campaignPage = 0; },
     newCampaign: {
       name: '',
       brand: '',
@@ -748,12 +868,20 @@ function campaignsPage() {
     },
 
     openEditModal(campaign) {
-      this.editCampaign = { ...campaign, target_country: (campaign.target_country || '').toUpperCase() };
+      this.editCampaign = {
+        ...campaign,
+        target_country: (campaign.target_country || '').toUpperCase(),
+        target_tiers_input: campaign.target_tiers ? JSON.parse(campaign.target_tiers).join(',') : '',
+      };
       this.showEditModal = true;
     },
 
     async saveCampaignEdit() {
       if (!this.editCampaign) return;
+      let targetTiers = null;
+      if (this.editCampaign.target_tiers_input) {
+        targetTiers = JSON.stringify(this.editCampaign.target_tiers_input.split(',').map(t => t.trim().toUpperCase()).filter(Boolean));
+      }
       const payload = {
         name: this.editCampaign.name,
         brand: this.editCampaign.brand || null,
@@ -766,6 +894,9 @@ function campaignsPage() {
         delayMaxSec: this.editCampaign.delay_max_sec,
         maxRetries: this.editCampaign.max_retries,
         status: this.editCampaign.status,
+        minFollowers: this.editCampaign.min_followers || null,
+        maxFollowers: this.editCampaign.max_followers || null,
+        targetTiers: targetTiers,
       };
       const res = await fetch(`/api/campaigns/${this.editCampaign.id}`, {
         method: 'PATCH',

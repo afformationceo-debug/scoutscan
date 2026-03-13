@@ -313,6 +313,51 @@
       </div>
     </div>
 
+    <!-- Real-time Scraping Progress -->
+    <div x-show="activeJobId" class="mb-4 bg-dark-card border border-accent/30 rounded-lg p-4" x-transition>
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full animate-pulse" :class="jobStatus === 'running' ? 'bg-accent' : jobStatus === 'completed' ? 'bg-success' : 'bg-error'"></span>
+          <span class="text-sm font-semibold text-white">스크래핑 실시간 진행</span>
+          <span class="text-xs text-kaia-muted font-mono" x-text="activeJobId ? activeJobId.slice(0,8) : ''"></span>
+        </div>
+        <div class="flex items-center gap-3 text-[11px]">
+          <span class="text-kaia-muted" x-text="jobPhaseLabel"></span>
+          <button x-show="jobStatus !== 'running'" @click="activeJobId = null" class="text-kaia-muted hover:text-white">닫기</button>
+        </div>
+      </div>
+      <!-- Phase Progress Bar -->
+      <div class="flex items-center gap-1 mb-3">
+        <div class="flex-1 h-2 rounded-full bg-dark-body overflow-hidden flex">
+          <div class="h-2 bg-accent transition-all duration-500 rounded-l-full" :style="'width: ' + jobPhasePercent.posts + '%'"></div>
+          <div class="h-2 bg-purple-500 transition-all duration-500" :style="'width: ' + jobPhasePercent.profiles + '%'"></div>
+          <div class="h-2 bg-blue-500 transition-all duration-500 rounded-r-full" :style="'width: ' + jobPhasePercent.ai + '%'"></div>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 text-[11px] mb-2">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent inline-block"></span> 포스트 수집: <span class="font-mono text-white" x-text="jobCounts.posts"></span></span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> 프로필 분석: <span class="font-mono text-white" x-text="jobCounts.profiles"></span></span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> AI 분류: <span class="font-mono text-white" x-text="jobCounts.ai"></span></span>
+        <span x-show="jobCounts.assigned > 0" class="text-success">캠페인 배정: <span class="font-mono" x-text="jobCounts.assigned"></span></span>
+      </div>
+      <!-- Live Log -->
+      <div class="max-h-[150px] overflow-y-auto bg-dark-body rounded-lg p-2 font-mono text-[11px] space-y-0.5">
+        <template x-for="(log, idx) in jobLogs" :key="idx">
+          <div :class="{
+            'text-accent': log.type === 'post',
+            'text-purple-400': log.type === 'profile',
+            'text-blue-400': log.type === 'ai',
+            'text-success': log.type === 'complete',
+            'text-error': log.type === 'error',
+            'text-kaia-muted': !['post','profile','ai','complete','error'].includes(log.type)
+          }">
+            <span class="text-kaia-muted/50" x-text="log.ts"></span>
+            <span x-text="log.msg"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Keywords Table -->
     <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
       <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
@@ -446,11 +491,24 @@
       </div>
     </div>
 
+    <!-- Campaign List Controls -->
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <input type="text" x-model="campaignSearch" placeholder="캠페인 검색..." class="rounded-lg border px-3 py-1.5 text-sm w-48" @input="filterCampaigns()">
+        <span class="text-xs text-kaia-muted" x-text="'총 ' + filteredCampaigns.length + '개'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <button @click="campaignPage = Math.max(0, campaignPage - 1)" x-show="campaignPage > 0" class="text-accent hover:text-accent-hover px-2 py-1 border border-dark-border rounded">이전</button>
+        <span class="text-kaia-muted" x-text="(campaignPage + 1) + ' / ' + Math.ceil(filteredCampaigns.length / campaignsPerPage)"></span>
+        <button @click="campaignPage++" x-show="(campaignPage + 1) * campaignsPerPage < filteredCampaigns.length" class="text-accent hover:text-accent-hover px-2 py-1 border border-dark-border rounded">다음</button>
+      </div>
+    </div>
+
     <!-- Campaigns List -->
     <div class="space-y-3">
       <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
       <div x-show="!loading && campaigns.length === 0" class="text-center py-12 text-kaia-muted bg-dark-card border border-dark-border rounded-lg">캠페인이 없습니다.</div>
-      <template x-for="c in campaigns" :key="c.id">
+      <template x-for="c in paginatedCampaigns" :key="c.id">
         <div class="bg-dark-card border border-dark-border rounded-lg p-5 hover:border-dark-border/80 card-glow">
           <div class="flex items-center justify-between mb-3">
             <div>
@@ -540,6 +598,7 @@
                     <tr class="border-b border-dark-border/50 text-kaia-muted">
                       <th class="px-2 py-1 text-left w-[130px]">유저</th>
                       <th class="px-2 py-1 text-center w-[50px]">참여</th>
+                      <th class="px-2 py-1 text-left">참여 상세</th>
                       <th class="px-2 py-1 text-center w-[50px]">DM</th>
                       <th class="px-2 py-1 text-left">메시지/실패원인</th>
                       <th class="px-2 py-1 text-right w-[70px]">시간(KST)</th>
@@ -559,6 +618,12 @@
                           <span x-show="a.engagement_status === 'engaged'" class="text-success">done</span>
                           <span x-show="a.engagement_status === 'none' || !a.engagement_status" class="text-kaia-muted">-</span>
                           <span x-show="a.engagement_status === 'failed'" class="text-error">fail</span>
+                        </td>
+                        <td class="px-2 py-1 max-w-[200px]">
+                          <p x-show="a.liked_post_url" class="line-clamp-1 text-[10px] text-purple-400">
+                            ♥ <a :href="a.liked_post_url" target="_blank" class="hover:underline" x-text="a.liked_post_url ? a.liked_post_url.split('/').filter(Boolean).pop() : ''"></a>
+                          </p>
+                          <p x-show="a.comment_text" class="line-clamp-1 text-[10px] text-blue-400" x-text="'💬 ' + (a.comment_text || '')"></p>
                         </td>
                         <td class="px-2 py-1 text-center">
                           <span x-show="a.execute_status === 'success'" class="text-success font-bold">sent</span>
@@ -707,6 +772,18 @@
               <option value="DE">독일 (DE)</option><option value="FR">프랑스 (FR)</option><option value="BR">브라질 (BR)</option>
               <option value="MN">몽골 (MN)</option><option value="MM">미얀마 (MM)</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">최소 팔로워</label>
+            <input type="number" x-model.number="editCampaign.min_followers" min="0" placeholder="0" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-kaia-muted mb-1">최대 팔로워</label>
+            <input type="number" x-model.number="editCampaign.max_followers" min="0" placeholder="제한 없음" class="w-full rounded-lg border px-3 py-1.5 text-sm">
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-kaia-muted mb-1">타겟 등급 (쉼표 구분, 예: S,A,B)</label>
+            <input type="text" x-model="editCampaign.target_tiers_input" placeholder="S,A,B,C 또는 비워두면 전체" class="w-full rounded-lg border px-3 py-1.5 text-sm">
           </div>
           <div>
             <label class="block text-xs text-kaia-muted mb-1">일일 DM 한도</label>

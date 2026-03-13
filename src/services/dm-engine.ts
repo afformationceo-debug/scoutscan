@@ -168,6 +168,9 @@ export class DMEngine {
               engagedCount++;
               db.prepare('UPDATE dm_action_queue SET engagement_status = ? WHERE id = ?')
                 .run('engaged', item.id);
+              // Save engagement details to queue item
+              db.prepare(`UPDATE dm_action_queue SET liked_post_url = ?, comment_text = ?, commented_post_url = ? WHERE id = ?`)
+                .run(engResult.likedPostUrl || null, engResult.commentText || null, engResult.commentedPostUrl || null, item.id);
               sseManager.broadcast('campaign:' + campaignId, 'engagement', {
                 account: account.username,
                 recipient: item.recipient_username,

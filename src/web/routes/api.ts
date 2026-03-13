@@ -442,7 +442,9 @@ api.post('/campaigns', async (c) => {
 });
 
 api.get('/campaigns', (c) => {
-  const campaigns = listCampaigns();
+  const limit = parseInt(c.req.query('limit') || '0');
+  const offset = parseInt(c.req.query('offset') || '0');
+  const campaigns = listCampaigns(limit, offset);
   return c.json({ campaigns });
 });
 
@@ -582,6 +584,7 @@ api.get('/campaigns/:id/activity', (c) => {
   const rows = db.prepare(`
     SELECT q.id, q.influencer_key, q.execute_status, q.engagement_status, q.error_message,
            q.account_username, q.executed_at, q.created_at, q.message_rendered,
+           q.liked_post_url, q.comment_text, q.commented_post_url,
            m.username, m.full_name, m.followers_count, m.profile_pic_url, m.detected_country, m.ai_country
     FROM dm_action_queue q
     LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
