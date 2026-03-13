@@ -843,83 +843,96 @@ api.get('/dashboard/stats', (c) => {
 
 // Recent activity feed for dashboard
 api.get('/dashboard/activity', (c) => {
+  try {
   const limit = Math.min(parseInt(c.req.query('limit') || '30'), 50);
   const activities: { type: string; message: string; ts: string }[] = [];
 
   // Recent scraping jobs (last 24h)
-  const recentJobs = db.prepare(`
-    SELECT id, platform, query, status, result_count, created_at, completed_at
-    FROM jobs WHERE created_at > datetime('now', '-24 hours')
-    ORDER BY created_at DESC LIMIT 20
-  `).all() as any[];
+  try {
+    const recentJobs = db.prepare(`
+      SELECT id, platform, query, status, result_count, created_at, completed_at
+      FROM jobs WHERE created_at > datetime('now', '-24 hours')
+      ORDER BY created_at DESC LIMIT 20
+    `).all() as any[];
 
-  for (const j of recentJobs) {
-    if (j.status === 'completed' || j.status === 'done') {
-      activities.push({
-        type: 'scraping_completed',
-        message: `스크래핑 완료: ${j.query} (${j.platform}) — ${j.result_count || 0}건`,
-        ts: j.completed_at || j.created_at,
-      });
-    } else if (j.status === 'running') {
-      activities.push({
-        type: 'scraping_started',
-        message: `스크래핑 진행중: ${j.query} (${j.platform})`,
-        ts: j.created_at,
-      });
-    } else if (j.status === 'failed') {
-      activities.push({
-        type: 'scraping_failed',
-        message: `스크래핑 실패: ${j.query} (${j.platform})`,
-        ts: j.completed_at || j.created_at,
-      });
+    for (const j of recentJobs) {
+      if (j.status === 'completed' || j.status === 'done') {
+        activities.push({
+          type: 'scraping_completed',
+          message: `스크래핑 완료: ${j.query} (${j.platform}) — ${j.result_count || 0}건`,
+          ts: j.completed_at || j.created_at,
+        });
+      } else if (j.status === 'running') {
+        activities.push({
+          type: 'scraping_started',
+          message: `스크래핑 진행중: ${j.query} (${j.platform})`,
+          ts: j.created_at,
+        });
+      } else if (j.status === 'failed') {
+        activities.push({
+          type: 'scraping_failed',
+          message: `스크래핑 실패: ${j.query} (${j.platform})`,
+          ts: j.completed_at || j.created_at,
+        });
+      }
     }
-  }
+  } catch { /* jobs table query error */ }
 
   // Recent DM actions (last 24h)
-  const recentDMs = db.prepare(`
-    SELECT q.execute_status, q.executed_at, q.recipient_username, q.account_username,
-           c.name as campaign_name, c.platform
-    FROM dm_action_queue q
-    JOIN dm_campaigns c ON q.campaign_id = c.id
-    WHERE q.executed_at > datetime('now', '-24 hours')
-    ORDER BY q.executed_at DESC LIMIT 20
-  `).all() as any[];
+  try {
+    const recentDMs = db.prepare(`
+      SELECT q.execute_status, q.executed_at, q.account_username,
+             m.username as recipient_username,
+             c.name as campaign_name, c.platform
+      FROM dm_action_queue q
+      JOIN dm_campaigns c ON q.campaign_id = c.id
+      LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
+      WHERE q.executed_at > datetime('now', '-24 hours')
+      ORDER BY q.executed_at DESC LIMIT 20
+    `).all() as any[];
 
-  for (const d of recentDMs) {
-    if (d.execute_status === 'success') {
-      activities.push({
-        type: 'dm_sent',
-        message: `DM 발송: @${d.recipient_username} (${d.campaign_name})`,
-        ts: d.executed_at,
-      });
-    } else if (d.execute_status === 'failed') {
-      activities.push({
-        type: 'dm_failed',
-        message: `DM 실패: @${d.recipient_username} (${d.campaign_name})`,
-        ts: d.executed_at,
-      });
+    for (const d of recentDMs) {
+      if (d.execute_status === 'success') {
+        activities.push({
+          type: 'dm_sent',
+          message: `DM 발송: @${d.recipient_username || '?'} (${d.campaign_name})`,
+          ts: d.executed_at,
+        });
+      } else if (d.execute_status === 'failed') {
+        activities.push({
+          type: 'dm_failed',
+          message: `DM 실패: @${d.recipient_username || '?'} (${d.campaign_name})`,
+          ts: d.executed_at,
+        });
+      }
     }
-  }
+  } catch { /* dm_action_queue may not exist yet */ }
 
   // Recent AI classifications (last 24h)
-  const recentAI = db.prepare(`
-    SELECT COUNT(*) as cnt, MAX(ai_classified_at) as last_at
-    FROM influencer_master
-    WHERE ai_classified_at > datetime('now', '-24 hours')
-  `).get() as any;
+  try {
+    const recentAI = db.prepare(`
+      SELECT COUNT(*) as cnt, MAX(ai_classified_at) as last_at
+      FROM influencer_master
+      WHERE ai_classified_at > datetime('now', '-24 hours')
+    `).get() as any;
 
-  if (recentAI?.cnt > 0) {
-    activities.push({
-      type: 'auto_assign',
-      message: `AI 분류 완료: ${recentAI.cnt}명 분류됨`,
-      ts: recentAI.last_at,
-    });
-  }
+    if (recentAI?.cnt > 0) {
+      activities.push({
+        type: 'auto_assign',
+        message: `AI 분류 완료: ${recentAI.cnt}명 분류됨`,
+        ts: recentAI.last_at,
+      });
+    }
+  } catch { /* AI classification query error */ }
 
   // Sort by timestamp descending
   activities.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
 
   return c.json({ activities: activities.slice(0, limit) });
+  } catch (err) {
+    console.error('[Dashboard Activity Error]', err);
+    return c.json({ activities: [], error: (err as Error).message });
+  }
 });
 
 export { api };
