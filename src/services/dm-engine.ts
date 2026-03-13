@@ -339,7 +339,7 @@ export class DMEngine {
 
     // Per-account targeting filters
     if (account.target_country) {
-      conditions.push('im.detected_country = ?');
+      conditions.push('UPPER(COALESCE(im.ai_country, im.detected_country)) = UPPER(?)');
       params.push(account.target_country);
     }
     if (account.target_tiers) {

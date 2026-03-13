@@ -150,10 +150,10 @@ export function getInfluencerStats(): { total: number; byCountry: Record<string,
   const total = (db.prepare(`SELECT COUNT(*) as count FROM influencer_master`).get() as any).count;
 
   const countryRows = db.prepare(
-    `SELECT detected_country, COUNT(*) as count FROM influencer_master WHERE detected_country IS NOT NULL GROUP BY detected_country ORDER BY count DESC`
+    `SELECT COALESCE(ai_country, detected_country) as country, COUNT(*) as count FROM influencer_master WHERE COALESCE(ai_country, detected_country) IS NOT NULL GROUP BY COALESCE(ai_country, detected_country) ORDER BY count DESC`
   ).all() as any[];
   const byCountry: Record<string, number> = {};
-  for (const r of countryRows) byCountry[r.detected_country] = r.count;
+  for (const r of countryRows) byCountry[r.country] = r.count;
 
   const tierRows = db.prepare(
     `SELECT scout_tier, COUNT(*) as count FROM influencer_master GROUP BY scout_tier ORDER BY scout_tier`

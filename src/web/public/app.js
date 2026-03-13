@@ -897,6 +897,14 @@ function campaignsPage() {
 
     _refreshInterval: null,
 
+    toggleCampaign(campaign) {
+      const wasCollapsed = campaign._collapsed;
+      // Collapse all
+      this.campaigns.forEach(c => c._collapsed = true);
+      // Toggle clicked one
+      campaign._collapsed = !wasCollapsed;
+    },
+
     async load() {
       this.loading = true;
       const res = await fetch('/api/campaigns');
@@ -906,6 +914,7 @@ function campaignsPage() {
         const existing = this.campaigns.find(e => e.id === c.id);
         return {
           ...c,
+          _collapsed: existing ? existing._collapsed : true,
           _showTargets: existing ? existing._showTargets : false,
           _targets: existing ? existing._targets : [],
           _targetTotal: existing ? existing._targetTotal : 0,

@@ -170,6 +170,7 @@
                   <span x-show="p.ai_is_influencer === 1" class="text-success text-[11px] font-bold">인플</span>
                   <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-error text-[11px] font-bold">업체</span>
                   <span x-show="!p.ai_classified_at" class="text-dark-border">-</span>
+                  <p x-show="p.ai_reason" class="text-[9px] text-kaia-muted mt-0.5 line-clamp-2" x-text="p.ai_reason"></p>
                 </td>
                 <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
                   <span x-text="p.ai_country || '-'" :class="p.ai_country && p.ai_country !== 'UNKNOWN' ? 'text-white font-medium' : 'text-dark-border'"></span>
@@ -509,225 +510,235 @@
       <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
       <div x-show="!loading && campaigns.length === 0" class="text-center py-12 text-kaia-muted bg-dark-card border border-dark-border rounded-lg">캠페인이 없습니다.</div>
       <template x-for="c in paginatedCampaigns" :key="c.id">
-        <div class="bg-dark-card border border-dark-border rounded-lg p-5 hover:border-dark-border/80 card-glow">
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <h3 class="font-semibold text-white" x-text="c.name"></h3>
-              <p class="text-xs text-kaia-muted">
-                <span class="badge text-[10px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : 'tt')" x-text="c.platform"></span>
-                <span x-show="c.target_country" class="ml-1 font-medium text-white" x-text="c.target_country"></span>
-                <span x-show="c.brand" class="ml-1" x-text="c.brand"></span>
-              </p>
+        <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden card-glow">
+          <!-- Compact Header (always visible) -->
+          <div @click="toggleCampaign(c)" class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-dark-hover transition-colors">
+            <span class="text-kaia-muted text-[11px]" x-text="c._collapsed ? '▶' : '▼'"></span>
+            <span class="badge text-[9px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : 'tt')" x-text="c.platform"></span>
+            <span class="font-medium text-sm flex-1 truncate text-white" x-text="c.name"></span>
+            <span class="text-[10px] text-kaia-secondary" x-text="c.target_country?.toUpperCase()"></span>
+            <!-- Status badge -->
+            <span class="badge text-[9px]" :class="{
+              'bg-success/15 text-success': c.status === 'completed',
+              'bg-accent/15 text-accent': c.status === 'active',
+              'bg-warning/15 text-warning': c.status === 'paused',
+              'bg-dark-hover text-kaia-muted': c.status === 'draft'
+            }" x-text="c.status"></span>
+            <!-- Cookie dot -->
+            <span class="w-2 h-2 rounded-full" :class="{
+              'bg-success': c.cookie_status === 'valid',
+              'bg-error': c.cookie_status === 'expired',
+              'bg-kaia-muted': !c.cookie_status || c.cookie_status === 'unknown'
+            }"></span>
+            <!-- Quick stats -->
+            <div class="flex items-center gap-2 text-[10px] font-mono">
+              <span class="text-kaia-secondary">대기:<span class="text-white" x-text="c.total_queued - (c.total_sent||0) - (c.total_failed||0)"></span></span>
+              <span class="text-success">발송:<span x-text="c.total_sent||0"></span></span>
+              <span class="text-error">실패:<span x-text="c.total_failed||0"></span></span>
             </div>
-            <div class="flex items-center gap-2">
-              <!-- Cookie Status -->
-              <span class="flex items-center gap-1 text-[11px]">
-                <span class="inline-block w-2 h-2 rounded-full"
-                      :class="c.cookie_status === 'valid' ? 'bg-success' : c.cookie_status === 'expired' ? 'bg-error' : 'bg-kaia-muted'"></span>
-                <span :class="c.cookie_status === 'valid' ? 'text-success' : c.cookie_status === 'expired' ? 'text-error' : 'text-kaia-muted'"
-                      x-text="c.has_cookie ? (c.cookie_status === 'valid' ? 'Cookie OK' : c.cookie_status === 'expired' ? 'Cookie 만료' : c.cookie_status || 'unknown') : '쿠키 없음'"></span>
-              </span>
-              <span class="badge"
-                    :class="c.status === 'active' ? 'badge-success' : c.status === 'completed' ? 'badge-info' : c.status === 'paused' ? 'badge-warning' : 'badge-c'"
-                    x-text="c.status"></span>
+            <!-- Action buttons (stop propagation) -->
+            <div class="flex items-center gap-1" @click.stop>
               <button @click="openEditModal(c)" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[10px]">수정</button>
-              <button @click="uploadCookieDialog(c)" class="badge badge-accent cursor-pointer hover:opacity-80 text-[10px]">Cookie</button>
+              <button @click="uploadCookieDialog(c)" class="badge bg-accent/15 text-accent cursor-pointer hover:opacity-80 text-[10px]">Cookie</button>
               <button @click="checkCookieNow(c)" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[10px]">Check</button>
-              <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)" class="badge badge-accent cursor-pointer hover:opacity-80">큐 생성</button>
-              <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)" class="badge badge-success cursor-pointer hover:opacity-80">시작</button>
-              <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)" class="badge badge-warning cursor-pointer hover:opacity-80">일시정지</button>
+              <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)" class="badge bg-accent/15 text-accent cursor-pointer hover:opacity-80 text-[10px]">큐 생성</button>
+              <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)" class="badge badge-success cursor-pointer hover:opacity-80 text-[10px]">시작</button>
+              <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)" class="badge badge-warning cursor-pointer hover:opacity-80 text-[10px]">일시정지</button>
             </div>
           </div>
 
-          <!-- Sender Account Info -->
-          <div x-show="c.sender_username" class="text-[11px] text-kaia-muted mb-2">
-            발송 계정: <span class="text-accent font-medium" x-text="'@' + c.sender_username"></span>
-            <span class="ml-2">한도: <span class="text-white font-mono" x-text="c.daily_limit"></span>/일</span>
-          </div>
+          <!-- Expanded Details (shown when not collapsed) -->
+          <div x-show="!c._collapsed" class="border-t border-dark-border p-5">
+            <!-- Sender Account Info -->
+            <div x-show="c.sender_username" class="text-[11px] text-kaia-muted mb-2">
+              발송 계정: <span class="text-accent font-medium" x-text="'@' + c.sender_username"></span>
+              <span class="ml-2">한도: <span class="text-white font-mono" x-text="c.daily_limit"></span>/일</span>
+            </div>
 
-          <div class="flex items-center gap-4 text-[12px] text-kaia-text mb-2">
-            <span>대기: <span class="font-mono text-white" x-text="c.total_queued"></span></span>
-            <span>발송: <span class="font-mono text-success" x-text="c.total_sent"></span></span>
-            <span>실패: <span class="font-mono text-error" x-text="c.total_failed"></span></span>
-            <span>응답: <span class="font-mono text-accent" x-text="c.total_replied"></span></span>
-          </div>
-          <div x-show="c.total_queued > 0" class="progress-bar h-1.5 mb-3">
-            <div class="h-1.5 rounded-full bg-success transition-all" :style="'width: ' + Math.round((c.total_sent / c.total_queued) * 100) + '%'"></div>
-          </div>
+            <div class="flex items-center gap-4 text-[12px] text-kaia-text mb-2">
+              <span>대기: <span class="font-mono text-white" x-text="c.total_queued"></span></span>
+              <span>발송: <span class="font-mono text-success" x-text="c.total_sent"></span></span>
+              <span>실패: <span class="font-mono text-error" x-text="c.total_failed"></span></span>
+              <span>응답: <span class="font-mono text-accent" x-text="c.total_replied"></span></span>
+            </div>
+            <div x-show="c.total_queued > 0" class="progress-bar h-1.5 mb-3">
+              <div class="h-1.5 rounded-full bg-success transition-all" :style="'width: ' + Math.round((c.total_sent / c.total_queued) * 100) + '%'"></div>
+            </div>
 
-          <!-- Live Progress Section -->
-          <div class="mt-2 mb-2">
-            <div x-data="campaignLive(c.id)" x-init="init()" class="bg-dark-body rounded-lg border border-accent/20 p-3">
-              <!-- Status Bar -->
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
-                  <span class="inline-block w-2 h-2 rounded-full animate-pulse" :class="c.status === 'active' ? 'bg-success' : 'bg-kaia-muted'"></span>
-                  <span class="text-[12px] font-semibold text-white">실시간 진행</span>
+            <!-- Live Progress Section -->
+            <div class="mt-2 mb-2">
+              <div x-data="campaignLive(c.id)" x-init="init()" class="bg-dark-body rounded-lg border border-accent/20 p-3">
+                <!-- Status Bar -->
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="inline-block w-2 h-2 rounded-full animate-pulse" :class="c.status === 'active' ? 'bg-success' : 'bg-kaia-muted'"></span>
+                    <span class="text-[12px] font-semibold text-white">실시간 진행</span>
+                  </div>
+                  <div class="flex items-center gap-3 text-[11px]">
+                    <span class="text-success">성공: <span class="font-mono" x-text="summary.success || 0"></span></span>
+                    <span class="text-error">실패: <span class="font-mono" x-text="summary.failed || 0"></span></span>
+                    <span class="text-kaia-muted">대기: <span class="font-mono" x-text="summary.pending || 0"></span></span>
+                    <button @click="loadActivity()" class="text-accent hover:text-accent-hover">새로고침</button>
+                  </div>
                 </div>
-                <div class="flex items-center gap-3 text-[11px]">
-                  <span class="text-success">성공: <span class="font-mono" x-text="summary.success || 0"></span></span>
-                  <span class="text-error">실패: <span class="font-mono" x-text="summary.failed || 0"></span></span>
-                  <span class="text-kaia-muted">대기: <span class="font-mono" x-text="summary.pending || 0"></span></span>
-                  <button @click="loadActivity()" class="text-accent hover:text-accent-hover">새로고침</button>
+                <!-- Current Status Banner (countdown, processing state) -->
+                <div x-show="currentStatus" class="mb-2 px-3 py-2 rounded-md text-[12px] font-mono"
+                     :class="{
+                       'bg-warning/10 text-warning': currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown',
+                       'bg-accent/10 text-accent': currentPhase === 'processing' || currentPhase === 'sent',
+                       'bg-blue-500/10 text-blue-400': currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page'),
+                       'bg-purple-500/10 text-purple-400': currentPhase === 'engage_start' || currentPhase === 'engaged',
+                       'bg-error/10 text-error': currentPhase === 'failed' || currentPhase === 'error',
+                       'bg-dark-hover text-kaia-text': !['delay','engage_wait','cooldown','processing','sent','dm_step','navigate','search_type','search_wait','search_result','select_user','open_chat','msg_wait','msg_type','msg_send','msg_confirm','browser_init','page_create','engage_start','engaged','failed','error'].includes(currentPhase)
+                     }">
+                  <div class="flex items-center gap-2">
+                    <span x-show="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown'" class="animate-spin text-[10px]">&#9201;</span>
+                    <span x-show="currentPhase === 'processing' || currentPhase === 'sent'" class="animate-pulse">&#9889;</span>
+                    <span x-show="currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page')" class="animate-pulse text-[10px]">&#128640;</span>
+                    <span x-show="currentPhase === 'engage_start' || currentPhase === 'engaged'" class="animate-pulse text-[10px]">&#10084;</span>
+                    <span x-show="currentPhase === 'failed' || currentPhase === 'error'" class="text-[10px]">&#10060;</span>
+                    <span x-text="currentStatus" class="flex-1"></span>
+                    <span x-show="countdown > 0" class="ml-auto font-bold text-white" x-text="countdown + '초'"></span>
+                  </div>
                 </div>
-              </div>
-              <!-- Current Status Banner (countdown, processing state) -->
-              <div x-show="currentStatus" class="mb-2 px-3 py-2 rounded-md text-[12px] font-mono"
-                   :class="{
-                     'bg-warning/10 text-warning': currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown',
-                     'bg-accent/10 text-accent': currentPhase === 'processing' || currentPhase === 'sent',
-                     'bg-blue-500/10 text-blue-400': currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page'),
-                     'bg-purple-500/10 text-purple-400': currentPhase === 'engage_start' || currentPhase === 'engaged',
-                     'bg-error/10 text-error': currentPhase === 'failed' || currentPhase === 'error',
-                     'bg-dark-hover text-kaia-text': !['delay','engage_wait','cooldown','processing','sent','dm_step','navigate','search_type','search_wait','search_result','select_user','open_chat','msg_wait','msg_type','msg_send','msg_confirm','browser_init','page_create','engage_start','engaged','failed','error'].includes(currentPhase)
-                   }">
-                <div class="flex items-center gap-2">
-                  <span x-show="currentPhase === 'delay' || currentPhase === 'engage_wait' || currentPhase === 'cooldown'" class="animate-spin text-[10px]">&#9201;</span>
-                  <span x-show="currentPhase === 'processing' || currentPhase === 'sent'" class="animate-pulse">&#9889;</span>
-                  <span x-show="currentPhase.startsWith('dm_step') || currentPhase.startsWith('navigate') || currentPhase.startsWith('search') || currentPhase.startsWith('select') || currentPhase.startsWith('open') || currentPhase.startsWith('msg') || currentPhase.startsWith('browser') || currentPhase.startsWith('page')" class="animate-pulse text-[10px]">&#128640;</span>
-                  <span x-show="currentPhase === 'engage_start' || currentPhase === 'engaged'" class="animate-pulse text-[10px]">&#10084;</span>
-                  <span x-show="currentPhase === 'failed' || currentPhase === 'error'" class="text-[10px]">&#10060;</span>
-                  <span x-text="currentStatus" class="flex-1"></span>
-                  <span x-show="countdown > 0" class="ml-auto font-bold text-white" x-text="countdown + '초'"></span>
-                </div>
-              </div>
-              <!-- Activity Table -->
-              <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
-                <table class="min-w-full text-[11px]">
-                  <thead class="sticky top-0 bg-dark-body">
-                    <tr class="border-b border-dark-border/50 text-kaia-muted">
-                      <th class="px-2 py-1 text-left w-[130px]">유저</th>
-                      <th class="px-2 py-1 text-center w-[50px]">참여</th>
-                      <th class="px-2 py-1 text-left">참여 상세</th>
-                      <th class="px-2 py-1 text-center w-[50px]">DM</th>
-                      <th class="px-2 py-1 text-left">메시지/실패원인</th>
-                      <th class="px-2 py-1 text-right w-[70px]">시간(KST)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template x-for="a in activity" :key="a.id">
-                      <tr class="border-b border-dark-border/10 hover:bg-dark-hover/20">
-                        <td class="px-2 py-1">
-                          <div class="flex items-center gap-1">
-                            <img x-show="a.profile_pic_url" :src="a.profile_pic_url" class="w-4 h-4 rounded-full" loading="lazy">
-                            <span class="text-accent font-medium" x-text="'@' + (a.username || '-')"></span>
-                            <span class="text-kaia-muted/50" x-text="a.followers_count ? formatNumber(a.followers_count) : ''"></span>
-                          </div>
-                        </td>
-                        <td class="px-2 py-1 text-center">
-                          <span x-show="a.engagement_status === 'engaged'" class="text-success">done</span>
-                          <span x-show="a.engagement_status === 'none' || !a.engagement_status" class="text-kaia-muted">-</span>
-                          <span x-show="a.engagement_status === 'failed'" class="text-error">fail</span>
-                        </td>
-                        <td class="px-2 py-1 max-w-[200px]">
-                          <p x-show="a.liked_post_url" class="line-clamp-1 text-[10px] text-purple-400">
-                            ♥ <a :href="a.liked_post_url" target="_blank" class="hover:underline" x-text="a.liked_post_url ? a.liked_post_url.split('/').filter(Boolean).pop() : ''"></a>
-                          </p>
-                          <p x-show="a.comment_text" class="line-clamp-1 text-[10px] text-blue-400" x-text="'💬 ' + (a.comment_text || '')"></p>
-                        </td>
-                        <td class="px-2 py-1 text-center">
-                          <span x-show="a.execute_status === 'success'" class="text-success font-bold">sent</span>
-                          <span x-show="a.execute_status === 'failed'" class="text-error font-bold">fail</span>
-                          <span x-show="a.execute_status === 'pending'" class="text-kaia-muted">대기</span>
-                          <span x-show="a.execute_status === 'processing'" class="text-warning animate-pulse">진행</span>
-                        </td>
-                        <td class="px-2 py-1 max-w-[250px]">
-                          <p x-show="a.error_message" class="line-clamp-1 text-error" x-text="a.error_message"></p>
-                          <p x-show="!a.error_message && a.message_rendered" class="line-clamp-1 text-kaia-muted text-[10px]" x-text="a.message_rendered"></p>
-                        </td>
-                        <td class="px-2 py-1 text-right text-kaia-muted" x-text="a.executed_at ? formatDateKST(a.executed_at).split(' ').pop() : '-'"></td>
+                <!-- Activity Table -->
+                <div class="overflow-x-auto max-h-[300px] overflow-y-auto">
+                  <table class="min-w-full text-[11px]">
+                    <thead class="sticky top-0 bg-dark-body">
+                      <tr class="border-b border-dark-border/50 text-kaia-muted">
+                        <th class="px-2 py-1 text-left w-[130px]">유저</th>
+                        <th class="px-2 py-1 text-center w-[50px]">참여</th>
+                        <th class="px-2 py-1 text-left">참여 상세</th>
+                        <th class="px-2 py-1 text-center w-[50px]">DM</th>
+                        <th class="px-2 py-1 text-left">메시지/실패원인</th>
+                        <th class="px-2 py-1 text-right w-[70px]">시간(KST)</th>
                       </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="a in activity" :key="a.id">
+                        <tr class="border-b border-dark-border/10 hover:bg-dark-hover/20">
+                          <td class="px-2 py-1">
+                            <div class="flex items-center gap-1">
+                              <img x-show="a.profile_pic_url" :src="a.profile_pic_url" class="w-4 h-4 rounded-full" loading="lazy">
+                              <span class="text-accent font-medium" x-text="'@' + (a.username || '-')"></span>
+                              <span class="text-kaia-muted/50" x-text="a.followers_count ? formatNumber(a.followers_count) : ''"></span>
+                            </div>
+                          </td>
+                          <td class="px-2 py-1 text-center">
+                            <span x-show="a.engagement_status === 'engaged'" class="text-success">done</span>
+                            <span x-show="a.engagement_status === 'none' || !a.engagement_status" class="text-kaia-muted">-</span>
+                            <span x-show="a.engagement_status === 'failed'" class="text-error">fail</span>
+                          </td>
+                          <td class="px-2 py-1 max-w-[200px]">
+                            <p x-show="a.liked_post_url" class="line-clamp-1 text-[10px] text-purple-400">
+                              ♥ <a :href="a.liked_post_url" target="_blank" class="hover:underline" x-text="a.liked_post_url ? a.liked_post_url.split('/').filter(Boolean).pop() : ''"></a>
+                            </p>
+                            <p x-show="a.comment_text" class="line-clamp-1 text-[10px] text-blue-400" x-text="'💬 ' + (a.comment_text || '')"></p>
+                          </td>
+                          <td class="px-2 py-1 text-center">
+                            <span x-show="a.execute_status === 'success'" class="text-success font-bold">sent</span>
+                            <span x-show="a.execute_status === 'failed'" class="text-error font-bold">fail</span>
+                            <span x-show="a.execute_status === 'pending'" class="text-kaia-muted">대기</span>
+                            <span x-show="a.execute_status === 'processing'" class="text-warning animate-pulse">진행</span>
+                          </td>
+                          <td class="px-2 py-1 max-w-[250px]">
+                            <p x-show="a.error_message" class="line-clamp-1 text-error" x-text="a.error_message"></p>
+                            <p x-show="!a.error_message && a.message_rendered" class="line-clamp-1 text-kaia-muted text-[10px]" x-text="a.message_rendered"></p>
+                          </td>
+                          <td class="px-2 py-1 text-right text-kaia-muted" x-text="a.executed_at ? formatDateKST(a.executed_at).split(' ').pop() : '-'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div x-show="activity.length === 0" class="text-kaia-muted py-4 text-center text-[12px]">배정된 데이터가 없습니다.</div>
+                </div>
+                <!-- SSE Live Events -->
+                <div x-show="liveEvents.length > 0" class="mt-2 pt-2 border-t border-dark-border/30">
+                  <p class="text-[10px] text-kaia-muted mb-1">실시간 로그 (<span x-text="liveEvents.length"></span>건)</p>
+                  <div class="max-h-[200px] overflow-y-auto space-y-0.5 font-mono text-[11px]">
+                    <template x-for="(ev, idx) in liveEvents" :key="idx">
+                      <div :class="{
+                        'text-error': ev.type === 'dm_failed',
+                        'text-success': ev.type === 'dm_sent',
+                        'text-blue-400': ev.type === 'step',
+                        'text-purple-400': ev.type === 'engagement',
+                        'text-warning': ev.type === 'round_complete',
+                        'text-accent': !['dm_failed','dm_sent','step','engagement','round_complete'].includes(ev.type)
+                      }">
+                        <span class="text-kaia-muted/50" x-text="ev.ts"></span>
+                        <span x-text="ev.msg"></span>
+                      </div>
                     </template>
-                  </tbody>
-                </table>
-                <div x-show="activity.length === 0" class="text-kaia-muted py-4 text-center text-[12px]">배정된 데이터가 없습니다.</div>
+                  </div>
+                </div>
               </div>
-              <!-- SSE Live Events -->
-              <div x-show="liveEvents.length > 0" class="mt-2 pt-2 border-t border-dark-border/30">
-                <p class="text-[10px] text-kaia-muted mb-1">실시간 로그 (<span x-text="liveEvents.length"></span>건)</p>
-                <div class="max-h-[200px] overflow-y-auto space-y-0.5 font-mono text-[11px]">
-                  <template x-for="(ev, idx) in liveEvents" :key="idx">
-                    <div :class="{
-                      'text-error': ev.type === 'dm_failed',
-                      'text-success': ev.type === 'dm_sent',
-                      'text-blue-400': ev.type === 'step',
-                      'text-purple-400': ev.type === 'engagement',
-                      'text-warning': ev.type === 'round_complete',
-                      'text-accent': !['dm_failed','dm_sent','step','engagement','round_complete'].includes(ev.type)
-                    }">
-                      <span class="text-kaia-muted/50" x-text="ev.ts"></span>
-                      <span x-text="ev.msg"></span>
+            </div>
+
+            <!-- Campaign Data Section (expandable) -->
+            <div class="mt-2">
+              <button @click="toggleTargets(c)" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
+                <span x-text="c._showTargets ? '▼' : '▶'"></span>
+                <span>캠페인 배정 데이터</span>
+                <span class="text-kaia-muted" x-text="'(' + (c._targetTotal || c.total_queued || 0) + '명)'"></span>
+              </button>
+              <div x-show="c._showTargets" class="mt-2 bg-dark-body rounded-lg border border-dark-border/50 overflow-hidden">
+                <div x-show="c._targetsLoading" class="text-center py-4 text-kaia-muted text-xs">로딩 중...</div>
+                <div x-show="!c._targetsLoading && (!c._targets || c._targets.length === 0)" class="text-center py-4 text-kaia-muted text-xs">배정된 타겟이 없습니다. 큐 생성을 먼저 실행하세요.</div>
+                <div x-show="!c._targetsLoading && c._targets && c._targets.length > 0" class="overflow-x-auto">
+                  <table class="min-w-full data-table">
+                    <thead>
+                      <tr class="border-b border-dark-border">
+                        <th class="px-2 py-2 text-left">유저명</th>
+                        <th class="px-2 py-2 text-left">이름</th>
+                        <th class="px-2 py-2 text-center">플랫폼</th>
+                        <th class="px-2 py-2 text-center">국가</th>
+                        <th class="px-2 py-2 text-right">팔로워</th>
+                        <th class="px-2 py-2 text-right">참여율</th>
+                        <th class="px-2 py-2 text-center">등급</th>
+                        <th class="px-2 py-2 text-left">바이오</th>
+                        <th class="px-2 py-2 text-center">상태</th>
+                        <th class="px-2 py-2 text-center">참여</th>
+                        <th class="px-2 py-2 text-left">메시지</th>
+                        <th class="px-2 py-2 text-center">생성일</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template x-for="t in c._targets" :key="t.id">
+                        <tr class="border-b border-dark-border/20 hover:bg-dark-hover/30">
+                          <td class="px-2 py-1.5">
+                            <div class="flex items-center gap-1.5">
+                              <img x-show="t.profile_pic_url" :src="t.profile_pic_url" class="w-5 h-5 rounded-full" loading="lazy">
+                              <span class="text-accent font-medium text-[12px]" x-text="'@' + (t.influencer_username || t.influencer_key?.split(':')[1] || '-')"></span>
+                            </div>
+                          </td>
+                          <td class="px-2 py-1.5 text-[12px] text-white" x-text="t.full_name || '-'"></td>
+                          <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="'badge-' + ((t.influencer_platform || c.platform) === 'instagram' ? 'ig' : (t.influencer_platform || c.platform) === 'twitter' ? 'tw' : 'tt')" x-text="t.influencer_platform || c.platform"></span></td>
+                          <td class="px-2 py-1.5 text-center text-[12px] text-white font-medium" x-text="t.detected_country || '-'"></td>
+                          <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.followers_count ? formatNumber(t.followers_count) : '-'"></td>
+                          <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.engagement_rate ? (t.engagement_rate * 100).toFixed(1) + '%' : '-'"></td>
+                          <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.scout_tier === 'S' ? 'badge-s' : t.scout_tier === 'A' ? 'badge-a' : t.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="t.scout_tier || '-'"></span></td>
+                          <td class="px-2 py-1.5 max-w-[150px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.bio || '-'"></p></td>
+                          <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.execute_status === 'success' ? 'badge-success' : t.execute_status === 'failed' ? 'badge-error' : t.execute_status === 'processing' ? 'badge-warning' : 'badge-c'" x-text="t.execute_status"></span></td>
+                          <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.engagement_status === 'done' ? 'badge-success' : t.engagement_status === 'none' ? 'badge-c' : 'badge-warning'" x-text="t.engagement_status || 'none'"></span></td>
+                          <td class="px-2 py-1.5 max-w-[180px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.message_rendered || '-'"></p></td>
+                          <td class="px-2 py-1.5 text-center text-[11px] text-kaia-muted" x-text="t.created_at ? formatDate(t.created_at) : '-'"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <!-- Pagination -->
+                  <div class="flex items-center justify-between px-3 py-2 border-t border-dark-border/50">
+                    <span class="text-[11px] text-kaia-muted">
+                      <span x-text="c._targets.length"></span> / <span x-text="c._targetTotal"></span>명 표시
+                    </span>
+                    <div class="flex gap-2">
+                      <button x-show="c._targetPage > 0" @click="loadTargetsPage(c, c._targetPage - 1)"
+                              class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">이전</button>
+                      <button x-show="(c._targetPage + 1) * 50 < c._targetTotal" @click="loadTargetsPage(c, c._targetPage + 1)"
+                              class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">다음</button>
+                      <button x-show="c._targetTotal > 50" @click="loadAllTargets(c)"
+                              class="text-[11px] text-kaia-text hover:text-white px-2 py-0.5 border border-dark-border rounded">전체 보기</button>
                     </div>
-                  </template>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Campaign Data Section (expandable) -->
-          <div class="mt-2">
-            <button @click="toggleTargets(c)" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
-              <span x-text="c._showTargets ? '▼' : '▶'"></span>
-              <span>캠페인 배정 데이터</span>
-              <span class="text-kaia-muted" x-text="'(' + (c._targetTotal || c.total_queued || 0) + '명)'"></span>
-            </button>
-            <div x-show="c._showTargets" class="mt-2 bg-dark-body rounded-lg border border-dark-border/50 overflow-hidden">
-              <div x-show="c._targetsLoading" class="text-center py-4 text-kaia-muted text-xs">로딩 중...</div>
-              <div x-show="!c._targetsLoading && (!c._targets || c._targets.length === 0)" class="text-center py-4 text-kaia-muted text-xs">배정된 타겟이 없습니다. 큐 생성을 먼저 실행하세요.</div>
-              <div x-show="!c._targetsLoading && c._targets && c._targets.length > 0" class="overflow-x-auto">
-                <table class="min-w-full data-table">
-                  <thead>
-                    <tr class="border-b border-dark-border">
-                      <th class="px-2 py-2 text-left">유저명</th>
-                      <th class="px-2 py-2 text-left">이름</th>
-                      <th class="px-2 py-2 text-center">플랫폼</th>
-                      <th class="px-2 py-2 text-center">국가</th>
-                      <th class="px-2 py-2 text-right">팔로워</th>
-                      <th class="px-2 py-2 text-right">참여율</th>
-                      <th class="px-2 py-2 text-center">등급</th>
-                      <th class="px-2 py-2 text-left">바이오</th>
-                      <th class="px-2 py-2 text-center">상태</th>
-                      <th class="px-2 py-2 text-center">참여</th>
-                      <th class="px-2 py-2 text-left">메시지</th>
-                      <th class="px-2 py-2 text-center">생성일</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template x-for="t in c._targets" :key="t.id">
-                      <tr class="border-b border-dark-border/20 hover:bg-dark-hover/30">
-                        <td class="px-2 py-1.5">
-                          <div class="flex items-center gap-1.5">
-                            <img x-show="t.profile_pic_url" :src="t.profile_pic_url" class="w-5 h-5 rounded-full" loading="lazy">
-                            <span class="text-accent font-medium text-[12px]" x-text="'@' + (t.influencer_username || t.influencer_key?.split(':')[1] || '-')"></span>
-                          </div>
-                        </td>
-                        <td class="px-2 py-1.5 text-[12px] text-white" x-text="t.full_name || '-'"></td>
-                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="'badge-' + ((t.influencer_platform || c.platform) === 'instagram' ? 'ig' : (t.influencer_platform || c.platform) === 'twitter' ? 'tw' : 'tt')" x-text="t.influencer_platform || c.platform"></span></td>
-                        <td class="px-2 py-1.5 text-center text-[12px] text-white font-medium" x-text="t.detected_country || '-'"></td>
-                        <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.followers_count ? formatNumber(t.followers_count) : '-'"></td>
-                        <td class="px-2 py-1.5 text-right text-[12px] num" x-text="t.engagement_rate ? (t.engagement_rate * 100).toFixed(1) + '%' : '-'"></td>
-                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.scout_tier === 'S' ? 'badge-s' : t.scout_tier === 'A' ? 'badge-a' : t.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="t.scout_tier || '-'"></span></td>
-                        <td class="px-2 py-1.5 max-w-[150px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.bio || '-'"></p></td>
-                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.execute_status === 'success' ? 'badge-success' : t.execute_status === 'failed' ? 'badge-error' : t.execute_status === 'processing' ? 'badge-warning' : 'badge-c'" x-text="t.execute_status"></span></td>
-                        <td class="px-2 py-1.5 text-center"><span class="badge text-[9px]" :class="t.engagement_status === 'done' ? 'badge-success' : t.engagement_status === 'none' ? 'badge-c' : 'badge-warning'" x-text="t.engagement_status || 'none'"></span></td>
-                        <td class="px-2 py-1.5 max-w-[180px]"><p class="line-clamp-1 text-[11px] text-kaia-muted" x-text="t.message_rendered || '-'"></p></td>
-                        <td class="px-2 py-1.5 text-center text-[11px] text-kaia-muted" x-text="t.created_at ? formatDate(t.created_at) : '-'"></td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-                <!-- Pagination -->
-                <div class="flex items-center justify-between px-3 py-2 border-t border-dark-border/50">
-                  <span class="text-[11px] text-kaia-muted">
-                    <span x-text="c._targets.length"></span> / <span x-text="c._targetTotal"></span>명 표시
-                  </span>
-                  <div class="flex gap-2">
-                    <button x-show="c._targetPage > 0" @click="loadTargetsPage(c, c._targetPage - 1)"
-                            class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">이전</button>
-                    <button x-show="(c._targetPage + 1) * 50 < c._targetTotal" @click="loadTargetsPage(c, c._targetPage + 1)"
-                            class="text-[11px] text-accent hover:text-accent-hover px-2 py-0.5 border border-dark-border rounded">다음</button>
-                    <button x-show="c._targetTotal > 50" @click="loadAllTargets(c)"
-                            class="text-[11px] text-kaia-text hover:text-white px-2 py-0.5 border border-dark-border rounded">전체 보기</button>
                   </div>
                 </div>
               </div>
