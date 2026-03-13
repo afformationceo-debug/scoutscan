@@ -20,14 +20,6 @@ pages.get('/', (c) => {
   return c.html(renderPage('dashboard'));
 });
 
-pages.get('/search', (c) => {
-  return c.html(renderPage('search'));
-});
-
-pages.get('/profiles', (c) => {
-  return c.html(renderPage('profiles'));
-});
-
 pages.get('/data', (c) => {
   return c.html(renderPage('data'));
 });

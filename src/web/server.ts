@@ -14,11 +14,15 @@ import { scheduler } from '../services/scheduler.js';
 import { ProxyRouter } from '../core/proxy.js';
 import { StealthBrowser } from '../core/anti-detection/stealth-browser.js';
 import { CookieManager } from '../core/cookie-manager.js';
+import { cookieDbAdapter } from './services/db.js';
 import { BrowserContextPool } from '../services/browser-context-pool.js';
 import { DMEngine } from '../services/dm-engine.js';
 import { EngagementEngine } from '../services/engagement-engine.js';
 import { CookieHealthService } from '../services/cookie-health.js';
 import { registry } from '../services/registry.js';
+
+// 0. Connect CookieManager to DB (must happen before any CookieManager instance is used)
+CookieManager.setDbAdapter(cookieDbAdapter);
 
 // 1. Create shared infrastructure
 const proxyRouter = new ProxyRouter();
@@ -76,11 +80,10 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
   Server running at http://localhost:${info.port}
 
   Pages:
-    /          - Dashboard
-    /search    - Hashtag Search
-    /profiles  - Profile Lookup
-    /history   - Scraping History
-    /settings  - Cookie Settings
+    /          - Dashboard (Live)
+    /data      - Data Management
+    /history   - Job History
+    /settings  - Settings
 
   Browser Pool: max 40 concurrent contexts
   Cookie Health: checking every 5 minutes

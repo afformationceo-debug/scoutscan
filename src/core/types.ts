@@ -130,6 +130,8 @@ export interface KeywordTarget {
   isActive: boolean;
   scrapeUntil?: string; // ISO date string - only scrape posts up to this date
   groupKey?: string;
+  lastJobId?: string;
+  lastJobStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

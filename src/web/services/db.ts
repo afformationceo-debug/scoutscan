@@ -250,6 +250,14 @@ db.exec(`
     FOREIGN KEY (campaign_id) REFERENCES dm_campaigns(id)
   );
   CREATE INDEX IF NOT EXISTS idx_dr_campaign ON dm_rounds(campaign_id);
+
+  -- Table 9: scraping_cookies (persistent cookie storage for ephemeral filesystems)
+  CREATE TABLE IF NOT EXISTS scraping_cookies (
+    platform TEXT PRIMARY KEY,
+    cookie_json TEXT NOT NULL,
+    cookie_count INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 // ─── ALTER TABLE migrations (idempotent) ───
@@ -282,6 +290,9 @@ const alterMigrations = [
   `ALTER TABLE dm_campaigns ADD COLUMN cookie_expires_at TEXT`,
   // comment_templates: campaign association
   `ALTER TABLE comment_templates ADD COLUMN campaign_id TEXT`,
+  // keyword_targets job tracking
+  `ALTER TABLE keyword_targets ADD COLUMN last_job_id TEXT`,
+  `ALTER TABLE keyword_targets ADD COLUMN last_job_status TEXT DEFAULT 'idle'`,
   // AI classification columns
   `ALTER TABLE influencer_master ADD COLUMN ai_is_influencer INTEGER`,
   `ALTER TABLE influencer_master ADD COLUMN ai_country TEXT`,
@@ -292,6 +303,8 @@ const alterMigrations = [
   `ALTER TABLE dm_action_queue ADD COLUMN liked_post_url TEXT`,
   `ALTER TABLE dm_action_queue ADD COLUMN comment_text TEXT`,
   `ALTER TABLE dm_action_queue ADD COLUMN commented_post_url TEXT`,
+  // dm_accounts: store actual cookie JSON in DB (ephemeral filesystem safe)
+  `ALTER TABLE dm_accounts ADD COLUMN cookie_json TEXT`,
 ];
 
 for (const sql of alterMigrations) {
@@ -584,5 +597,45 @@ export function getProfileStats(): { platform: string; count: number }[] {
 export function getJobPostsRaw(jobId: string): any[] {
   return db.prepare(`SELECT * FROM posts WHERE job_id = ? ORDER BY likes_count DESC`).all(jobId) as any[];
 }
+
+// ─── Cookie DB Adapter ───
+// Provides DB-first cookie storage for CookieManager (survives deploys/restarts)
+
+import type { CookieDbAdapter } from '../../core/cookie-manager.js';
+
+export const cookieDbAdapter: CookieDbAdapter = {
+  getPlatformCookieJson(platform: string): string | null {
+    const row = db.prepare('SELECT cookie_json FROM scraping_cookies WHERE platform = ?').get(platform) as any;
+    return row?.cookie_json || null;
+  },
+
+  savePlatformCookieJson(platform: string, json: string, count: number): void {
+    db.prepare('INSERT OR REPLACE INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at) VALUES (?, ?, ?, ?)')
+      .run(platform, json, count, new Date().toISOString());
+  },
+
+  getAccountCookieJson(platform: string, username: string): string | null {
+    const row = db.prepare('SELECT cookie_json FROM dm_accounts WHERE platform = ? AND username = ?').get(platform, username) as any;
+    return row?.cookie_json || null;
+  },
+
+  saveAccountCookieJson(platform: string, username: string, json: string, count: number): void {
+    // Ensure the account row exists
+    const exists = db.prepare('SELECT id FROM dm_accounts WHERE platform = ? AND username = ?').get(platform, username) as any;
+    if (exists) {
+      db.prepare('UPDATE dm_accounts SET cookie_json = ?, cookie_status = ?, cookie_last_checked_at = ? WHERE platform = ? AND username = ?')
+        .run(json, 'valid', new Date().toISOString(), platform, username);
+    } else {
+      db.prepare(`INSERT INTO dm_accounts (platform, username, cookie_json, cookie_status, cookie_last_checked_at, daily_sent, daily_limit, status, created_at)
+                  VALUES (?, ?, ?, 'valid', ?, 0, 40, 'active', ?)`)
+        .run(platform, username, json, new Date().toISOString(), new Date().toISOString());
+    }
+  },
+
+  hasAccountCookie(platform: string, username: string): boolean {
+    const row = db.prepare('SELECT cookie_json FROM dm_accounts WHERE platform = ? AND username = ?').get(platform, username) as any;
+    return !!(row?.cookie_json);
+  },
+};
 
 export { db };

@@ -14,128 +14,90 @@ interface CookieEntry {
 }
 
 /**
- * Cookie Manager - Import/export browser cookies for authenticated scraping
+ * DB adapter interface — allows CookieManager to store/load cookies from DB
+ * When set, DB is the primary source of truth; filesystem is best-effort cache.
+ */
+export interface CookieDbAdapter {
+  getPlatformCookieJson(platform: string): string | null;
+  savePlatformCookieJson(platform: string, json: string, count: number): void;
+  getAccountCookieJson(platform: string, username: string): string | null;
+  saveAccountCookieJson(platform: string, username: string, json: string, count: number): void;
+  hasAccountCookie(platform: string, username: string): boolean;
+}
+
+/**
+ * Cookie Manager - DB-first cookie storage with filesystem cache
  *
- * Usage:
- * 1. Login to Instagram/Twitter in your browser
- * 2. Export cookies using a browser extension (EditThisCookie, Cookie-Editor)
- * 3. Save as JSON to cookies/ directory
- * 4. Scraper automatically loads and uses them
- *
- * Supported formats:
- * - JSON array (from EditThisCookie extension)
- * - Netscape cookie file format
- * - Key-value pairs
+ * Architecture:
+ * - DB is the primary source of truth (survives deploys/restarts)
+ * - Filesystem is a best-effort cache (may be wiped on ephemeral hosts)
+ * - On load: try DB first, fallback to filesystem
+ * - On save: always save to DB, also try filesystem
  */
 export class CookieManager {
   private cookieDir: string;
+  private static _dbAdapter: CookieDbAdapter | null = null;
 
   constructor(cookieDir?: string) {
     this.cookieDir = cookieDir || join(process.cwd(), 'cookies');
   }
 
-  /** Load cookies for a platform */
+  /** Set the global DB adapter — call once during server initialization */
+  static setDbAdapter(adapter: CookieDbAdapter): void {
+    CookieManager._dbAdapter = adapter;
+  }
+
+  private get db(): CookieDbAdapter | null {
+    return CookieManager._dbAdapter;
+  }
+
+  // ─── Platform-Level Cookies (for scraping) ───
+
+  /** Load cookies for a platform — DB first, filesystem fallback */
   loadCookies(platform: string): CookieEntry[] {
-    const filePath = join(this.cookieDir, `${platform}.json`);
-
-    if (!existsSync(filePath)) {
-      logger.debug(`No cookie file found for ${platform} at ${filePath}`);
-      return [];
+    // 1. Try DB first
+    if (this.db) {
+      const json = this.db.getPlatformCookieJson(platform);
+      if (json) {
+        const cookies = this.parseCookieJson(platform, json);
+        if (cookies.length > 0) return cookies;
+      }
     }
 
-    try {
-      const raw = readFileSync(filePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-
-      // Handle array format (EditThisCookie export)
-      if (Array.isArray(parsed)) {
-        return parsed.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || `.${platform}.com`,
-          path: c.path || '/',
-          expires: c.expirationDate ? Math.floor(c.expirationDate) : undefined,
-          httpOnly: c.httpOnly || false,
-          secure: c.secure || true,
-          sameSite: this.normalizeSameSite(c.sameSite),
-        }));
-      }
-
-      // Handle object format { cookieName: cookieValue }
-      if (typeof parsed === 'object') {
-        const domainMap: Record<string, string> = {
-          instagram: '.instagram.com',
-          twitter: '.x.com',
-          tiktok: '.tiktok.com',
-          youtube: '.youtube.com',
-          xiaohongshu: '.xiaohongshu.com',
-          linkedin: '.linkedin.com',
-        };
-
-        return Object.entries(parsed).map(([name, value]) => ({
-          name,
-          value: String(value),
-          domain: domainMap[platform] || `.${platform}.com`,
-          path: '/',
-          secure: true,
-          sameSite: 'None' as const,
-        }));
-      }
-
-      return [];
-    } catch (error) {
-      logger.error(`Failed to parse cookies for ${platform}: ${(error as Error).message}`);
-      return [];
-    }
+    // 2. Fallback to filesystem
+    return this.loadCookiesFromFile(platform);
   }
 
-  /** Normalize sameSite value for Playwright compatibility */
-  private normalizeSameSite(value: string | undefined): 'Strict' | 'Lax' | 'None' {
-    if (!value) return 'None';
-    const lower = value.toLowerCase();
-    if (lower === 'strict') return 'Strict';
-    if (lower === 'lax') return 'Lax';
-    // "unspecified", "no_restriction", etc. → "None"
-    return 'None';
-  }
-
-  /** Save cookies (after browser session) */
+  /** Save cookies for a platform — DB + filesystem */
   saveCookies(platform: string, cookies: CookieEntry[]): void {
-    if (!existsSync(this.cookieDir)) {
-      mkdirSync(this.cookieDir, { recursive: true });
+    const json = JSON.stringify(cookies, null, 2);
+
+    // Always save to DB
+    if (this.db) {
+      this.db.savePlatformCookieJson(platform, json, cookies.length);
     }
 
-    const filePath = join(this.cookieDir, `${platform}.json`);
-    writeFileSync(filePath, JSON.stringify(cookies, null, 2), 'utf-8');
+    // Also save to filesystem (best effort)
+    try {
+      if (!existsSync(this.cookieDir)) {
+        mkdirSync(this.cookieDir, { recursive: true });
+      }
+      const filePath = join(this.cookieDir, `${platform}.json`);
+      writeFileSync(filePath, json, 'utf-8');
+    } catch {
+      // Filesystem may be read-only or ephemeral — OK, DB is the source of truth
+    }
+
     logger.info(`Cookies saved for ${platform}: ${cookies.length} entries`);
   }
 
   /** Check if cookies exist for a platform */
   hasCookies(platform: string): boolean {
+    if (this.db) {
+      const json = this.db.getPlatformCookieJson(platform);
+      if (json) return true;
+    }
     return existsSync(join(this.cookieDir, `${platform}.json`));
-  }
-
-  /** Convert to Playwright cookie format */
-  toPlaywrightCookies(cookies: CookieEntry[]): Array<{
-    name: string;
-    value: string;
-    domain: string;
-    path: string;
-    expires?: number;
-    httpOnly?: boolean;
-    secure?: boolean;
-    sameSite?: 'Strict' | 'Lax' | 'None';
-  }> {
-    return cookies.map(c => ({
-      name: c.name,
-      value: c.value,
-      domain: c.domain,
-      path: c.path,
-      expires: c.expires || Math.floor(Date.now() / 1000) + 86400 * 30,
-      httpOnly: c.httpOnly,
-      secure: c.secure,
-      sameSite: c.sameSite,
-    }));
   }
 
   /** Get cookie status for all platforms */
@@ -151,113 +113,50 @@ export class CookieManager {
     });
   }
 
-  /** Extract essential session cookies for a platform */
-  getSessionCookies(platform: string): Record<string, string> {
-    const cookies = this.loadCookies(platform);
-    const result: Record<string, string> = {};
+  // ─── Per-Account Cookies (for DM sending) ───
 
-    const importantCookies: Record<string, string[]> = {
-      instagram: ['sessionid', 'csrftoken', 'ds_user_id', 'mid', 'ig_did', 'rur'],
-      twitter: ['auth_token', 'ct0', 'twid', 'guest_id'],
-      tiktok: ['sessionid', 'tt_csrf_token', 'msToken', 'ttwid'],
-      youtube: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO'],
-      xiaohongshu: ['web_session', 'xsecappid'],
-      linkedin: ['li_at', 'JSESSIONID', 'bcookie'],
-    };
-
-    const important = importantCookies[platform] || [];
-    for (const cookie of cookies) {
-      if (important.length === 0 || important.includes(cookie.name)) {
-        result[cookie.name] = cookie.value;
-      }
-    }
-
-    return result;
-  }
-
-  /** Get the list of critical cookies for a platform */
-  getCriticalCookieNames(platform: string): string[] {
-    const critical: Record<string, string[]> = {
-      instagram: ['sessionid', 'csrftoken', 'ds_user_id'],
-      twitter: ['auth_token', 'ct0', 'twid'],
-      tiktok: ['sessionid', 'tt_csrf_token', 'msToken', 'ttwid'],
-      youtube: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO'],
-      xiaohongshu: ['web_session', 'xsecappid'],
-      linkedin: ['li_at', 'JSESSIONID', 'bcookie'],
-    };
-    return critical[platform] || [];
-  }
-
-  // ─── Per-Account Cookie Methods ───
-
-  /** Get file path for per-account cookies */
-  private getAccountCookiePath(platform: string, username: string): string {
-    return join(this.cookieDir, platform, `${username}.json`);
-  }
-
-  /** Load cookies for a specific account */
+  /** Load cookies for a specific account — DB first, filesystem fallback */
   loadAccountCookies(platform: string, username: string): CookieEntry[] {
-    const filePath = this.getAccountCookiePath(platform, username);
-    if (!existsSync(filePath)) {
-      logger.debug(`No cookie file for ${platform}/@${username}`);
-      return [];
+    // 1. Try DB first
+    if (this.db) {
+      const json = this.db.getAccountCookieJson(platform, username);
+      if (json) {
+        const cookies = this.parseCookieJson(platform, json);
+        if (cookies.length > 0) return cookies;
+      }
     }
 
-    try {
-      const raw = readFileSync(filePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-
-      if (Array.isArray(parsed)) {
-        return parsed.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || `.${platform}.com`,
-          path: c.path || '/',
-          expires: c.expirationDate ? Math.floor(c.expirationDate) : c.expires,
-          httpOnly: c.httpOnly || false,
-          secure: c.secure !== false,
-          sameSite: this.normalizeSameSite(c.sameSite),
-        }));
-      }
-
-      if (typeof parsed === 'object') {
-        const domainMap: Record<string, string> = {
-          instagram: '.instagram.com',
-          twitter: '.x.com',
-          tiktok: '.tiktok.com',
-          youtube: '.youtube.com',
-          xiaohongshu: '.xiaohongshu.com',
-          linkedin: '.linkedin.com',
-        };
-        return Object.entries(parsed).map(([name, value]) => ({
-          name,
-          value: String(value),
-          domain: domainMap[platform] || `.${platform}.com`,
-          path: '/',
-          secure: true,
-          sameSite: 'None' as const,
-        }));
-      }
-
-      return [];
-    } catch (error) {
-      logger.error(`Failed to parse account cookies for ${platform}/@${username}: ${(error as Error).message}`);
-      return [];
-    }
+    // 2. Fallback to filesystem
+    return this.loadAccountCookiesFromFile(platform, username);
   }
 
-  /** Save cookies for a specific account */
+  /** Save cookies for a specific account — DB + filesystem */
   saveAccountCookies(platform: string, username: string, cookies: CookieEntry[]): void {
-    const dir = join(this.cookieDir, platform);
-    mkdirSync(dir, { recursive: true });
+    const json = JSON.stringify(cookies, null, 2);
 
-    const filePath = this.getAccountCookiePath(platform, username);
-    writeFileSync(filePath, JSON.stringify(cookies, null, 2), 'utf-8');
+    // Always save to DB
+    if (this.db) {
+      this.db.saveAccountCookieJson(platform, username, json, cookies.length);
+    }
+
+    // Also save to filesystem (best effort)
+    try {
+      const dir = join(this.cookieDir, platform);
+      mkdirSync(dir, { recursive: true });
+      const filePath = join(dir, `${username}.json`);
+      writeFileSync(filePath, json, 'utf-8');
+    } catch {
+      // Filesystem may be read-only or ephemeral — OK, DB is the source of truth
+    }
+
     logger.info(`Account cookies saved: ${platform}/@${username} (${cookies.length} entries)`);
   }
 
   /** Check if cookies exist for a specific account */
   hasAccountCookies(platform: string, username: string): boolean {
+    if (this.db) {
+      return this.db.hasAccountCookie(platform, username);
+    }
     return existsSync(this.getAccountCookiePath(platform, username));
   }
 
@@ -297,5 +196,156 @@ export class CookieManager {
     const expiresAt = earliestExpiry ? new Date(earliestExpiry * 1000).toISOString() : undefined;
 
     return { valid, missingCookies, expiresAt };
+  }
+
+  // ─── Conversion / Utility ───
+
+  /** Normalize sameSite value for Playwright compatibility */
+  private normalizeSameSite(value: string | undefined): 'Strict' | 'Lax' | 'None' {
+    if (!value) return 'None';
+    const lower = value.toLowerCase();
+    if (lower === 'strict') return 'Strict';
+    if (lower === 'lax') return 'Lax';
+    return 'None';
+  }
+
+  /** Convert to Playwright cookie format */
+  toPlaywrightCookies(cookies: CookieEntry[]): Array<{
+    name: string;
+    value: string;
+    domain: string;
+    path: string;
+    expires?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+  }> {
+    return cookies.map(c => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path,
+      expires: c.expires || Math.floor(Date.now() / 1000) + 86400 * 30,
+      httpOnly: c.httpOnly,
+      secure: c.secure,
+      sameSite: c.sameSite,
+    }));
+  }
+
+  /** Extract essential session cookies for a platform */
+  getSessionCookies(platform: string): Record<string, string> {
+    const cookies = this.loadCookies(platform);
+    const result: Record<string, string> = {};
+
+    const importantCookies: Record<string, string[]> = {
+      instagram: ['sessionid', 'csrftoken', 'ds_user_id', 'mid', 'ig_did', 'rur'],
+      twitter: ['auth_token', 'ct0', 'twid', 'guest_id'],
+      tiktok: ['sessionid', 'tt_csrf_token', 'msToken', 'ttwid'],
+      youtube: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO'],
+      xiaohongshu: ['web_session', 'xsecappid'],
+      linkedin: ['li_at', 'JSESSIONID', 'bcookie'],
+    };
+
+    const important = importantCookies[platform] || [];
+    for (const cookie of cookies) {
+      if (important.length === 0 || important.includes(cookie.name)) {
+        result[cookie.name] = cookie.value;
+      }
+    }
+
+    return result;
+  }
+
+  /** Get the list of critical cookies for a platform */
+  getCriticalCookieNames(platform: string): string[] {
+    const critical: Record<string, string[]> = {
+      instagram: ['sessionid', 'csrftoken', 'ds_user_id'],
+      twitter: ['auth_token', 'ct0', 'twid'],
+      tiktok: ['sessionid', 'tt_csrf_token', 'msToken', 'ttwid'],
+      youtube: ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO'],
+      xiaohongshu: ['web_session', 'xsecappid'],
+      linkedin: ['li_at', 'JSESSIONID', 'bcookie'],
+    };
+    return critical[platform] || [];
+  }
+
+  /** Parse cookie JSON string into CookieEntry array */
+  parseCookieJson(platform: string, cookieJson: string): CookieEntry[] {
+    try {
+      const parsed = JSON.parse(cookieJson);
+
+      if (Array.isArray(parsed)) {
+        return parsed.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain || `.${platform}.com`,
+          path: c.path || '/',
+          expires: c.expirationDate ? Math.floor(c.expirationDate) : c.expires,
+          httpOnly: c.httpOnly || false,
+          secure: c.secure !== false,
+          sameSite: this.normalizeSameSite(c.sameSite),
+        }));
+      }
+
+      if (typeof parsed === 'object') {
+        const domainMap: Record<string, string> = {
+          instagram: '.instagram.com',
+          twitter: '.x.com',
+          tiktok: '.tiktok.com',
+          youtube: '.youtube.com',
+          xiaohongshu: '.xiaohongshu.com',
+          linkedin: '.linkedin.com',
+        };
+        return Object.entries(parsed).map(([name, value]) => ({
+          name,
+          value: String(value),
+          domain: domainMap[platform] || `.${platform}.com`,
+          path: '/',
+          secure: true,
+          sameSite: 'None' as const,
+        }));
+      }
+
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ─── Private filesystem methods ───
+
+  private loadCookiesFromFile(platform: string): CookieEntry[] {
+    const filePath = join(this.cookieDir, `${platform}.json`);
+    if (!existsSync(filePath)) return [];
+
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      return this.parseCookieJson(platform, raw);
+    } catch (error) {
+      logger.error(`Failed to parse cookies for ${platform}: ${(error as Error).message}`);
+      return [];
+    }
+  }
+
+  private getAccountCookiePath(platform: string, username: string): string {
+    return join(this.cookieDir, platform, `${username}.json`);
+  }
+
+  private loadAccountCookiesFromFile(platform: string, username: string): CookieEntry[] {
+    const filePath = this.getAccountCookiePath(platform, username);
+    if (!existsSync(filePath)) return [];
+
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      return this.parseCookieJson(platform, raw);
+    } catch (error) {
+      logger.error(`Failed to parse account cookies for ${platform}/@${username}: ${(error as Error).message}`);
+      return [];
+    }
+  }
+
+  /** @deprecated Use parseCookieJson instead */
+  loadCookiesFromJson(platform: string, cookieJson: string): CookieEntry[] {
+    return this.parseCookieJson(platform, cookieJson);
   }
 }

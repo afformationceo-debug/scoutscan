@@ -4,7 +4,7 @@ import pLimit from 'p-limit';
 import { ScrapingEngine } from '../../core/engine.js';
 import type { Platform, Post, InfluencerProfile } from '../../core/types.js';
 import {
-  createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames,
+  createJob, updateJobStatus, getJob, insertPost, insertProfile, getExistingProfileUsernames, getMissingProfileUsernames, db,
 } from './db.js';
 import { upsertInfluencer, updateInfluencerGeo, getKeywordTarget, updateKeywordTarget } from './master-db.js';
 import { registry } from '../../services/registry.js';
@@ -265,12 +265,13 @@ class JobManager extends EventEmitter {
       // Broadcast global scraping_completed notification
       sseManager.broadcast('global', 'scraping_completed', { jobId, postsCount: count, profilesCount, pairId });
 
-      // Update keyword target totalExtracted
+      // Update keyword target totalExtracted and job status
       if (pairId) {
         const target = getKeywordTarget(pairId);
         if (target) {
           updateKeywordTarget(target.id, { totalExtracted: (target.totalExtracted || 0) + count });
         }
+        db.prepare(`UPDATE keyword_targets SET last_job_status = 'completed' WHERE pair_id = ?`).run(pairId);
       }
 
       // Post-completion: auto-replenish DM queues with newly scraped profiles
@@ -283,6 +284,9 @@ class JobManager extends EventEmitter {
     } catch (error) {
       updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: count });
       this.sendSSE(jobId, 'error', { message: (error as Error).message });
+      if (pairId) {
+        db.prepare(`UPDATE keyword_targets SET last_job_status = 'failed' WHERE pair_id = ?`).run(pairId);
+      }
     } finally {
       await engine.close();
     }

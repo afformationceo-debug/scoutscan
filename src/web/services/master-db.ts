@@ -3,6 +3,16 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import type { InfluencerProfile, KeywordTarget, DMCampaign, DMAccount } from '../../core/types.js';
 
+// ─── Scraping Cookies (persistent storage for ephemeral filesystems) ───
+
+export function saveScrapingCookiesToDB(platform: string, cookieJson: string, cookieCount: number): void {
+  db.prepare(`INSERT OR REPLACE INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at) VALUES (?, ?, ?, ?)`).run(platform, cookieJson, cookieCount, new Date().toISOString());
+}
+
+export function getScrapingCookieStatusFromDB(): Array<{ platform: string; cookieCount: number; updatedAt: string }> {
+  return db.prepare(`SELECT platform, cookie_count as cookieCount, updated_at as updatedAt FROM scraping_cookies`).all() as any[];
+}
+
 // ─── Scout Tier Calculation ───
 
 function calculateScoutTier(followers: number, engagementRate: number | null): string {
@@ -296,6 +306,8 @@ function rowToKeywordTarget(row: any): KeywordTarget {
     isActive: !!row.is_active,
     groupKey: row.group_key || undefined,
     scrapeUntil: row.scrape_until || undefined,
+    lastJobId: row.last_job_id || undefined,
+    lastJobStatus: row.last_job_status || 'idle',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

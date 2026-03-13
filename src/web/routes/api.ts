@@ -4,7 +4,7 @@ import { CookieManager } from '../../core/cookie-manager.js';
 import { listJobs, getJob, getJobPosts, getJobProfiles, deleteJob, getAllProfiles, getProfileStats, getMissingProfileUsernames } from '../services/db.js';
 import { jobManager } from '../services/job-manager.js';
 import { exportCSV, exportXLSX } from '../services/export.js';
-import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget, createCampaign, listCampaigns, getCampaign, getCampaignCookieJson, updateCampaignCookie, getCampaignTargets, addDMAccount, listDMAccounts, listCommentTemplates, createCommentTemplate, updateCommentTemplate, deleteCommentTemplate, getEngagementLogs, getCampaignRounds, updateDMAccount } from '../services/master-db.js';
+import { migrateProfilesToMaster, getInfluencers, getInfluencerStats, updateInfluencerGeo, listKeywordTargets, createKeywordTarget, updateKeywordTarget, deleteKeywordTarget, createCampaign, listCampaigns, getCampaign, getCampaignCookieJson, updateCampaignCookie, getCampaignTargets, addDMAccount, listDMAccounts, listCommentTemplates, createCommentTemplate, updateCommentTemplate, deleteCommentTemplate, getEngagementLogs, getCampaignRounds, updateDMAccount, saveScrapingCookiesToDB, getScrapingCookieStatusFromDB } from '../services/master-db.js';
 import { registry } from '../../services/registry.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
 import { AIClassifier } from '../../services/ai-classifier.js';
@@ -177,8 +177,33 @@ api.get('/profiles/stats', (c) => {
 // ─── Platforms ───
 
 api.get('/platforms', (c) => {
-  const status = cookieManager.getCookieStatus();
-  return c.json({ platforms: status });
+  const fsStatus = cookieManager.getCookieStatus();
+  const dbStatus = getScrapingCookieStatusFromDB();
+  const dbMap = new Map(dbStatus.map(d => [d.platform, d]));
+
+  // Also get DM account cookie status from DB
+  const dmAccounts = db.prepare(
+    `SELECT platform, COUNT(*) as cnt, SUM(CASE WHEN cookie_status = 'valid' THEN 1 ELSE 0 END) as valid_cnt
+     FROM dm_accounts GROUP BY platform`
+  ).all() as any[];
+  const dmMap = new Map(dmAccounts.map((d: any) => [d.platform, d]));
+
+  const platforms = fsStatus.map(p => {
+    const dbEntry = dbMap.get(p.platform);
+    const dmEntry = dmMap.get(p.platform);
+    const hasCookies = p.hasCookies || (dbEntry && dbEntry.cookieCount > 0) || (dmEntry && dmEntry.valid_cnt > 0);
+    const cookieCount = p.cookieCount || dbEntry?.cookieCount || 0;
+    return {
+      ...p,
+      hasCookies: !!hasCookies,
+      cookieCount,
+      dmAccounts: dmEntry?.cnt || 0,
+      dmValidAccounts: dmEntry?.valid_cnt || 0,
+      updatedAt: dbEntry?.updatedAt || null,
+    };
+  });
+
+  return c.json({ platforms });
 });
 
 // Upload scraping cookies (platform-level, separate from DM account cookies)
@@ -193,6 +218,8 @@ api.post('/platforms/:platform/cookies', async (c) => {
     cm.saveCookies(platform, cookies);
 
     const loaded = cm.loadCookies(platform);
+    // Also persist to DB for ephemeral filesystem environments (e.g., Railway)
+    saveScrapingCookiesToDB(platform, cookieData, loaded.length);
     return c.json({ status: 'ok', platform, cookieCount: loaded.length, message: `Scraping cookies saved for ${platform}` });
   } catch (error) {
     return c.json({ error: `Failed to save cookies: ${(error as Error).message}` }, 400);
@@ -357,6 +384,8 @@ api.post('/keywords/:pairId/run', (c) => {
   const pairId = c.req.param('pairId');
   try {
     const jobId = scheduler.runNow(pairId);
+    // Save job reference on keyword target
+    db.prepare(`UPDATE keyword_targets SET last_job_id = ?, last_job_status = 'running' WHERE pair_id = ?`).run(jobId, pairId);
     return c.json({ jobId, message: `Scraping started for ${pairId}` }, 201);
   } catch (err) {
     return c.json({ error: (err as Error).message }, 400);
@@ -766,6 +795,39 @@ api.post('/dm-accounts/:id/upload-cookies', async (c) => {
   } catch (err) {
     return c.json({ error: `Failed to process cookies: ${(err as Error).message}` }, 400);
   }
+});
+
+// ─── Dashboard Stats (aggregate endpoint) ───
+
+api.get('/dashboard/stats', (c) => {
+  const totalInfluencers = (db.prepare('SELECT COUNT(*) as cnt FROM influencer_master').get() as any).cnt;
+  const aiClassified = (db.prepare('SELECT COUNT(*) as cnt FROM influencer_master WHERE ai_classified_at IS NOT NULL').get() as any).cnt;
+
+  const campaigns = db.prepare('SELECT status, COUNT(*) as cnt FROM dm_campaigns GROUP BY status').all() as any[];
+  const campaignMap = Object.fromEntries(campaigns.map((c: any) => [c.status, c.cnt]));
+
+  const dmStats = db.prepare(`
+    SELECT
+      SUM(CASE WHEN execute_status = 'success' THEN 1 ELSE 0 END) as sent,
+      SUM(CASE WHEN execute_status = 'failed' THEN 1 ELSE 0 END) as failed,
+      SUM(CASE WHEN execute_status = 'pending' THEN 1 ELSE 0 END) as pending
+    FROM dm_action_queue
+  `).get() as any;
+
+  const keywords = db.prepare('SELECT COUNT(*) as cnt FROM keyword_targets WHERE is_active = 1').get() as any;
+  const totalExtracted = (db.prepare('SELECT SUM(total_extracted) as total FROM keyword_targets').get() as any)?.total || 0;
+
+  return c.json({
+    totalInfluencers,
+    aiClassified,
+    activeCampaigns: (campaignMap.active || 0) + (campaignMap.processing || 0),
+    totalCampaigns: campaigns.reduce((a: number, c: any) => a + c.cnt, 0),
+    totalSent: dmStats?.sent || 0,
+    totalFailed: dmStats?.failed || 0,
+    totalPending: dmStats?.pending || 0,
+    activeKeywords: keywords?.cnt || 0,
+    totalExtracted,
+  });
 });
 
 export { api };

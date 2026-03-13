@@ -1,109 +1,173 @@
-<!-- Guide Box -->
-<div class="guide-box mb-6">
-  <p><strong>대시보드</strong>에서는 플랫폼 쿠키 상태, 빠른 검색, 최근 작업 현황을 한눈에 확인할 수 있습니다. 스크래핑을 시작하려면 <strong>데이터 관리 → 키워드</strong> 탭에서 국가×키워드 페어를 등록하세요.</p>
-</div>
+<div x-data="liveDashboard()" x-init="init()">
+  <!-- Summary Stats Row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">전체 인플루언서</div>
+      <div class="text-2xl font-heading font-bold text-white font-mono" x-text="formatNumber(stats.totalInfluencers)"></div>
+      <div class="text-[11px] text-kaia-muted mt-1">AI 분류: <span class="text-accent" x-text="formatNumber(stats.aiClassified)"></span></div>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">활성 캠페인</div>
+      <div class="text-2xl font-heading font-bold text-accent font-mono" x-text="stats.activeCampaigns"></div>
+      <div class="text-[11px] text-kaia-muted mt-1">전체: <span class="text-white" x-text="stats.totalCampaigns"></span></div>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">DM 발송</div>
+      <div class="text-2xl font-heading font-bold text-success font-mono" x-text="formatNumber(stats.totalSent)"></div>
+      <div class="text-[11px] text-kaia-muted mt-1">실패: <span class="text-error" x-text="stats.totalFailed"></span> | 대기: <span class="text-warning" x-text="stats.totalPending"></span></div>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
+      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">스크래핑 키워드</div>
+      <div class="text-2xl font-heading font-bold text-info font-mono" x-text="stats.activeKeywords"></div>
+      <div class="text-[11px] text-kaia-muted mt-1">누적 수집: <span class="text-white" x-text="formatNumber(stats.totalExtracted)"></span></div>
+    </div>
+  </div>
 
-<!-- Cookie Health Banner -->
-<div x-data="cookieHealthBanner()" x-init="init()">
-  <template x-if="expiredAccounts.length > 0">
-    <div class="bg-error/10 border border-error/30 rounded-lg p-4 mb-6">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="text-error font-semibold text-sm">쿠키 만료 경고</span>
-        <span class="badge badge-error text-xs" x-text="expiredAccounts.length + '개 계정'"></span>
+  <!-- Cookie Health Banner -->
+  <div x-show="expiredCookies.length > 0" class="bg-error/10 border border-error/30 rounded-lg p-3 mb-4">
+    <div class="flex items-center gap-2">
+      <span class="text-error text-sm font-semibold">쿠키 만료 경고</span>
+      <template x-for="a in expiredCookies" :key="a.platform + ':' + a.username">
+        <span class="badge badge-error text-[10px]" x-text="a.platform + ':@' + a.username"></span>
+      </template>
+    </div>
+  </div>
+
+  <!-- Two Column Layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- Left: Active Scraping -->
+    <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="live-dot"></span>
+          <h3 class="text-sm font-semibold text-white">스크래핑 현황</h3>
+        </div>
+        <span class="text-[11px] text-kaia-muted" x-text="keywords.length + '개 키워드'"></span>
       </div>
-      <div class="space-y-1">
-        <template x-for="a in expiredAccounts" :key="a.platform + ':' + a.username">
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-kaia-text">
-              <span class="capitalize font-medium text-white" x-text="a.platform"></span>
-              <span class="text-accent" x-text="'@' + a.username"></span>
-              <span x-show="a.missingCookies && a.missingCookies.length > 0" class="text-kaia-muted text-xs ml-2"
-                    x-text="'누락: ' + a.missingCookies.join(', ')"></span>
-            </span>
-            <a href="/data?tab=accounts" class="text-accent text-xs hover:text-accent-hover">수정</a>
-          </div>
-        </template>
+      <div class="max-h-[400px] overflow-y-auto">
+        <table class="min-w-full data-table">
+          <thead>
+            <tr class="border-b border-dark-border">
+              <th class="px-3 py-2 text-left">키워드</th>
+              <th class="px-3 py-2 text-center">플랫폼</th>
+              <th class="px-3 py-2 text-right">수집</th>
+              <th class="px-3 py-2 text-center">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="k in keywords" :key="k.pairId">
+              <tr class="border-b border-dark-border/30">
+                <td class="px-3 py-2 text-white text-[12px]" x-text="k.keyword"></td>
+                <td class="px-3 py-2 text-center">
+                  <span class="badge text-[10px]" :class="'badge-' + (k.platform === 'instagram' ? 'ig' : k.platform === 'twitter' ? 'tw' : k.platform === 'tiktok' ? 'tt' : k.platform === 'youtube' ? 'yt' : 'xhs')" x-text="k.platform"></span>
+                </td>
+                <td class="px-3 py-2 text-right num text-white text-[12px]" x-text="formatNumber(k.totalExtracted)"></td>
+                <td class="px-3 py-2 text-center">
+                  <template x-if="k._running">
+                    <span class="flex items-center justify-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse"></span>
+                      <span class="text-accent text-[10px]" x-text="k._phase"></span>
+                    </span>
+                  </template>
+                  <template x-if="!k._running">
+                    <span class="text-[10px] text-kaia-muted" x-text="k.lastScrapedAt ? formatDate(k.lastScrapedAt).split(' ')[0] : '-'"></span>
+                  </template>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="keywords.length === 0" class="text-center text-kaia-muted py-8 text-sm">키워드가 없습니다. 데이터 관리에서 등록하세요.</div>
       </div>
     </div>
-  </template>
-</div>
 
-<!-- Platform Status Cards -->
-<div x-data="platformStatus()" x-init="load()">
-  <h2 class="text-2xl font-heading font-bold text-white mb-6">대시보드</h2>
-
-  <!-- Platform cards -->
-  <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-    <template x-for="p in platforms" :key="p.platform">
-      <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow hover:border-accent/30 transition-colors">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="font-semibold text-white text-sm capitalize" x-text="p.platform"></h3>
-          <span class="badge"
-                :class="p.hasCookies ? 'badge-success' : 'badge-error'"
-                x-text="p.hasCookies ? '정상' : '쿠키 없음'"></span>
+    <!-- Right: Campaigns Status -->
+    <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+      <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="live-dot"></span>
+          <h3 class="text-sm font-semibold text-white">캠페인 현황</h3>
         </div>
-        <p class="text-xs text-kaia-muted" x-text="p.cookieCount + '개 쿠키 로드됨'"></p>
+        <span class="text-[11px] text-kaia-muted" x-text="campaigns.length + '개 캠페인'"></span>
+      </div>
+      <div class="max-h-[400px] overflow-y-auto">
+        <table class="min-w-full data-table">
+          <thead>
+            <tr class="border-b border-dark-border">
+              <th class="px-3 py-2 text-left">캠페인</th>
+              <th class="px-3 py-2 text-center">플랫폼</th>
+              <th class="px-3 py-2 text-right">발송</th>
+              <th class="px-3 py-2 text-right">실패</th>
+              <th class="px-3 py-2 text-right">대기</th>
+              <th class="px-3 py-2 text-center">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="c in campaigns" :key="c.id">
+              <tr class="border-b border-dark-border/30">
+                <td class="px-3 py-2 text-white text-[12px] max-w-[160px] truncate" x-text="c.name"></td>
+                <td class="px-3 py-2 text-center">
+                  <span class="badge text-[10px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : c.platform === 'tiktok' ? 'tt' : c.platform === 'youtube' ? 'yt' : 'xhs')" x-text="c.platform"></span>
+                </td>
+                <td class="px-3 py-2 text-right num text-success text-[12px]" x-text="c.total_sent || 0"></td>
+                <td class="px-3 py-2 text-right num text-error text-[12px]" x-text="c.total_failed || 0"></td>
+                <td class="px-3 py-2 text-right num text-warning text-[12px]" x-text="Math.max(0, (c.total_queued || 0) - (c.total_sent || 0) - (c.total_failed || 0))"></td>
+                <td class="px-3 py-2 text-center">
+                  <span class="badge text-[10px]"
+                        :class="c.status === 'active' || c.status === 'processing' ? 'badge-success' : c.status === 'completed' ? 'badge-info' : c.status === 'paused' ? 'badge-warning' : 'badge-c'"
+                        x-text="c.status"></span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="campaigns.length === 0" class="text-center text-kaia-muted py-8 text-sm">캠페인이 없습니다. 데이터 관리에서 생성하세요.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Platform Cookie Status (compact) -->
+  <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
+    <template x-for="p in platforms" :key="p.platform">
+      <div class="bg-dark-card border border-dark-border rounded-lg p-3 text-center" :class="p.hasCookies ? 'border-success/20' : 'border-error/20'">
+        <div class="text-[11px] text-kaia-muted capitalize" x-text="p.platform"></div>
+        <div class="flex items-center justify-center gap-1 mt-1">
+          <span class="w-1.5 h-1.5 rounded-full" :class="p.hasCookies ? 'bg-success' : 'bg-error'"></span>
+          <span class="text-[10px]" :class="p.hasCookies ? 'text-success' : 'text-error'" x-text="p.hasCookies ? p.cookieCount + '개' : '없음'"></span>
+        </div>
       </div>
     </template>
   </div>
 
-  <!-- Quick Search -->
-  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-8 card-glow">
-    <h3 class="text-base font-heading font-semibold text-white mb-4">빠른 해시태그 검색</h3>
-    <form @submit.prevent="quickSearch()" class="flex gap-3">
-      <select x-model="searchPlatform" class="rounded-lg border px-3 py-2 text-sm">
-        <option value="instagram">Instagram</option>
-        <option value="twitter">Twitter</option>
-        <option value="tiktok">TikTok</option>
-        <option value="youtube">YouTube</option>
-      </select>
-      <input type="text" x-model="searchTag" placeholder="해시태그 입력 (예: travel)"
-             class="flex-1 rounded-lg border px-3 py-2 text-sm" required>
-      <input type="number" x-model="searchMax" min="1" max="200" placeholder="최대 결과"
-             class="w-32 rounded-lg border px-3 py-2 text-sm">
-      <button type="submit" class="btn-accent px-6 py-2 rounded-lg text-sm">검색</button>
-    </form>
-  </div>
-
-  <!-- Recent Jobs -->
-  <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden card-glow">
-    <div class="px-6 py-4 border-b border-dark-border">
-      <h3 class="text-base font-heading font-semibold text-white">최근 작업</h3>
+  <!-- Activity Feed -->
+  <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+    <div class="px-4 py-3 border-b border-dark-border flex items-center gap-2">
+      <span class="live-dot"></span>
+      <h3 class="text-sm font-semibold text-white">실시간 활동</h3>
     </div>
-    <div x-data="recentJobs()" x-init="load()">
-      <table class="min-w-full data-table" x-show="jobs.length > 0">
-        <thead>
-          <tr class="border-b border-dark-border">
-            <th class="px-4 py-3 text-left">플랫폼</th>
-            <th class="px-4 py-3 text-left">검색어</th>
-            <th class="px-4 py-3 text-left">상태</th>
-            <th class="px-4 py-3 text-right">결과</th>
-            <th class="px-4 py-3 text-left">생성일</th>
-            <th class="px-4 py-3 text-left">작업</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="job in jobs" :key="job.id">
-            <tr class="border-b border-dark-border/50">
-              <td class="px-4 py-3"><span class="badge capitalize" :class="'badge-' + (job.platform === 'instagram' ? 'ig' : job.platform === 'twitter' ? 'tw' : job.platform === 'tiktok' ? 'tt' : job.platform === 'youtube' ? 'yt' : 'xhs')" x-text="job.platform"></span></td>
-              <td class="px-4 py-3 text-white"><span x-text="job.type === 'hashtag' ? '#' : '@'"></span><span x-text="job.query"></span></td>
-              <td class="px-4 py-3">
-                <span class="badge"
-                      :class="{ 'badge-warning': job.status === 'pending', 'badge-info': job.status === 'running', 'badge-success': job.status === 'completed', 'badge-error': job.status === 'failed' }"
-                      x-text="job.status"></span>
-              </td>
-              <td class="px-4 py-3 text-right num" x-text="job.resultCount"></td>
-              <td class="px-4 py-3 text-kaia-muted text-xs" x-text="new Date(job.createdAt).toLocaleString()"></td>
-              <td class="px-4 py-3 space-x-2">
-                <a :href="'/search?jobId=' + job.id" class="text-accent text-xs hover:text-accent-hover">보기</a>
-                <button @click="exportJob(job.id, 'csv')" class="text-kaia-text text-xs hover:text-white">CSV</button>
-                <button @click="exportJob(job.id, 'xlsx')" class="text-kaia-text text-xs hover:text-white">XLSX</button>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-      <p x-show="jobs.length === 0" class="text-kaia-muted text-center py-12">아직 작업이 없습니다. 위에서 검색을 시작하세요.</p>
+    <div class="max-h-[300px] overflow-y-auto p-3 space-y-1.5 font-mono text-[11px]">
+      <template x-for="(a, idx) in activities" :key="idx">
+        <div class="flex items-center gap-2 py-1 px-2 rounded hover:bg-dark-hover transition-colors">
+          <span class="text-kaia-muted/60 w-[70px] flex-shrink-0" x-text="a.ts"></span>
+          <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                :class="{
+                  'bg-info': a.type === 'scraping_started',
+                  'bg-success': a.type === 'scraping_completed' || a.type === 'dm_sent',
+                  'bg-accent': a.type === 'auto_assign',
+                  'bg-warning': a.type === 'cookie_warning',
+                  'bg-error': a.type === 'cookie_expired' || a.type === 'dm_failed',
+                }"></span>
+          <span :class="{
+                  'text-info': a.type === 'scraping_started',
+                  'text-success': a.type === 'scraping_completed' || a.type === 'dm_sent',
+                  'text-accent': a.type === 'auto_assign',
+                  'text-warning': a.type === 'cookie_warning',
+                  'text-error': a.type === 'cookie_expired' || a.type === 'dm_failed',
+                  'text-kaia-text': !['scraping_started','scraping_completed','auto_assign','cookie_warning','cookie_expired','dm_sent','dm_failed'].includes(a.type)
+                }" x-text="a.message"></span>
+        </div>
+      </template>
+      <div x-show="activities.length === 0" class="text-center text-kaia-muted py-8">활동이 없습니다. 스크래핑이나 캠페인을 시작하세요.</div>
     </div>
   </div>
 </div>
