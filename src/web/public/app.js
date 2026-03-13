@@ -81,6 +81,15 @@ function globalNotifications() {
         });
       });
 
+      this.eventSource.addEventListener('campaign_completed', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'auto_assign',
+          message: `캠페인 완료: ${data.campaignName} (발송 ${data.sent}, 실패 ${data.failed})`,
+          detail: data.skipped > 0 ? `스킵: ${data.skipped}` : '',
+        });
+      });
+
       this.eventSource.addEventListener('cookie_warning', (e) => {
         const data = JSON.parse(e.data);
         this.addNotification({
@@ -410,6 +419,8 @@ function keywordsPage() {
     targets: [],
     loading: false,
     showAddForm: false,
+    platformCookies: [],
+    cookieOk: true,
     newTarget: {
       pairId: '',
       platform: 'instagram',
@@ -644,9 +655,23 @@ function keywordsPage() {
 
     async load() {
       this.loading = true;
-      const res = await fetch('/api/keywords');
-      const data = await res.json();
+      const [kwRes, platRes] = await Promise.all([
+        fetch('/api/keywords'),
+        fetch('/api/platforms'),
+      ]);
+      const data = await kwRes.json();
       this.targets = data.targets;
+      // Cookie status for scraping platforms
+      try {
+        const platData = await platRes.json();
+        this.platformCookies = (platData.platforms || []).map(p => ({
+          platform: p.platform,
+          hasCookies: p.hasCookies,
+          cookieCount: p.cookieCount || 0,
+          updatedAt: p.updatedAt || null,
+        }));
+        this.cookieOk = this.platformCookies.every(p => p.hasCookies);
+      } catch {}
       this.loading = false;
       // Restore saved running state from sessionStorage (page navigation)
       this._restoreRunningState();
@@ -1787,6 +1812,14 @@ function campaignLive(campaignId) {
         this.currentStatus = `@${d.recipient}: ${d.detail}`;
         this.currentPhase = d.step || 'dm_step';
         addLive('step', d, `@${d.recipient} → ${d.detail}`);
+      });
+
+      this.eventSource.addEventListener('campaign_completed', (e) => {
+        const d = JSON.parse(e.data);
+        this.currentStatus = `캠페인 완료! 발송: ${d.sent}, 실패: ${d.failed}, 스킵: ${d.skipped}`;
+        this.currentPhase = 'completed';
+        this.countdown = 0;
+        addLive('round_complete', d, `캠페인 완료 — 발송 ${d.sent}, 실패 ${d.failed}, 스킵 ${d.skipped}`);
       });
 
       this.eventSource.addEventListener('error', () => {

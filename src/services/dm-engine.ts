@@ -83,21 +83,51 @@ export class DMEngine {
         }
       }
 
+      // Mark permanently failed items (exceeded max retries) as 'skipped'
+      const maxRetries = campaign.max_retries || 2;
+      const skippedResult = db.prepare(
+        `UPDATE dm_action_queue SET execute_status = 'skipped' WHERE campaign_id = ? AND execute_status = 'failed' AND retry_count >= ?`
+      ).run(campaignId, maxRetries);
+      if (skippedResult.changes > 0) {
+        console.log(`[DMEngine] Skipped ${skippedResult.changes} items that exceeded ${maxRetries} retries`);
+      }
+
       // Check if all items processed
       const remaining = db.prepare(
         `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND execute_status = 'pending'`
       ).get(campaignId) as any;
 
+      const stats = db.prepare(
+        `SELECT
+          SUM(CASE WHEN execute_status = 'success' THEN 1 ELSE 0 END) as sent,
+          SUM(CASE WHEN execute_status = 'failed' THEN 1 ELSE 0 END) as failed,
+          SUM(CASE WHEN execute_status = 'skipped' THEN 1 ELSE 0 END) as skipped
+        FROM dm_action_queue WHERE campaign_id = ?`
+      ).get(campaignId) as any;
+
+      const now = new Date().toISOString();
       if (remaining.cnt === 0) {
         db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
-          .run('completed', new Date().toISOString(), campaignId);
+          .run('completed', now, campaignId);
+        // Broadcast campaign completion
+        sseManager.broadcast('campaign:' + campaignId, 'campaign_completed', {
+          sent: stats.sent || 0,
+          failed: stats.failed || 0,
+          skipped: stats.skipped || 0,
+        });
+        sseManager.broadcast('global', 'campaign_completed', {
+          campaignName: campaign.name,
+          sent: stats.sent || 0,
+          failed: stats.failed || 0,
+          skipped: stats.skipped || 0,
+        });
       } else {
         // Still pending items, keep active
         db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
-          .run('active', new Date().toISOString(), campaignId);
+          .run('active', now, campaignId);
       }
 
-      console.log(`[DMEngine] Campaign ${campaign.name}: ${remaining.cnt} remaining`);
+      console.log(`[DMEngine] Campaign ${campaign.name}: ${remaining.cnt} remaining, sent=${stats.sent||0} failed=${stats.failed||0} skipped=${stats.skipped||0}`);
     } finally {
       this.activeCampaigns.delete(campaignId);
     }
@@ -459,10 +489,10 @@ export class DMEngine {
     return queued;
   }
 
-  /** Auto-replenish queues: add new profiles to active campaigns */
+  /** Auto-replenish queues: add new profiles to active/paused/completed campaigns */
   autoReplenishQueues(): number {
     const activeCampaigns = db.prepare(
-      `SELECT * FROM dm_campaigns WHERE status IN ('active', 'paused') AND total_queued > 0`
+      `SELECT * FROM dm_campaigns WHERE status IN ('active', 'paused', 'completed') AND total_queued > 0`
     ).all() as any[];
 
     let totalAdded = 0;
