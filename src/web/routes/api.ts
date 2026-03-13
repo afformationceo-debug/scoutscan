@@ -181,6 +181,24 @@ api.get('/platforms', (c) => {
   return c.json({ platforms: status });
 });
 
+// Upload scraping cookies (platform-level, separate from DM account cookies)
+api.post('/platforms/:platform/cookies', async (c) => {
+  const platform = c.req.param('platform');
+  try {
+    const body = await c.req.json();
+    const cookieData = typeof body.cookies === 'string' ? body.cookies : JSON.stringify(body.cookies || body);
+    const parsed = JSON.parse(cookieData);
+    const cm = new CookieManager();
+    const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value: String(value) }));
+    cm.saveCookies(platform, cookies);
+
+    const loaded = cm.loadCookies(platform);
+    return c.json({ status: 'ok', platform, cookieCount: loaded.length, message: `Scraping cookies saved for ${platform}` });
+  } catch (error) {
+    return c.json({ error: `Failed to save cookies: ${(error as Error).message}` }, 400);
+  }
+});
+
 // ─── Master DB ───
 
 api.post('/master/migrate', (c) => {
@@ -401,7 +419,6 @@ api.post('/campaigns', async (c) => {
       const cm = new CookieManager();
       const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
       cm.saveAccountCookies(platform, senderUsername, cookies);
-      cm.saveCookies(platform, cookies); // Also for scraping
       const validation = cm.validateCookies(platform, senderUsername);
       cookieStatus = validation.valid ? 'valid' : 'expired';
       // Also register as DM account
@@ -618,9 +635,6 @@ api.post('/campaigns/:id/upload-cookies', async (c) => {
     // Save per-account cookies (for DM sending)
     cm.saveAccountCookies(campaign.platform, username, cookies);
 
-    // Also save platform-level cookies (for scraping) — always keep the latest cookie for scraping
-    cm.saveCookies(campaign.platform, cookies);
-
     // Validate
     const validation = cm.validateCookies(campaign.platform, username);
     const status = validation.valid ? 'valid' : 'expired';
@@ -721,9 +735,6 @@ api.post('/dm-accounts/:id/upload-cookies', async (c) => {
     const cm = new CookieManager();
     const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
     cm.saveAccountCookies(account.platform, account.username, cookies);
-
-    // Also save as platform-level cookies (for scraping)
-    cm.saveCookies(account.platform, cookies);
 
     // Update DB
     const cookieFile = `cookies/${account.platform}/${account.username}.json`;
