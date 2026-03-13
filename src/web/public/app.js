@@ -838,11 +838,19 @@ function dataPage() {
     platform: '',
     search: '',
     aiType: '',
-    sortBy: 'followers',
+    filterCountry: '',
+    filterTier: '',
+    filterDmStatus: '',
+    filterCampaign: '',
+    filterVerified: false,
+    filterHasEmail: false,
+    sortBy: 'added',
     order: 'desc',
     limit: 100,
     offset: 0,
     loading: false,
+    filterOptions: {},
+    campaignMap: {},
     missingProfiles: {},
     enriching: false,
     enrichCount: 0,
@@ -852,6 +860,22 @@ function dataPage() {
     enrichRetrying: false,
     enrichLogs: [],
     enrichEventSource: null,
+
+    hasActiveFilters() {
+      return this.filterCountry || this.filterTier || this.aiType || this.filterDmStatus || this.filterCampaign || this.filterVerified || this.filterHasEmail;
+    },
+
+    resetFilters() {
+      this.filterCountry = '';
+      this.filterTier = '';
+      this.aiType = '';
+      this.filterDmStatus = '';
+      this.filterCampaign = '';
+      this.filterVerified = false;
+      this.filterHasEmail = false;
+      this.offset = 0;
+      this.load();
+    },
 
     async load() {
       this.loading = true;
@@ -864,6 +888,12 @@ function dataPage() {
       if (this.platform) params.set('platform', this.platform);
       if (this.search) params.set('search', this.search);
       if (this.aiType) params.set('aiType', this.aiType);
+      if (this.filterCountry) params.set('country', this.filterCountry);
+      if (this.filterTier) params.set('tier', this.filterTier);
+      if (this.filterDmStatus) params.set('dmStatus', this.filterDmStatus);
+      if (this.filterCampaign) params.set('campaignId', this.filterCampaign);
+      if (this.filterVerified) params.set('isVerified', '1');
+      if (this.filterHasEmail) params.set('hasEmail', '1');
 
       const [profileRes, statsRes, missingRes] = await Promise.all([
         fetch(`/api/master/influencers?${params}`),
@@ -874,14 +904,19 @@ function dataPage() {
       const statsData = await statsRes.json();
       const missingData = await missingRes.json();
 
-      this.profiles = profileData.influencers;
-      this.total = profileData.total;
-      // Master stats format: { total, byCountry, byTier }
-      const byPlatform = {};
-      for (const inf of profileData.influencers) {
-        byPlatform[inf.platform] = (byPlatform[inf.platform] || 0) + 1;
+      // Build campaign name map from stats
+      this.filterOptions = statsData;
+      if (statsData.campaigns) {
+        this.campaignMap = {};
+        for (const cp of statsData.campaigns) this.campaignMap[cp.id] = cp.name;
       }
-      this.stats = Object.entries(byPlatform).map(([platform, count]) => ({ platform, count }));
+
+      // Enrich profiles with campaign name
+      this.profiles = (profileData.influencers || []).map(p => {
+        p._campaignName = p.dm_campaign_id ? (this.campaignMap[p.dm_campaign_id] || p.dm_campaign_id) : '';
+        return p;
+      });
+      this.total = profileData.total;
       this.totalAll = statsData.total || 0;
       this.missingProfiles = missingData.missing || {};
       this.loading = false;

@@ -130,6 +130,9 @@ export function getInfluencers(opts: {
   if (opts.dmStatus) { conditions.push('dm_status = ?'); params.push(opts.dmStatus); }
   if ((opts as any).aiType === 'influencer') { conditions.push('ai_is_influencer = 1'); }
   if ((opts as any).aiType === 'business') { conditions.push('ai_is_influencer = 0 AND ai_classified_at IS NOT NULL'); }
+  if ((opts as any).campaignId) { conditions.push('dm_campaign_id = ?'); params.push((opts as any).campaignId); }
+  if ((opts as any).hasEmail === '1') { conditions.push("contact_email IS NOT NULL AND contact_email != ''"); }
+  if ((opts as any).isVerified === '1') { conditions.push('is_verified = 1'); }
   if (opts.search) {
     conditions.push('(username LIKE ? OR full_name LIKE ? OR bio LIKE ?)');
     const s = `%${opts.search}%`;
@@ -144,6 +147,9 @@ export function getInfluencers(opts: {
     : opts.sortBy === 'tier' ? 'scout_tier'
     : opts.sortBy === 'country' ? 'COALESCE(ai_country, detected_country)'
     : opts.sortBy === 'updated' ? 'last_updated_at'
+    : opts.sortBy === 'added' ? 'first_seen_at'
+    : opts.sortBy === 'following' ? 'following_count'
+    : opts.sortBy === 'posts' ? 'posts_count'
     : 'followers_count';
   const order = opts.order === 'asc' ? 'ASC' : 'DESC';
   const limit = opts.limit || 100;
@@ -156,11 +162,11 @@ export function getInfluencers(opts: {
   return { influencers: rows, total };
 }
 
-export function getInfluencerStats(): { total: number; byCountry: Record<string, number>; byTier: Record<string, number> } {
+export function getInfluencerStats() {
   const total = (db.prepare(`SELECT COUNT(*) as count FROM influencer_master`).get() as any).count;
 
   const countryRows = db.prepare(
-    `SELECT COALESCE(ai_country, detected_country) as country, COUNT(*) as count FROM influencer_master WHERE COALESCE(ai_country, detected_country) IS NOT NULL GROUP BY COALESCE(ai_country, detected_country) ORDER BY count DESC`
+    `SELECT COALESCE(ai_country, detected_country) as country, COUNT(*) as count FROM influencer_master WHERE COALESCE(ai_country, detected_country) IS NOT NULL AND COALESCE(ai_country, detected_country) != 'UNKNOWN' GROUP BY COALESCE(ai_country, detected_country) ORDER BY count DESC`
   ).all() as any[];
   const byCountry: Record<string, number> = {};
   for (const r of countryRows) byCountry[r.country] = r.count;
@@ -171,7 +177,24 @@ export function getInfluencerStats(): { total: number; byCountry: Record<string,
   const byTier: Record<string, number> = {};
   for (const r of tierRows) byTier[r.scout_tier] = r.count;
 
-  return { total, byCountry, byTier };
+  const dmStatusRows = db.prepare(
+    `SELECT dm_status, COUNT(*) as count FROM influencer_master GROUP BY dm_status ORDER BY count DESC`
+  ).all() as any[];
+  const byDmStatus: Record<string, number> = {};
+  for (const r of dmStatusRows) byDmStatus[r.dm_status || 'pending'] = r.count;
+
+  const platformRows = db.prepare(
+    `SELECT platform, COUNT(*) as count FROM influencer_master GROUP BY platform ORDER BY count DESC`
+  ).all() as any[];
+  const byPlatform: Record<string, number> = {};
+  for (const r of platformRows) byPlatform[r.platform] = r.count;
+
+  const campaignRows = db.prepare(
+    `SELECT DISTINCT c.id, c.name FROM dm_campaigns c INNER JOIN dm_action_queue q ON q.campaign_id = c.id ORDER BY c.name`
+  ).all() as any[];
+  const campaigns = campaignRows.map((r: any) => ({ id: r.id, name: r.name }));
+
+  return { total, byCountry, byTier, byDmStatus, byPlatform, campaigns };
 }
 
 // ─── Migrate existing profiles → influencer_master ───

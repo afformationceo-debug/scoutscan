@@ -88,36 +88,78 @@
 
     <!-- Platform Tabs + Stats -->
     <div class="bg-dark-card border border-dark-border rounded-lg mb-6">
+      <!-- Row 1: Platform tabs + search + export -->
       <div class="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-dark-border">
-        <button @click="platform = ''; load()"
+        <button @click="platform = ''; offset=0; load()"
                 :class="platform === '' ? 'btn-accent' : 'bg-dark-hover text-kaia-text'"
                 class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
           All <span class="ml-1 opacity-75 font-mono" x-text="'(' + totalAll + ')'"></span>
         </button>
-        <template x-for="s in stats" :key="s.platform">
-          <button @click="platform = s.platform; load()"
-                  :class="platform === s.platform ? 'btn-accent' : 'bg-dark-hover text-kaia-text'"
+        <template x-for="[plat, cnt] in Object.entries(filterOptions.byPlatform || {})" :key="plat">
+          <button @click="platform = plat; offset=0; load()"
+                  :class="platform === plat ? 'btn-accent' : 'bg-dark-hover text-kaia-text'"
                   class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize">
-            <span x-text="s.platform"></span>
-            <span class="ml-1 opacity-75 font-mono" x-text="'(' + s.count + ')'"></span>
+            <span x-text="plat"></span>
+            <span class="ml-1 opacity-75 font-mono" x-text="'(' + cnt + ')'"></span>
           </button>
         </template>
         <div class="flex-1"></div>
-        <select x-model="aiType" @change="load()" class="text-xs rounded-lg border px-2 py-1.5">
-          <option value="">AI: 전체</option>
-          <option value="influencer">AI: 인플루언서만</option>
-          <option value="business">AI: 업체만</option>
-        </select>
-        <input type="text" x-model="search" @input.debounce.400ms="load()" placeholder="검색..."
+        <input type="text" x-model="search" @input.debounce.400ms="offset=0; load()" placeholder="유저명/이름/바이오 검색..."
                class="rounded-lg border px-3 py-1.5 text-xs w-56">
-        <select x-model="sortBy" @change="load()" class="text-xs rounded-lg border px-2 py-1.5">
+        <button @click="exportAll('csv')" class="text-xs text-kaia-text hover:text-accent px-2">CSV</button>
+        <button @click="exportAll('xlsx')" class="text-xs text-kaia-text hover:text-accent px-2">XLSX</button>
+      </div>
+      <!-- Row 2: Filters -->
+      <div class="px-5 py-2 flex flex-wrap items-center gap-2 border-b border-dark-border bg-dark-body/30">
+        <span class="text-[10px] text-kaia-muted font-medium uppercase tracking-wider">필터</span>
+        <select x-model="filterCountry" @change="offset=0; load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="">국가: 전체</option>
+          <template x-for="[c, cnt] in Object.entries(filterOptions.byCountry || {})" :key="c">
+            <option :value="c" x-text="c + ' (' + cnt + ')'"></option>
+          </template>
+        </select>
+        <select x-model="filterTier" @change="offset=0; load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="">등급: 전체</option>
+          <template x-for="[t, cnt] in Object.entries(filterOptions.byTier || {})" :key="t">
+            <option :value="t" x-text="t + ' (' + cnt + ')'"></option>
+          </template>
+        </select>
+        <select x-model="aiType" @change="offset=0; load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="">AI분류: 전체</option>
+          <option value="influencer">인플루언서만</option>
+          <option value="business">업체만</option>
+        </select>
+        <select x-model="filterDmStatus" @change="offset=0; load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="">DM: 전체</option>
+          <template x-for="[s, cnt] in Object.entries(filterOptions.byDmStatus || {})" :key="s">
+            <option :value="s" x-text="s + ' (' + cnt + ')'"></option>
+          </template>
+        </select>
+        <select x-model="filterCampaign" @change="offset=0; load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="">캠페인: 전체</option>
+          <template x-for="cp in (filterOptions.campaigns || [])" :key="cp.id">
+            <option :value="cp.id" x-text="cp.name"></option>
+          </template>
+        </select>
+        <label class="flex items-center gap-1 text-xs text-kaia-text cursor-pointer">
+          <input type="checkbox" x-model="filterVerified" @change="offset=0; load()" class="rounded border-dark-border">
+          <span>인증만</span>
+        </label>
+        <label class="flex items-center gap-1 text-xs text-kaia-text cursor-pointer">
+          <input type="checkbox" x-model="filterHasEmail" @change="offset=0; load()" class="rounded border-dark-border">
+          <span>이메일有</span>
+        </label>
+        <div class="flex-1"></div>
+        <select x-model="sortBy" @change="load()" class="text-xs rounded-lg border px-2 py-1">
+          <option value="added">정렬: 최신추가순</option>
+          <option value="updated">정렬: 최근업데이트</option>
           <option value="followers">정렬: 팔로워</option>
           <option value="engagement">정렬: 참여율</option>
           <option value="posts">정렬: 게시물</option>
-          <option value="scraped">정렬: 날짜</option>
+          <option value="country">정렬: 국가</option>
+          <option value="tier">정렬: 등급</option>
         </select>
-        <button @click="exportAll('csv')" class="text-xs text-kaia-text hover:text-accent px-2">CSV</button>
-        <button @click="exportAll('xlsx')" class="text-xs text-kaia-text hover:text-accent px-2">XLSX</button>
+        <button @click="resetFilters()" x-show="hasActiveFilters()" class="text-[10px] text-error hover:text-error/80 px-1">초기화</button>
       </div>
 
       <!-- Profiles Table -->
@@ -144,7 +186,10 @@
               <th class="px-2 py-2.5 text-left">URL</th>
               <th class="px-2 py-2.5 text-center">등급</th>
               <th class="px-2 py-2.5 text-center">DM</th>
-              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='scraped'; load()">업데이트</th>
+              <th class="px-2 py-2.5 text-left text-[11px]">캠페인</th>
+              <th class="px-2 py-2.5 text-left text-[11px]">소스</th>
+              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='added'; load()">추가일</th>
+              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='updated'; load()">업데이트</th>
             </tr>
           </thead>
           <tbody>
@@ -197,6 +242,9 @@
                 <td class="px-2 py-2 text-center">
                   <span class="badge" :class="p.dm_status === 'sent' ? 'badge-success' : p.dm_status === 'replied' ? 'badge-info' : p.dm_status === 'blacklist' ? 'badge-error' : 'badge-c'" x-text="p.dm_status || 'pending'"></span>
                 </td>
+                <td class="px-2 py-2 text-[10px] text-kaia-muted whitespace-nowrap max-w-[100px] truncate" :title="p._campaignName || ''" x-text="p._campaignName || '-'"></td>
+                <td class="px-2 py-2 text-[10px] text-kaia-muted whitespace-nowrap max-w-[120px] truncate" :title="p.source_pair_ids || ''" x-text="p.source_pair_ids || '-'"></td>
+                <td class="px-2 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="formatDate(p.first_seen_at)"></td>
                 <td class="px-2 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="formatDate(p.last_updated_at)"></td>
               </tr>
             </template>

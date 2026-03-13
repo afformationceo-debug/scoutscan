@@ -240,12 +240,15 @@ api.get('/master/influencers', (c) => {
   const dmStatus = c.req.query('dmStatus') || undefined;
   const search = c.req.query('search') || undefined;
   const aiType = c.req.query('aiType') || undefined;
+  const campaignId = c.req.query('campaignId') || undefined;
+  const hasEmail = c.req.query('hasEmail') || undefined;
+  const isVerified = c.req.query('isVerified') || undefined;
   const limit = parseInt(c.req.query('limit') || '100');
   const offset = parseInt(c.req.query('offset') || '0');
   const sortBy = c.req.query('sortBy') || 'followers';
   const order = (c.req.query('order') || 'desc') as 'asc' | 'desc';
 
-  const result = getInfluencers({ platform, country, tier, dmStatus, search, limit, offset, sortBy, order, aiType } as any);
+  const result = getInfluencers({ platform, country, tier, dmStatus, search, limit, offset, sortBy, order, aiType, campaignId, hasEmail, isVerified } as any);
   return c.json(result);
 });
 
@@ -845,7 +848,7 @@ api.get('/dashboard/activity', (c) => {
 
   // Recent scraping jobs (last 24h)
   const recentJobs = db.prepare(`
-    SELECT id, platform, hashtag, status, result_count, created_at, completed_at
+    SELECT id, platform, query, status, result_count, created_at, completed_at
     FROM jobs WHERE created_at > datetime('now', '-24 hours')
     ORDER BY created_at DESC LIMIT 20
   `).all() as any[];
@@ -854,19 +857,19 @@ api.get('/dashboard/activity', (c) => {
     if (j.status === 'completed' || j.status === 'done') {
       activities.push({
         type: 'scraping_completed',
-        message: `스크래핑 완료: ${j.hashtag} (${j.platform}) — ${j.result_count || 0}건`,
+        message: `스크래핑 완료: ${j.query} (${j.platform}) — ${j.result_count || 0}건`,
         ts: j.completed_at || j.created_at,
       });
     } else if (j.status === 'running') {
       activities.push({
         type: 'scraping_started',
-        message: `스크래핑 진행중: ${j.hashtag} (${j.platform})`,
+        message: `스크래핑 진행중: ${j.query} (${j.platform})`,
         ts: j.created_at,
       });
     } else if (j.status === 'failed') {
       activities.push({
-        type: 'dm_failed',
-        message: `스크래핑 실패: ${j.hashtag} (${j.platform})`,
+        type: 'scraping_failed',
+        message: `스크래핑 실패: ${j.query} (${j.platform})`,
         ts: j.completed_at || j.created_at,
       });
     }
