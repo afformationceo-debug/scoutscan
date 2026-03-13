@@ -6,7 +6,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { api } from './routes/api.js';
 import { sse } from './routes/sse.js';
 import { pages } from './routes/pages.js';
-import { recoverStuckJobs } from './services/db.js';
+import { recoverStuckJobs, migrateCookiesFromFilesystemToDB } from './services/db.js';
 import { scheduler } from '../services/scheduler.js';
 
 // ─── Browser Context Pool + Engine Initialization ───
@@ -23,6 +23,10 @@ import { registry } from '../services/registry.js';
 
 // 0. Connect CookieManager to DB (must happen before any CookieManager instance is used)
 CookieManager.setDbAdapter(cookieDbAdapter);
+
+// 0.5. One-time migration: filesystem cookies → DB (runs on first boot after upgrade)
+const migratedCookies = migrateCookiesFromFilesystemToDB();
+if (migratedCookies > 0) console.log(`[Startup] Migrated ${migratedCookies} cookie file(s) from filesystem to DB`);
 
 // 1. Create shared infrastructure
 const proxyRouter = new ProxyRouter();

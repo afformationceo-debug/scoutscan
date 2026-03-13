@@ -638,4 +638,59 @@ export const cookieDbAdapter: CookieDbAdapter = {
   },
 };
 
+// ─── One-time Cookie Migration: filesystem → DB ───
+// Migrates existing filesystem cookies into DB on first boot after upgrade.
+
+import { existsSync, readFileSync, readdirSync } from 'fs';
+
+export function migrateCookiesFromFilesystemToDB(): number {
+  let migrated = 0;
+  const cookieDir = join(process.cwd(), 'cookies');
+
+  // 1. Migrate platform-level scraping cookies (cookies/{platform}.json)
+  const platforms = ['instagram', 'twitter', 'tiktok', 'youtube', 'xiaohongshu', 'linkedin'];
+  for (const platform of platforms) {
+    // Skip if already in DB
+    const existing = db.prepare('SELECT cookie_json FROM scraping_cookies WHERE platform = ?').get(platform) as any;
+    if (existing?.cookie_json) continue;
+
+    const filePath = join(cookieDir, `${platform}.json`);
+    if (existsSync(filePath)) {
+      try {
+        const json = readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(json);
+        const count = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
+        if (count > 0) {
+          db.prepare('INSERT OR REPLACE INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at) VALUES (?, ?, ?, ?)')
+            .run(platform, json, count, new Date().toISOString());
+          migrated++;
+          console.log(`[CookieMigration] Migrated ${platform} scraping cookies (${count} entries) from filesystem to DB`);
+        }
+      } catch { /* skip invalid files */ }
+    }
+  }
+
+  // 2. Migrate per-account DM cookies (cookies/{platform}/{username}.json)
+  const accounts = db.prepare('SELECT id, platform, username, cookie_json FROM dm_accounts WHERE cookie_json IS NULL').all() as any[];
+  for (const acc of accounts) {
+    // Try cookie_file field first, then standard path
+    const filePath = join(cookieDir, acc.platform, `${acc.username}.json`);
+    if (existsSync(filePath)) {
+      try {
+        const json = readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(json);
+        const count = Array.isArray(parsed) ? parsed.length : Object.keys(parsed).length;
+        if (count > 0) {
+          db.prepare('UPDATE dm_accounts SET cookie_json = ?, cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?')
+            .run(json, 'valid', new Date().toISOString(), acc.id);
+          migrated++;
+          console.log(`[CookieMigration] Migrated ${acc.platform}/@${acc.username} DM cookies (${count} entries) from filesystem to DB`);
+        }
+      } catch { /* skip invalid files */ }
+    }
+  }
+
+  return migrated;
+}
+
 export { db };
