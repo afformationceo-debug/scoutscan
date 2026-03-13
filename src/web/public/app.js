@@ -323,7 +323,7 @@ function keywordsPage() {
         if (this.jobLogs.length > 100) this.jobLogs.pop();
       };
 
-      this._jobSSE = new EventSource(`/sse/jobs/${jobId}/stream`);
+      this._jobSSE = new EventSource(`/api/jobs/${jobId}/stream`);
 
       this._jobSSE.addEventListener('progress', (e) => {
         const d = JSON.parse(e.data);
