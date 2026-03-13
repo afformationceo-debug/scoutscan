@@ -132,6 +132,9 @@ class JobManager extends EventEmitter {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
+    // Broadcast global scraping_started notification
+    sseManager.broadcast('global', 'scraping_started', { jobId, platform, keyword: hashtag, pairId });
+
     const engine = new ScrapingEngine({ platforms: [platform] });
     let count = 0;
     const collectedPosts: Post[] = [];
@@ -258,6 +261,9 @@ class JobManager extends EventEmitter {
 
       updateJobStatus(jobId, 'completed', { resultCount: count });
       this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount });
+
+      // Broadcast global scraping_completed notification
+      sseManager.broadcast('global', 'scraping_completed', { jobId, postsCount: count, profilesCount, pairId });
 
       // Update keyword target totalExtracted
       if (pairId) {

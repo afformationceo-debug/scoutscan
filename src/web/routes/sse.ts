@@ -85,6 +85,43 @@ sse.get('/campaigns/:id/stream', (c) => {
   });
 });
 
+// ─── Global Notification SSE Stream ───
+
+sse.get('/global/stream', (c) => {
+  const stream = new ReadableStream({
+    start(controller) {
+      const clientId = sseManager.addClient('global', controller);
+
+      // Send connection confirmation
+      try {
+        const initPayload = `event: connected\ndata: ${JSON.stringify({ message: 'Global notification stream connected' })}\n\n`;
+        controller.enqueue(new TextEncoder().encode(initPayload));
+      } catch { /* ignore init errors */ }
+
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(new TextEncoder().encode(': keepalive\n\n'));
+        } catch {
+          clearInterval(keepalive);
+        }
+      }, 15000);
+
+      c.req.raw.signal.addEventListener('abort', () => {
+        clearInterval(keepalive);
+        sseManager.removeClient(clientId);
+      });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  });
+});
+
 // ─── Cookie Health SSE Stream ───
 
 sse.get('/cookie-health/stream', (c) => {

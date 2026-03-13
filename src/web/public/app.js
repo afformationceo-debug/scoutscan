@@ -29,6 +29,130 @@ function app() {
   return {};
 }
 
+// ─── Global Notifications Component ───
+
+function globalNotifications() {
+  return {
+    notifications: [],
+    eventSource: null,
+    maxVisible: 5,
+    _idCounter: 0,
+
+    init() {
+      this.connect();
+    },
+
+    connect() {
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
+
+      this.eventSource = new EventSource('/api/global/stream');
+
+      this.eventSource.addEventListener('scraping_started', (e) => {
+        const data = JSON.parse(e.data);
+        const keyword = data.keyword || '';
+        const platform = data.platform || '';
+        this.addNotification({
+          type: 'scraping_started',
+          message: `스크래핑 시작: ${keyword} (${platform})`,
+          detail: data.scheduled ? '예약 작업' : data.jobId ? `Job: ${data.jobId.slice(0, 8)}` : '',
+        });
+      });
+
+      this.eventSource.addEventListener('scraping_completed', (e) => {
+        const data = JSON.parse(e.data);
+        const postsCount = data.postsCount || 0;
+        const profilesCount = data.profilesCount || 0;
+        this.addNotification({
+          type: 'scraping_completed',
+          message: `스크래핑 완료: ${postsCount}개 포스트, ${profilesCount}명 프로필`,
+          detail: data.jobId ? `Job: ${data.jobId.slice(0, 8)}` : '',
+        });
+      });
+
+      this.eventSource.addEventListener('auto_assign', (e) => {
+        const data = JSON.parse(e.data);
+        const assigned = data.assigned || 0;
+        this.addNotification({
+          type: 'auto_assign',
+          message: `캠페인 자동 배정: ${assigned}명 배정됨`,
+          detail: data.message || '',
+        });
+      });
+
+      this.eventSource.addEventListener('cookie_warning', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'cookie_warning',
+          message: `쿠키 만료 경고: @${data.username} (${data.platform})`,
+          detail: data.detail || '',
+        });
+      });
+
+      this.eventSource.addEventListener('cookie_expired', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'cookie_expired',
+          message: `쿠키 만료됨: @${data.username} (${data.platform})`,
+          detail: data.detail || '',
+        });
+      });
+
+      this.eventSource.addEventListener('error', () => {
+        // SSE will auto-reconnect
+      });
+    },
+
+    addNotification({ type, message, detail }) {
+      const id = ++this._idCounter;
+      const notification = {
+        id,
+        type,
+        message,
+        detail: detail || '',
+        timestamp: new Date().toISOString(),
+        visible: true,
+      };
+
+      // Add to front (newest first)
+      this.notifications.unshift(notification);
+
+      // Trim to max visible
+      const visibleCount = this.notifications.filter(n => n.visible).length;
+      if (visibleCount > this.maxVisible) {
+        // Hide oldest visible notifications
+        const visible = this.notifications.filter(n => n.visible);
+        for (let i = this.maxVisible; i < visible.length; i++) {
+          visible[i].visible = false;
+        }
+      }
+
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => {
+        this.dismiss(id);
+      }, 10000);
+
+      // Clean up old hidden notifications (keep array from growing)
+      if (this.notifications.length > 50) {
+        this.notifications = this.notifications.filter(n => n.visible);
+      }
+    },
+
+    dismiss(id) {
+      const n = this.notifications.find(n => n.id === id);
+      if (n) n.visible = false;
+    },
+
+    destroy() {
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+    },
+  };
+}
+
 // ─── Platform Status Component ───
 
 function platformStatus() {

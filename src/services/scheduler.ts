@@ -4,12 +4,17 @@ import { jobManager } from '../web/services/job-manager.js';
 import { getKeywordTarget, listKeywordTargets, updateKeywordTarget } from '../web/services/master-db.js';
 import { resetDailyLimits } from '../web/services/master-db.js';
 import { registry } from './registry.js';
+import { sseManager } from '../web/services/sse-manager.js';
+import { CookieManager } from '../core/cookie-manager.js';
+import { db } from '../web/services/db.js';
 import type { Platform } from '../core/types.js';
 
 export class SchedulerService {
   private scrapingCron: ScheduledTask | null = null;
   private resetCron: ScheduledTask | null = null;
   private replenishCron: ScheduledTask | null = null;
+  private cookieHealthCron: ScheduledTask | null = null;
+  private cookieManager = new CookieManager();
   private running = false;
 
   /** Start all cron jobs */
@@ -44,7 +49,21 @@ export class SchedulerService {
       }
     });
 
-    console.log('[Scheduler] Started: hourly scraping + midnight DM reset + 30min DM replenish');
+    // Cron 4: Every 5 minutes, check cookie health for DM accounts and scraping cookies
+    this.cookieHealthCron = cron.schedule('*/5 * * * *', () => {
+      this.checkCookieHealth().catch(err => {
+        console.error('[Scheduler] Error checking cookie health:', err);
+      });
+    });
+
+    // Run cookie health check once on startup (after a short delay for DB init)
+    setTimeout(() => {
+      this.checkCookieHealth().catch(err => {
+        console.error('[Scheduler] Initial cookie health check failed:', err);
+      });
+    }, 5000);
+
+    console.log('[Scheduler] Started: hourly scraping + midnight DM reset + 30min DM replenish + 5min cookie health');
   }
 
   /** Stop all cron jobs */
@@ -60,6 +79,10 @@ export class SchedulerService {
     if (this.replenishCron) {
       this.replenishCron.stop();
       this.replenishCron = null;
+    }
+    if (this.cookieHealthCron) {
+      this.cookieHealthCron.stop();
+      this.cookieHealthCron = null;
     }
     this.running = false;
     console.log('[Scheduler] Stopped');
@@ -140,8 +163,145 @@ export class SchedulerService {
       nextScrapeAt,
     });
 
+    // Broadcast scheduled scraping start on global channel
+    sseManager.broadcast('global', 'scraping_started', {
+      pairId: target.pairId,
+      keyword: target.keyword,
+      platform: target.platform,
+      jobId,
+      scheduled: true,
+    });
+
     console.log(`[Scheduler] Started job ${jobId.slice(0, 8)} for ${target.pairId} (${target.keyword}), next: ${nextScrapeAt}`);
     return jobId;
+  }
+
+  /** Check cookie health for all DM accounts and scraping cookies */
+  private async checkCookieHealth(): Promise<void> {
+    const warnings: Array<{ type: string; username: string; platform: string; detail: string }> = [];
+
+    // 1. Check DM account cookies
+    try {
+      const accounts = db.prepare(
+        'SELECT id, platform, username, cookie_status, cookie_expires_at FROM dm_accounts WHERE is_active = 1'
+      ).all() as Array<{ id: number; platform: string; username: string; cookie_status: string; cookie_expires_at: string | null }>;
+
+      for (const account of accounts) {
+        try {
+          const result = this.cookieManager.validateCookies(account.platform, account.username);
+
+          if (!result.valid) {
+            const detail = result.missingCookies.length > 0
+              ? `Missing: ${result.missingCookies.join(', ')}`
+              : 'Cookie validation failed';
+
+            warnings.push({
+              type: 'cookie_expired',
+              username: account.username,
+              platform: account.platform,
+              detail,
+            });
+
+            // Update DB status
+            db.prepare('UPDATE dm_accounts SET cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?')
+              .run('expired', new Date().toISOString(), account.id);
+          } else {
+            // Check if cookies are about to expire (within 24 hours)
+            if (result.expiresAt) {
+              const expiresAt = new Date(result.expiresAt).getTime();
+              const now = Date.now();
+              const hoursLeft = (expiresAt - now) / (1000 * 60 * 60);
+
+              if (hoursLeft <= 24 && hoursLeft > 0) {
+                warnings.push({
+                  type: 'cookie_warning',
+                  username: account.username,
+                  platform: account.platform,
+                  detail: `Expires in ${Math.round(hoursLeft)}h`,
+                });
+
+                db.prepare('UPDATE dm_accounts SET cookie_status = ?, cookie_last_checked_at = ?, cookie_expires_at = ? WHERE id = ?')
+                  .run('expiring_soon', new Date().toISOString(), result.expiresAt, account.id);
+              } else if (hoursLeft > 24) {
+                db.prepare('UPDATE dm_accounts SET cookie_status = ?, cookie_last_checked_at = ?, cookie_expires_at = ? WHERE id = ?')
+                  .run('valid', new Date().toISOString(), result.expiresAt, account.id);
+              }
+            } else {
+              db.prepare('UPDATE dm_accounts SET cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?')
+                .run('valid', new Date().toISOString(), account.id);
+            }
+          }
+        } catch {
+          // Skip individual account errors
+        }
+      }
+    } catch {
+      // dm_accounts table might not have is_active column in all setups
+    }
+
+    // 2. Check scraping cookies (platform-level)
+    const scrapingPlatforms = ['instagram', 'twitter', 'tiktok', 'youtube', 'xiaohongshu'];
+    for (const platform of scrapingPlatforms) {
+      try {
+        const cookies = this.cookieManager.loadCookies(platform);
+        if (cookies.length === 0) continue;
+
+        const critical = this.cookieManager.getCriticalCookieNames(platform);
+        const cookieNames = new Set(cookies.map(c => c.name));
+        const missing = critical.filter(name => !cookieNames.has(name));
+        const now = Math.floor(Date.now() / 1000);
+
+        // Check for expired critical cookies
+        const expired: string[] = [];
+        let earliestExpiry: number | undefined;
+        for (const cookie of cookies) {
+          if (critical.includes(cookie.name) && cookie.expires) {
+            if (cookie.expires < now) {
+              expired.push(cookie.name);
+            } else {
+              if (!earliestExpiry || cookie.expires < earliestExpiry) {
+                earliestExpiry = cookie.expires;
+              }
+            }
+          }
+        }
+
+        if (missing.length > 0 || expired.length > 0) {
+          const detail = [...missing.map(n => `missing: ${n}`), ...expired.map(n => `expired: ${n}`)].join(', ');
+          warnings.push({
+            type: 'cookie_expired',
+            username: 'scraping',
+            platform,
+            detail,
+          });
+        } else if (earliestExpiry) {
+          const hoursLeft = (earliestExpiry - now) / 3600;
+          if (hoursLeft <= 24 && hoursLeft > 0) {
+            warnings.push({
+              type: 'cookie_warning',
+              username: 'scraping',
+              platform,
+              detail: `Expires in ${Math.round(hoursLeft)}h`,
+            });
+          }
+        }
+      } catch {
+        // Skip platform cookie errors
+      }
+    }
+
+    // Broadcast all warnings on global channel
+    for (const warning of warnings) {
+      sseManager.broadcast('global', warning.type, {
+        username: warning.username,
+        platform: warning.platform,
+        detail: warning.detail,
+      });
+    }
+
+    if (warnings.length > 0) {
+      console.log(`[Scheduler] Cookie health: ${warnings.length} warning(s) found`);
+    }
   }
 }
 
