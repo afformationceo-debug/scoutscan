@@ -158,6 +158,11 @@ export interface InfluencerMaster {
   detectedLanguage?: string;
   geoConfidence: number;
   geoSource?: string;
+  aiIsInfluencer?: number;
+  aiCountry?: string;
+  aiConfidence?: number;
+  aiReason?: string;
+  aiClassifiedAt?: string;
   scoutTier: string;
   scoutTierAuto: string;
   scoutTierManual?: string;

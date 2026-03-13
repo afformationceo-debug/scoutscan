@@ -142,7 +142,7 @@ export function getInfluencers(opts: {
   const sortCol = opts.sortBy === 'followers' ? 'followers_count'
     : opts.sortBy === 'engagement' ? 'engagement_rate'
     : opts.sortBy === 'tier' ? 'scout_tier'
-    : opts.sortBy === 'country' ? 'detected_country'
+    : opts.sortBy === 'country' ? 'COALESCE(ai_country, detected_country)'
     : opts.sortBy === 'updated' ? 'last_updated_at'
     : 'followers_count';
   const order = opts.order === 'asc' ? 'ASC' : 'DESC';

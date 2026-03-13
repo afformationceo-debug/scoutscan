@@ -137,12 +137,11 @@
               <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='engagement'; load()">참여율</th>
               <th class="px-2 py-2.5 text-center">인증</th>
               <th class="px-2 py-2.5 text-center">AI분류</th>
-              <th class="px-2 py-2.5 text-center">AI국가</th>
+              <th class="px-2 py-2.5 text-center cursor-pointer hover:text-accent" @click="sortBy='country'; load()">국가</th>
               <th class="px-2 py-2.5 text-center">비공개</th>
               <th class="px-2 py-2.5 text-left">카테고리</th>
               <th class="px-2 py-2.5 text-left">이메일</th>
               <th class="px-2 py-2.5 text-left">URL</th>
-              <th class="px-2 py-2.5 text-center">국가</th>
               <th class="px-2 py-2.5 text-center">등급</th>
               <th class="px-2 py-2.5 text-center">DM</th>
               <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='scraped'; load()">업데이트</th>
@@ -172,9 +171,12 @@
                   <span x-show="!p.ai_classified_at" class="text-dark-border">-</span>
                   <p x-show="p.ai_reason" class="text-[9px] text-kaia-muted mt-0.5 line-clamp-2" x-text="p.ai_reason"></p>
                 </td>
-                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
-                  <span x-text="p.ai_country || '-'" :class="p.ai_country && p.ai_country !== 'UNKNOWN' ? 'text-white font-medium' : 'text-dark-border'"></span>
-                  <span x-show="p.ai_confidence" class="text-[10px] text-kaia-muted" x-text="p.ai_confidence ? '(' + Math.round(p.ai_confidence * 100) + '%)' : ''"></span>
+                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]"
+                    :title="(p.ai_country ? 'AI: ' + p.ai_country + (p.ai_confidence ? ' (' + Math.round(p.ai_confidence*100) + '%)' : '') : '') + (p.detected_country ? (p.ai_country ? ' / ' : '') + 'Geo: ' + p.detected_country : '')">
+                  <span x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : (p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : '-'"
+                        :class="(p.ai_country && p.ai_country !== 'UNKNOWN') || (p.detected_country && p.detected_country !== 'UNKNOWN') ? 'text-white font-medium' : 'text-dark-border'"></span>
+                  <span x-show="p.ai_country && p.ai_country !== 'UNKNOWN'" class="text-[9px] text-accent/60 ml-0.5">AI</span>
+                  <span x-show="(!p.ai_country || p.ai_country === 'UNKNOWN') && p.detected_country && p.detected_country !== 'UNKNOWN'" class="text-[9px] text-kaia-muted/60 ml-0.5">geo</span>
                 </td>
                 <td class="px-2 py-2 text-center">
                   <span x-show="p.is_private" class="text-error text-[11px] font-bold">Y</span>
@@ -188,9 +190,6 @@
                 <td class="px-2 py-2 max-w-[160px] text-[12px]">
                   <a x-show="p.external_url" :href="p.external_url" target="_blank" class="text-accent hover:underline truncate block" x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
                   <span x-show="!p.external_url" class="text-dark-border">-</span>
-                </td>
-                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]">
-                  <span x-text="p.detected_country || '-'" :class="p.detected_country && p.detected_country !== 'UNKNOWN' ? 'text-white font-medium' : 'text-dark-border'"></span>
                 </td>
                 <td class="px-2 py-2 text-center">
                   <span class="badge" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || '-'"></span>
