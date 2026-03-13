@@ -101,7 +101,6 @@ export class CookieManager {
 
   /** Save cookies (after browser session) */
   saveCookies(platform: string, cookies: CookieEntry[]): void {
-    const { mkdirSync } = require('fs');
     if (!existsSync(this.cookieDir)) {
       mkdirSync(this.cookieDir, { recursive: true });
     }

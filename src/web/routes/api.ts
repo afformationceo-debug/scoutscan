@@ -401,6 +401,7 @@ api.post('/campaigns', async (c) => {
       const cm = new CookieManager();
       const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
       cm.saveAccountCookies(platform, senderUsername, cookies);
+      cm.saveCookies(platform, cookies); // Also for scraping
       const validation = cm.validateCookies(platform, senderUsername);
       cookieStatus = validation.valid ? 'valid' : 'expired';
       // Also register as DM account
@@ -613,7 +614,12 @@ api.post('/campaigns/:id/upload-cookies', async (c) => {
     const parsed = JSON.parse(cookieData);
     const cm = new CookieManager();
     const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
+
+    // Save per-account cookies (for DM sending)
     cm.saveAccountCookies(campaign.platform, username, cookies);
+
+    // Also save platform-level cookies (for scraping) — always keep the latest cookie for scraping
+    cm.saveCookies(campaign.platform, cookies);
 
     // Validate
     const validation = cm.validateCookies(campaign.platform, username);
@@ -627,7 +633,7 @@ api.post('/campaigns/:id/upload-cookies', async (c) => {
     addDMAccount(campaign.platform, username);
     const acct = (db.prepare('SELECT id FROM dm_accounts WHERE platform = ? AND username = ?').get(campaign.platform, username) as any);
     if (acct) {
-      db.prepare(`UPDATE dm_accounts SET cookie_file = ?, cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?`)
+      db.prepare(`UPDATE dm_accounts SET cookie_file = ?, cookie_status = ?, cookie_last_checked_at = ?, status = 'active' WHERE id = ?`)
         .run(`cookies/${campaign.platform}/${username}.json`, status, new Date().toISOString(), acct.id);
     }
 
@@ -715,6 +721,9 @@ api.post('/dm-accounts/:id/upload-cookies', async (c) => {
     const cm = new CookieManager();
     const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
     cm.saveAccountCookies(account.platform, account.username, cookies);
+
+    // Also save as platform-level cookies (for scraping)
+    cm.saveCookies(account.platform, cookies);
 
     // Update DB
     const cookieFile = `cookies/${account.platform}/${account.username}.json`;
