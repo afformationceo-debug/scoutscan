@@ -347,7 +347,7 @@ function keywordsPage() {
 
       this._jobSSE.addEventListener('post', (e) => {
         const d = JSON.parse(e.data);
-        addLog('post', `포스트 수집: @${d.author_username || '?'} ♥${d.likes || 0}`);
+        addLog('post', `포스트 수집: @${d.owner?.username || d.author_username || '?'} ♥${d.likesCount || d.likes || 0}`);
       });
 
       this._jobSSE.addEventListener('profile', (e) => {
