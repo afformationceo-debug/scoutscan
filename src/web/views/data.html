@@ -344,27 +344,54 @@
               <td class="px-3 py-2 text-center num" x-text="t.scrapingCycleHours + 'h'"></td>
               <td class="px-3 py-2 text-center num" x-text="t.maxResultsPerRun"></td>
               <td class="px-3 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="t.scrapeUntil ? t.scrapeUntil.split('T')[0] : '-'"></td>
-              <td class="px-3 py-2 text-right num text-white" x-text="formatNumber(t.totalExtracted)"></td>
+              <td class="px-3 py-2 text-right num text-white">
+                <span x-text="formatNumber(t._liveExtracted || t.totalExtracted)"></span>
+                <span x-show="getJobProgress(t.pairId) && getJobProgress(t.pairId).counts.posts > 0 && getJobProgress(t.pairId).status === 'running'"
+                      class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + getJobProgress(t.pairId).counts.posts"></span>
+              </td>
               <!-- INLINE PROGRESS / LAST SCRAPED -->
               <td class="px-3 py-2" colspan="1">
                 <template x-if="getJobProgress(t.pairId)">
-                  <div class="min-w-[180px]">
+                  <div class="min-w-[200px]">
                     <div class="flex items-center gap-1.5 mb-1">
-                      <span class="inline-block w-1.5 h-1.5 rounded-full animate-pulse"
-                            :class="getJobProgress(t.pairId).status === 'running' ? 'bg-accent' : getJobProgress(t.pairId).status === 'completed' ? 'bg-success' : 'bg-error'"></span>
-                      <span class="text-[11px] font-medium"
-                            :class="getJobProgress(t.pairId).status === 'running' ? 'text-accent' : getJobProgress(t.pairId).status === 'completed' ? 'text-success' : 'text-error'"
+                      <span class="inline-block w-1.5 h-1.5 rounded-full"
+                            :class="{
+                              'bg-accent animate-pulse': getJobProgress(t.pairId).status === 'running',
+                              'bg-success': getJobProgress(t.pairId).status === 'completed',
+                              'bg-error': getJobProgress(t.pairId).status === 'failed'
+                            }"></span>
+                      <span class="text-[11px] font-medium flex-1"
+                            :class="{
+                              'text-accent': getJobProgress(t.pairId).status === 'running',
+                              'text-success': getJobProgress(t.pairId).status === 'completed',
+                              'text-error': getJobProgress(t.pairId).status === 'failed'
+                            }"
                             x-text="getJobProgress(t.pairId).phase"></span>
+                      <span x-show="getJobProgress(t.pairId).status === 'running'"
+                            class="text-[9px] text-kaia-muted" x-text="_getElapsed(t.pairId)"></span>
                     </div>
-                    <div class="h-1 rounded-full bg-dark-body overflow-hidden">
-                      <div class="h-1 rounded-full transition-all duration-500"
-                           :class="getJobProgress(t.pairId).status === 'completed' ? 'bg-success' : 'bg-accent'"
+                    <div class="h-1.5 rounded-full bg-dark-body overflow-hidden">
+                      <div class="h-1.5 rounded-full transition-all duration-300"
+                           :class="{
+                             'bg-gradient-to-r from-accent to-accent/60': getJobProgress(t.pairId).status === 'running',
+                             'bg-success': getJobProgress(t.pairId).status === 'completed',
+                             'bg-error': getJobProgress(t.pairId).status === 'failed'
+                           }"
                            :style="'width: ' + getJobProgress(t.pairId).percent + '%'"></div>
                     </div>
-                    <div class="flex gap-2 mt-0.5 text-[10px] text-kaia-muted">
-                      <span x-show="getJobProgress(t.pairId).counts.posts > 0" x-text="'P:' + getJobProgress(t.pairId).counts.posts"></span>
-                      <span x-show="getJobProgress(t.pairId).counts.profiles > 0" x-text="'프:' + getJobProgress(t.pairId).counts.profiles"></span>
-                      <span x-show="getJobProgress(t.pairId).counts.ai > 0" x-text="'AI:' + getJobProgress(t.pairId).counts.ai"></span>
+                    <div class="flex gap-3 mt-1 text-[10px]">
+                      <span x-show="getJobProgress(t.pairId).counts.posts > 0" class="text-info">
+                        <span class="text-kaia-muted/60">포스트</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.posts + (getJobProgress(t.pairId).counts.total ? '/' + getJobProgress(t.pairId).counts.total : '')"></span>
+                      </span>
+                      <span x-show="getJobProgress(t.pairId).counts.profiles > 0" class="text-accent">
+                        <span class="text-kaia-muted/60">프로필</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.profiles + (getJobProgress(t.pairId).counts.profilesTotal ? '/' + getJobProgress(t.pairId).counts.profilesTotal : '')"></span>
+                      </span>
+                      <span x-show="getJobProgress(t.pairId).counts.skipped > 0" class="text-kaia-muted">
+                        스킵 <span class="font-mono" x-text="getJobProgress(t.pairId).counts.skipped"></span>
+                      </span>
+                      <span x-show="getJobProgress(t.pairId).counts.ai > 0" class="text-warning">
+                        <span class="text-kaia-muted/60">AI</span> <span class="font-mono text-white" x-text="getJobProgress(t.pairId).counts.ai + (getJobProgress(t.pairId).counts.aiTotal ? '/' + getJobProgress(t.pairId).counts.aiTotal : '')"></span>
+                      </span>
                     </div>
                   </div>
                 </template>

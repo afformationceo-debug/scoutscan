@@ -424,9 +424,37 @@ function keywordsPage() {
     estimatedProfileTime: '~7분',
 
     // Per-keyword running jobs
-    _runningJobs: {},  // { pairId: { jobId, status, phase, counts, percent, sse } }
+    _runningJobs: {},  // { pairId: { jobId, status, phase, counts, percent, sse, startedAt, ... } }
     _globalSSE: null,
     _refreshTimer: null,
+    _tick: 0,  // incremented every second to force elapsed time re-render
+
+    _saveRunningState() {
+      try {
+        const state = {};
+        for (const [k, v] of Object.entries(this._runningJobs)) {
+          if (v.status === 'running') {
+            state[k] = { jobId: v.jobId, status: v.status, phase: v.phase, counts: { ...v.counts }, percent: v.percent, startedAt: v.startedAt };
+          }
+        }
+        sessionStorage.setItem('_runningJobs', JSON.stringify(state));
+      } catch {}
+    },
+
+    _restoreRunningState() {
+      try {
+        const saved = sessionStorage.getItem('_runningJobs');
+        if (!saved) return;
+        const state = JSON.parse(saved);
+        for (const [pairId, v] of Object.entries(state)) {
+          if (v.status === 'running' && v.jobId && !this._runningJobs[pairId]) {
+            // Restore UI state, then reconnect SSE
+            this._runningJobs[pairId] = { ...v, sse: null };
+            this._connectJobSSE(pairId, v.jobId);
+          }
+        }
+      } catch {}
+    },
 
     startJobMonitor(pairId, jobId) {
       // Close existing SSE for this pairId
@@ -437,59 +465,157 @@ function keywordsPage() {
       this._runningJobs[pairId] = {
         jobId,
         status: 'running',
-        phase: '시작 중...',
-        counts: { posts: 0, profiles: 0, ai: 0, total: 0 },
+        phase: '브라우저 초기화...',
+        counts: { posts: 0, profiles: 0, profilesTotal: 0, ai: 0, aiTotal: 0, total: 0, skipped: 0 },
         percent: 0,
         sse: null,
+        startedAt: Date.now(),
       };
 
+      this._connectJobSSE(pairId, jobId);
+      this._saveRunningState();
+    },
+
+    _connectJobSSE(pairId, jobId) {
       const job = this._runningJobs[pairId];
+      if (!job) return;
       job.sse = new EventSource(`/api/jobs/${jobId}/stream`);
+
+      // Handle initial status (sent on SSE connect)
+      job.sse.addEventListener('status', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.status === 'running' && d.result_count > 0) {
+            job.counts.posts = d.result_count;
+            job.phase = `포스트 수집 중 ${d.result_count}건`;
+            job.percent = Math.min(30, Math.round(d.result_count / (job.counts.total || 200) * 33));
+          } else if (d.status === 'completed') {
+            job.status = 'completed';
+            job.phase = `완료 (${d.result_count || 0}건)`;
+            job.percent = 100;
+            job.sse?.close();
+            this._saveRunningState();
+            this.load();
+          }
+        } catch {}
+      });
 
       job.sse.addEventListener('progress', (e) => {
         const d = JSON.parse(e.data);
         if (d.phase === 'posts') {
           job.counts.posts = d.count;
           job.counts.total = d.total || 0;
-          job.phase = `포스트 ${d.count}/${d.total || '?'}`;
-          job.percent = d.total ? Math.round((d.count / d.total) * 33) : 15;
+          job.phase = `포스트 수집 ${d.count}/${d.total || '?'}`;
+          job.percent = d.total ? Math.round((d.count / d.total) * 33) : Math.min(30, d.count);
+          // Live update extracted count on target row
+          const t = this.targets?.find(t => t.pairId === pairId);
+          if (t) t._liveExtracted = (t.totalExtracted || 0) + d.count;
         } else if (d.phase === 'profiles') {
           job.counts.profiles = d.count;
-          job.phase = `프로필 ${d.count}/${d.total || '?'}`;
-          job.percent = 33 + (d.total ? Math.round((d.count / d.total) * 34) : 15);
+          job.counts.profilesTotal = d.total || 0;
+          job.phase = `프로필 추출 ${d.count}/${d.total || '?'}`;
+          job.percent = 33 + (d.total ? Math.round((d.count / d.total) * 34) : Math.min(30, d.count));
         } else if (d.phase === 'ai_classify') {
           job.counts.ai = d.count;
+          job.counts.aiTotal = d.total || 0;
           job.phase = `AI 분류 ${d.count}/${d.total || '?'}`;
-          job.percent = 67 + (d.total ? Math.round((d.count / d.total) * 33) : 15);
+          job.percent = 67 + (d.total ? Math.round((d.count / d.total) * 33) : Math.min(30, d.count));
         }
+        this._saveRunningState();
+      });
+
+      job.sse.addEventListener('profile_start', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          job.counts.profilesTotal = d.total;
+          job.counts.skipped = d.skipped || 0;
+          job.phase = `프로필 추출 시작 (신규 ${d.total}명${d.skipped ? ', 기존 ' + d.skipped + '명 스킵' : ''})`;
+          job.percent = 33;
+        } catch {}
+      });
+
+      job.sse.addEventListener('profile_pause', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          job.phase = `⏸ 안티봇 대기 ${d.pauseSeconds || 30}초...`;
+        } catch {}
+      });
+
+      job.sse.addEventListener('profile_retry', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          job.phase = `재시도 ${d.count}건...`;
+        } catch {}
+      });
+
+      job.sse.addEventListener('profile_error', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.consecutiveFailures >= 3) {
+            job.phase = `프로필 추출 ${job.counts.profiles}/${job.counts.profilesTotal} (연속실패 ${d.consecutiveFailures})`;
+          }
+        } catch {}
+      });
+
+      job.sse.addEventListener('ai_complete', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          job.phase = `AI 분류 완료 (${d.classified}명, ${d.assigned}명 캠페인 배정)`;
+          job.percent = 95;
+        } catch {}
       });
 
       job.sse.addEventListener('complete', (e) => {
-        const d = JSON.parse(e.data);
-        job.status = 'completed';
-        job.phase = `완료 (${d.postsCount}P, ${d.profilesCount}명)`;
-        job.percent = 100;
-        job.sse.close();
-        this.load();
+        try {
+          const d = JSON.parse(e.data);
+          job.status = 'completed';
+          job.phase = `완료 — ${d.postsCount || 0}P, ${d.profilesCount || 0}명 추출`;
+          job.percent = 100;
+          job.sse?.close();
+          this._saveRunningState();
+          // Clear after 10s so completed state stays visible briefly
+          setTimeout(() => {
+            delete this._runningJobs[pairId];
+            this._saveRunningState();
+          }, 10000);
+          this.load();
+        } catch {}
       });
 
       job.sse.addEventListener('error', (e) => {
         try {
           const d = JSON.parse(e.data);
           job.status = 'failed';
-          job.phase = `오류: ${d.message}`;
+          job.phase = `오류: ${d.message?.substring(0, 60) || '알 수 없음'}`;
+          job.sse?.close();
+          this._saveRunningState();
         } catch {}
       });
 
       job.sse.onerror = () => {
         if (job.status === 'running') {
           job.phase = '연결 재시도...';
+          // Reconnect after 3s
+          setTimeout(() => {
+            if (job.status === 'running' && (!job.sse || job.sse.readyState === 2)) {
+              this._connectJobSSE(pairId, jobId);
+            }
+          }, 3000);
         }
       };
     },
 
     getJobProgress(pairId) {
       return this._runningJobs[pairId] || null;
+    },
+
+    _getElapsed(pairId) {
+      void this._tick; // reactive dependency for auto-refresh
+      const job = this._runningJobs[pairId];
+      if (!job?.startedAt) return '';
+      const sec = Math.floor((Date.now() - job.startedAt) / 1000);
+      if (sec < 60) return sec + '초';
+      return Math.floor(sec / 60) + '분 ' + (sec % 60) + '초';
     },
 
     updatePairId() {
@@ -523,6 +649,8 @@ function keywordsPage() {
       const data = await res.json();
       this.targets = data.targets;
       this.loading = false;
+      // Restore saved running state from sessionStorage (page navigation)
+      this._restoreRunningState();
       // Start SSE monitoring for any keywords that have a running job
       for (const t of this.targets) {
         if (t.lastJobStatus === 'running' && t.lastJobId && !this._runningJobs[t.pairId]) {
@@ -534,6 +662,10 @@ function keywordsPage() {
       // Auto-refresh every 30s to pick up scheduler changes
       if (!this._refreshTimer) {
         this._refreshTimer = setInterval(() => this._silentRefresh(), 30000);
+      }
+      // Tick every 2s to update elapsed time display
+      if (!this._tickTimer) {
+        this._tickTimer = setInterval(() => { this._tick++; }, 2000);
       }
     },
 
@@ -1795,6 +1927,18 @@ function liveDashboard() {
         this.activities.unshift({ type: 'cookie_expired', message: `쿠키 만료: @${d.username} (${d.platform})`, ts: ts() });
         if (this.activities.length > 50) this.activities.pop();
         this.loadData();
+      });
+
+      this._sse.addEventListener('dm_sent', (e) => {
+        const d = JSON.parse(e.data);
+        this.activities.unshift({ type: 'dm_sent', message: `DM 발송: @${d.recipient} (${d.campaign || d.platform})`, ts: ts() });
+        if (this.activities.length > 50) this.activities.pop();
+      });
+
+      this._sse.addEventListener('dm_failed', (e) => {
+        const d = JSON.parse(e.data);
+        this.activities.unshift({ type: 'dm_failed', message: `DM 실패: @${d.recipient} (${d.campaign || d.platform})`, ts: ts() });
+        if (this.activities.length > 50) this.activities.pop();
       });
 
       this._sse.onerror = () => {

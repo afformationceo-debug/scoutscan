@@ -221,6 +221,12 @@ export class DMEngine {
             recipient: item.recipient_username,
             sentCount,
           });
+          sseManager.broadcast('global', 'dm_sent', {
+            campaign: campaign.name,
+            platform: campaign.platform,
+            account: account.username,
+            recipient: item.recipient_username,
+          });
         } catch (err) {
           const errMsg = (err as Error).message;
           db.prepare(`UPDATE dm_action_queue SET execute_status = 'failed', error_message = ?, retry_count = retry_count + 1 WHERE id = ?`)
@@ -236,6 +242,12 @@ export class DMEngine {
             recipient: item.recipient_username,
             error: errMsg.slice(0, 100),
             failedCount,
+          });
+          sseManager.broadcast('global', 'dm_failed', {
+            campaign: campaign.name,
+            platform: campaign.platform,
+            account: account.username,
+            recipient: item.recipient_username,
           });
 
           // Cookie expiration detection → mark account + broadcast
