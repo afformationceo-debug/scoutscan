@@ -690,6 +690,14 @@ api.post('/campaigns/:id/upload-cookies', async (c) => {
 });
 
 // Campaign cookie health check
+api.get('/campaigns/:id/cookie-json', (c) => {
+  const id = c.req.param('id');
+  const campaign = getCampaign(id);
+  if (!campaign) return c.json({ error: 'Campaign not found' }, 404);
+  const json = getCampaignCookieJson(id);
+  return c.json({ cookieJson: json || null, senderUsername: campaign.sender_username || null, cookieStatus: campaign.cookie_status || 'unknown' });
+});
+
 api.post('/campaigns/:id/check-cookies', (c) => {
   const id = c.req.param('id');
   const campaign = getCampaign(id);

@@ -425,6 +425,8 @@ function keywordsPage() {
 
     // Per-keyword running jobs
     _runningJobs: {},  // { pairId: { jobId, status, phase, counts, percent, sse } }
+    _globalSSE: null,
+    _refreshTimer: null,
 
     startJobMonitor(pairId, jobId) {
       // Close existing SSE for this pairId
@@ -527,6 +529,48 @@ function keywordsPage() {
           this.startJobMonitor(t.pairId, t.lastJobId);
         }
       }
+      // Start global SSE to auto-detect scheduler-triggered scraping
+      this._startGlobalSSE();
+      // Auto-refresh every 30s to pick up scheduler changes
+      if (!this._refreshTimer) {
+        this._refreshTimer = setInterval(() => this._silentRefresh(), 30000);
+      }
+    },
+
+    async _silentRefresh() {
+      try {
+        const res = await fetch('/api/keywords');
+        const data = await res.json();
+        // Update targets without flicker
+        for (const t of data.targets) {
+          const existing = this.targets.find(e => e.pairId === t.pairId);
+          if (existing) {
+            Object.assign(existing, t);
+          }
+        }
+        // Detect newly running jobs from scheduler
+        for (const t of data.targets) {
+          if (t.lastJobStatus === 'running' && t.lastJobId && !this._runningJobs[t.pairId]) {
+            this.startJobMonitor(t.pairId, t.lastJobId);
+          }
+        }
+      } catch { /* silent */ }
+    },
+
+    _startGlobalSSE() {
+      if (this._globalSSE) return;
+      this._globalSSE = new EventSource('/api/global/stream');
+      this._globalSSE.addEventListener('scraping_started', (e) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.pairId && d.jobId && !this._runningJobs[d.pairId]) {
+            this.startJobMonitor(d.pairId, d.jobId);
+          }
+        } catch {}
+      });
+      this._globalSSE.addEventListener('scraping_completed', () => {
+        this._silentRefresh();
+      });
     },
 
     async addKeyword() {
@@ -840,6 +884,8 @@ function campaignsPage() {
     campaignSearch: '',
     campaignPage: 0,
     campaignsPerPage: 20,
+    _cookieSSE: null,
+    _refreshTimer: null,
     get filteredCampaigns() {
       if (!this.campaignSearch) return this.campaigns;
       const q = this.campaignSearch.toLowerCase();
@@ -895,9 +941,25 @@ function campaignsPage() {
       });
       this.loading = false;
 
-      // Auto-refresh every 10s if any campaign is active
-      if (!this._refreshInterval && this.campaigns.some(c => c.status === 'active')) {
-        this._refreshInterval = setInterval(() => this.refreshStats(), 10000);
+      // Auto-refresh every 10s for active campaigns or every 30s otherwise
+      if (!this._refreshInterval) {
+        const interval = this.campaigns.some(c => c.status === 'active') ? 10000 : 30000;
+        this._refreshInterval = setInterval(() => this.refreshStats(), interval);
+      }
+      // Subscribe to cookie-health SSE for real-time cookie status
+      if (!this._cookieSSE) {
+        this._cookieSSE = new EventSource('/api/cookie-health/stream');
+        this._cookieSSE.addEventListener('status_change', (e) => {
+          try {
+            const d = JSON.parse(e.data);
+            // Update matching campaigns' cookie status
+            for (const c of this.campaigns) {
+              if (c.sender_username === d.username && c.platform === d.platform) {
+                c.cookie_status = d.status;
+              }
+            }
+          } catch {}
+        });
       }
     },
 
@@ -971,13 +1033,27 @@ function campaignsPage() {
       this.load();
     },
 
-    openEditModal(campaign) {
+    async openEditModal(campaign) {
       this.editCampaign = {
         ...campaign,
         target_country: (campaign.target_country || '').toUpperCase(),
         target_tiers_input: campaign.target_tiers ? JSON.parse(campaign.target_tiers).join(',') : '',
+        _cookieJson: '',
+        _cookieLoading: false,
       };
       this.showEditModal = true;
+      // Load current cookie JSON if available
+      if (campaign.sender_username) {
+        this.editCampaign._cookieLoading = true;
+        try {
+          const res = await fetch(`/api/campaigns/${campaign.id}/cookie-json`);
+          const data = await res.json();
+          if (data.cookieJson) {
+            this.editCampaign._cookieJson = data.cookieJson;
+          }
+        } catch {}
+        this.editCampaign._cookieLoading = false;
+      }
     },
 
     async saveCampaignEdit() {
@@ -1009,6 +1085,20 @@ function campaignsPage() {
       });
       const data = await res.json();
       if (data.error) { alert('오류: ' + data.error); return; }
+      // If cookie JSON was modified, also update cookies
+      if (this.editCampaign._cookieJson && this.editCampaign.sender_username) {
+        try {
+          JSON.parse(this.editCampaign._cookieJson);
+          await fetch(`/api/campaigns/${this.editCampaign.id}/upload-cookies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cookies: this.editCampaign._cookieJson,
+              senderUsername: (this.editCampaign.sender_username || '').replace(/^@/, ''),
+            }),
+          });
+        } catch { /* ignore invalid JSON */ }
+      }
       this.showEditModal = false;
       this.load();
     },

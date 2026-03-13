@@ -811,6 +811,24 @@
               <option value="completed">Completed</option>
             </select>
           </div>
+          <!-- Cookie Section in Edit Modal -->
+          <div class="col-span-2 mt-2 pt-3 border-t border-dark-border/50">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs text-kaia-muted font-medium">발송 쿠키 (JSON)</label>
+              <div class="flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full"
+                      :class="editCampaign?.cookie_status === 'valid' ? 'bg-success' : editCampaign?.cookie_status === 'expired' ? 'bg-error' : 'bg-kaia-muted'"></span>
+                <span class="text-[10px]"
+                      :class="editCampaign?.cookie_status === 'valid' ? 'text-success' : editCampaign?.cookie_status === 'expired' ? 'text-error' : 'text-kaia-muted'"
+                      x-text="editCampaign?.cookie_status === 'valid' ? '유효함' : editCampaign?.cookie_status === 'expired' ? '만료됨' : '미등록'"></span>
+              </div>
+            </div>
+            <div x-show="editCampaign?._cookieLoading" class="text-xs text-kaia-muted animate-pulse py-2">쿠키 로딩 중...</div>
+            <textarea x-show="!editCampaign?._cookieLoading" x-model="editCampaign._cookieJson" rows="5"
+                      placeholder='[{"name":"sessionid","value":"...","domain":".instagram.com"}]'
+                      class="w-full rounded-lg border px-3 py-1.5 text-xs font-mono"></textarea>
+            <p class="text-[10px] text-kaia-muted/50 mt-1">EditThisCookie에서 추출한 JSON을 붙여넣으세요. 비워두면 기존 쿠키가 유지됩니다.</p>
+          </div>
         </div>
         <div class="flex justify-end gap-2 mt-4">
           <button @click="showEditModal = false" class="px-4 py-2 text-sm text-kaia-text hover:text-white">취소</button>
