@@ -803,7 +803,7 @@ function keywordsPage() {
 
     async runNow(target) {
       try {
-        const res = await fetch(`/api/keywords/${target.pairId}/run`, { method: 'POST' });
+        const res = await fetch(`/api/keywords/${encodeURIComponent(target.pairId)}/run`, { method: 'POST' });
         const data = await res.json();
         if (data.error) {
           alert(data.error);
