@@ -40,8 +40,9 @@ export class YouTubeScraper implements PlatformScraper {
     const since = options.since || null;
     let yielded = 0;
     let consecutiveOld = 0;
+    let interceptedCount = 0;
 
-    logger.info(`[YouTube] Searching: #${cleanTag}`, { maxResults });
+    logger.info(`[YouTube] Searching: ${cleanTag}`, { maxResults });
 
     try {
       await this.browser.launch({ headless: true });
@@ -56,13 +57,21 @@ export class YouTubeScraper implements PlatformScraper {
         blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/youtubei/v1/search') || url.includes('/results')) {
+            interceptedCount++;
+            const before = collectedPosts.length;
             this.extractVideos(body, collectedPosts);
+            const extracted = collectedPosts.length - before;
+            if (extracted > 0) {
+              logger.info(`[YouTube] Intercepted ${extracted} videos from: ${url.split('?')[0].slice(-60)}`);
+            }
           }
         },
       });
 
-      // Accept cookies dialog handling
-      await page.goto(`https://www.youtube.com/results?search_query=%23${encodeURIComponent(cleanTag)}`, {
+      // Navigate to YouTube keyword search (NOT hashtag search)
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanTag)}`;
+      logger.info(`[YouTube] Search URL: ${searchUrl}`);
+      await page.goto(searchUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
@@ -132,7 +141,7 @@ export class YouTubeScraper implements PlatformScraper {
       await this.browser.closeAll();
     }
 
-    logger.info(`[YouTube] Search complete. Total: ${yielded} videos`);
+    logger.info(`[YouTube] Search complete. Total: ${yielded} videos (intercepted ${interceptedCount} API responses)`);
   }
 
   async getProfile(channelHandle: string, options?: ScrapingOptions): Promise<InfluencerProfile> {

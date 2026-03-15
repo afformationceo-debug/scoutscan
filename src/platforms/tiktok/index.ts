@@ -41,8 +41,9 @@ export class TikTokScraper implements PlatformScraper {
     const since = options.since || null;
     let yielded = 0;
     let consecutiveOld = 0;
+    let interceptedCount = 0;
 
-    logger.info(`[TikTok] Searching: #${cleanTag}`, { maxResults });
+    logger.info(`[TikTok] Searching: ${cleanTag}`, { maxResults });
 
     try {
       await this.browser.launch({ headless: true });
@@ -63,14 +64,22 @@ export class TikTokScraper implements PlatformScraper {
       const page = await this.browser.createPage(sessionId, {
         blockFonts: true,
         interceptResponses: (url, body) => {
-          if (url.includes('/api/search') || url.includes('/api/challenge') || url.includes('/api/post')) {
+          if (url.includes('/api/search') || url.includes('/api/challenge') || url.includes('/api/post') || url.includes('/api/recommend') || url.includes('search/item')) {
+            interceptedCount++;
+            const before = collectedPosts.length;
             this.extractVideos(body, collectedPosts);
+            const extracted = collectedPosts.length - before;
+            if (extracted > 0) {
+              logger.info(`[TikTok] Intercepted ${extracted} videos from: ${url.split('?')[0].slice(-60)}`);
+            }
           }
         },
       });
 
-      // Navigate to TikTok hashtag page
-      await page.goto(`https://www.tiktok.com/tag/${encodeURIComponent(cleanTag)}`, {
+      // Navigate to TikTok keyword search (NOT hashtag-only /tag/ URL)
+      const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(cleanTag)}`;
+      logger.info(`[TikTok] Search URL: ${searchUrl}`);
+      await page.goto(searchUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 45000,
       });
@@ -82,6 +91,8 @@ export class TikTokScraper implements PlatformScraper {
       for (const post of embedded) {
         collectedPosts.push(post);
       }
+
+      logger.info(`[TikTok] Page loaded. Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos`);
 
       // Yield initial
       while (collectedPosts.length > 0 && yielded < maxResults) {
@@ -133,7 +144,7 @@ export class TikTokScraper implements PlatformScraper {
       await this.browser.closeAll();
     }
 
-    logger.info(`[TikTok] Search complete. Total: ${yielded} videos`);
+    logger.info(`[TikTok] Search complete. Total: ${yielded} videos (intercepted ${interceptedCount} API responses)`);
   }
 
   async getProfile(username: string, options?: ScrapingOptions): Promise<InfluencerProfile> {
