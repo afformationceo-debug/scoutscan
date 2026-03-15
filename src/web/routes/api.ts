@@ -941,4 +941,164 @@ api.get('/dashboard/activity', (c) => {
   }
 });
 
+// ─── Debug: Scrape Test ───
+
+api.post('/debug/scrape-test/:platform', async (c) => {
+  const platform = c.req.param('platform') as Platform;
+  if (!VALID_PLATFORMS.includes(platform)) {
+    return c.json({ error: 'Invalid platform' }, 400);
+  }
+
+  const diag: Record<string, any> = {
+    platform,
+    startedAt: new Date().toISOString(),
+    steps: [] as string[],
+  };
+
+  try {
+    // Step 1: Check cookies in DB
+    const cm = new CookieManager();
+    const hasCookies = cm.hasCookies(platform);
+    diag.hasCookies = hasCookies;
+    diag.steps.push(`hasCookies(${platform}) = ${hasCookies}`);
+
+    if (hasCookies) {
+      const cookies = cm.loadCookies(platform);
+      diag.cookieCount = cookies.length;
+      diag.cookieNames = cookies.map(c => c.name);
+      diag.steps.push(`Loaded ${cookies.length} cookies: ${cookies.map(c => c.name).join(', ')}`);
+
+      // Check critical cookies
+      const critical = cm.getCriticalCookieNames(platform);
+      const cookieNameSet = new Set(cookies.map(c => c.name));
+      const missing = critical.filter(n => !cookieNameSet.has(n));
+      diag.criticalCookies = critical;
+      diag.missingCritical = missing;
+      diag.steps.push(`Critical cookies: ${critical.join(', ')} — missing: ${missing.length > 0 ? missing.join(', ') : 'none'}`);
+
+      // Check expiration
+      const now = Math.floor(Date.now() / 1000);
+      const expired = cookies.filter(c => c.expires && c.expires < now);
+      diag.expiredCookies = expired.map(c => ({ name: c.name, expires: new Date((c.expires || 0) * 1000).toISOString() }));
+      if (expired.length > 0) {
+        diag.steps.push(`WARNING: ${expired.length} cookies expired: ${expired.map(c => c.name).join(', ')}`);
+      }
+    } else {
+      diag.steps.push(`No cookies found for ${platform} — scraping will likely fail (login required)`);
+    }
+
+    // Step 2: Test Playwright browser launch
+    const { StealthBrowser } = await import('../../core/anti-detection/index.js');
+    const { ProxyRouter } = await import('../../core/proxy.js');
+    const { randomUUID } = await import('crypto');
+
+    const proxyRouter = new ProxyRouter();
+    const browser = new StealthBrowser(proxyRouter);
+
+    diag.steps.push('Launching Playwright browser...');
+    const launchStart = Date.now();
+    await browser.launch({ headless: true });
+    diag.browserLaunchMs = Date.now() - launchStart;
+    diag.steps.push(`Browser launched in ${diag.browserLaunchMs}ms`);
+
+    const sessionId = randomUUID();
+    await browser.createStealthContext(sessionId, { region: 'US' });
+
+    // Set cookies
+    if (hasCookies) {
+      const cookies = cm.loadCookies(platform);
+      await browser.setCookies(sessionId, cm.toPlaywrightCookies(cookies));
+      diag.steps.push(`Set ${cookies.length} cookies on browser context`);
+    }
+
+    const page = await browser.createPage(sessionId, {});
+
+    // Step 3: Navigate to platform homepage
+    const urls: Record<string, string> = {
+      instagram: 'https://www.instagram.com/',
+      twitter: 'https://x.com/home',
+      tiktok: 'https://www.tiktok.com/',
+      youtube: 'https://www.youtube.com/',
+      xiaohongshu: 'https://www.xiaohongshu.com/',
+      linkedin: 'https://www.linkedin.com/',
+    };
+
+    const testUrl = urls[platform] || `https://www.${platform}.com/`;
+    diag.steps.push(`Navigating to ${testUrl}...`);
+    const navStart = Date.now();
+    await page.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    diag.navigationMs = Date.now() - navStart;
+
+    // Wait a bit for redirects
+    await new Promise(r => setTimeout(r, 3000));
+
+    const finalUrl = page.url();
+    const pageTitle = await page.title();
+    diag.finalUrl = finalUrl;
+    diag.pageTitle = pageTitle;
+    diag.steps.push(`Page loaded: ${finalUrl} — title: "${pageTitle}" (${diag.navigationMs}ms)`);
+
+    // Check for login redirect
+    const loginIndicators = ['/login', '/accounts/login', '/i/flow/login', 'signin', '/challenge'];
+    const isLoginRedirect = loginIndicators.some(ind => finalUrl.includes(ind));
+    diag.isLoginRedirect = isLoginRedirect;
+    if (isLoginRedirect) {
+      diag.steps.push(`REDIRECT TO LOGIN DETECTED — cookies are expired or invalid!`);
+    } else {
+      diag.steps.push(`No login redirect — session appears valid`);
+    }
+
+    // Step 4: Try a quick search if logged in
+    if (!isLoginRedirect) {
+      const searchUrls: Record<string, string> = {
+        instagram: 'https://www.instagram.com/popular/kbeauty/',
+        twitter: 'https://x.com/search?q=test&src=typed_query&f=live',
+        tiktok: 'https://www.tiktok.com/search?q=test',
+        youtube: 'https://www.youtube.com/results?search_query=test',
+        xiaohongshu: 'https://www.xiaohongshu.com/search_result?keyword=test',
+        linkedin: 'https://www.linkedin.com/search/results/all/?keywords=test',
+      };
+
+      const searchUrl = searchUrls[platform];
+      if (searchUrl) {
+        diag.steps.push(`Testing search: ${searchUrl}...`);
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await new Promise(r => setTimeout(r, 5000));
+
+        const searchFinalUrl = page.url();
+        const searchTitle = await page.title();
+        diag.searchFinalUrl = searchFinalUrl;
+        diag.searchTitle = searchTitle;
+        diag.steps.push(`Search page: ${searchFinalUrl} — title: "${searchTitle}"`);
+
+        // Check if search page also redirected to login
+        const searchLoginRedirect = loginIndicators.some(ind => searchFinalUrl.includes(ind));
+        diag.searchLoginRedirect = searchLoginRedirect;
+        if (searchLoginRedirect) {
+          diag.steps.push(`Search page also redirected to login!`);
+        }
+
+        // Check page content for results
+        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
+        diag.bodyTextPreview = bodyText.slice(0, 300);
+        diag.steps.push(`Body text preview: "${bodyText.slice(0, 150)}..."`);
+      }
+    }
+
+    await browser.closeContext(sessionId);
+    await browser.closeAll();
+
+    diag.completedAt = new Date().toISOString();
+    diag.totalMs = Date.now() - new Date(diag.startedAt).getTime();
+    diag.steps.push(`Test completed in ${diag.totalMs}ms`);
+
+    return c.json(diag);
+  } catch (err) {
+    diag.error = (err as Error).message;
+    diag.stack = (err as Error).stack?.split('\n').slice(0, 5);
+    diag.steps.push(`ERROR: ${(err as Error).message}`);
+    return c.json(diag, 500);
+  }
+});
+
 export { api };
