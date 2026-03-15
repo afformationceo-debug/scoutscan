@@ -1145,6 +1145,28 @@ api.post('/debug/scrape-test/:platform', async (c) => {
   }
 });
 
+// Debug endpoint: run ACTUAL TwitterScraper.searchByHashtag
+api.post('/debug/twitter-real-test', async (c) => {
+  try {
+    const { TwitterScraper } = await import('../../platforms/twitter/index.js');
+    const scraper = new TwitterScraper();
+    const posts: any[] = [];
+    const startTime = Date.now();
+
+    for await (const post of scraper.searchByHashtag('韓国美容', { maxResults: 20 })) {
+      posts.push({ id: post.id, caption: post.caption?.slice(0, 80), username: post.owner?.username, likes: post.likesCount });
+    }
+
+    return c.json({
+      postCount: posts.length,
+      durationMs: Date.now() - startTime,
+      posts: posts.slice(0, 10),
+    });
+  } catch (err) {
+    return c.json({ error: (err as Error).message, stack: (err as Error).stack?.split('\n').slice(0, 5) }, 500);
+  }
+});
+
 // Debug endpoint: run Twitter scraper's exact DOM extraction logic
 api.post('/debug/twitter-dom-test', async (c) => {
   const diag: Record<string, any> = { steps: [] as string[] };
