@@ -54,7 +54,6 @@ export class YouTubeScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       const page = await this.browser.createPage(sessionId, {
-        blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/youtubei/v1/search') || url.includes('/results')) {
             interceptedCount++;

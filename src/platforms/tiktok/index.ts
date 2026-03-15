@@ -62,7 +62,6 @@ export class TikTokScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
-        blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/api/search') || url.includes('/api/challenge') || url.includes('/api/post') || url.includes('/api/recommend') || url.includes('search/item')) {
             interceptedCount++;

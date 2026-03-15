@@ -95,8 +95,6 @@ export class InstagramScraper implements PlatformScraper {
         }
 
         const page = await this.browser.createPage(sessionId, {
-          blockMedia: true,
-          blockFonts: true,
           interceptResponses: (url, body) => {
             this.extractPostsFromResponse(url, body, collectedPosts);
           },
@@ -551,7 +549,6 @@ export class InstagramScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
-        blockMedia: true,
         interceptResponses: (url, body) => {
           if (url.includes('web_profile_info') || url.includes('/graphql/query')) {
             try {
