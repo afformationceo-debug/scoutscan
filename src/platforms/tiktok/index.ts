@@ -86,13 +86,22 @@ export class TikTokScraper implements PlatformScraper {
 
       await randomDelay(5000, 8000);
 
+      // Check for login/captcha redirect
+      const currentUrl = page.url();
+      const pageTitle = await page.title().catch(() => 'unknown');
+      logger.info(`[TikTok] Page loaded. URL: ${currentUrl}, Title: "${pageTitle}"`);
+
+      if (currentUrl.includes('/login') || currentUrl.includes('captcha')) {
+        logger.error(`[TikTok] Redirected to login/captcha — cookies may be invalid. URL: ${currentUrl}`);
+      }
+
       // Try to extract from page embedded data
       const embedded = await this.extractEmbeddedData(page, cleanTag);
       for (const post of embedded) {
         collectedPosts.push(post);
       }
 
-      logger.info(`[TikTok] Page loaded. Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos`);
+      logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embedded.length})`);
 
       // Yield initial
       while (collectedPosts.length > 0 && yielded < maxResults) {

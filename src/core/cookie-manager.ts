@@ -269,16 +269,40 @@ export class CookieManager {
     return critical[platform] || [];
   }
 
+  /** Normalize domain for platform (e.g., twitter.com → x.com) */
+  private normalizeDomain(platform: string, domain: string): string {
+    // Twitter rebranded to x.com — cookies from .twitter.com must be mapped to .x.com
+    if (platform === 'twitter') {
+      if (domain.includes('twitter.com')) {
+        return domain.replace('twitter.com', 'x.com');
+      }
+      if (!domain.includes('x.com')) {
+        return '.x.com';
+      }
+    }
+    return domain;
+  }
+
   /** Parse cookie JSON string into CookieEntry array */
   parseCookieJson(platform: string, cookieJson: string): CookieEntry[] {
     try {
       const parsed = JSON.parse(cookieJson);
 
+      const domainMap: Record<string, string> = {
+        instagram: '.instagram.com',
+        twitter: '.x.com',
+        tiktok: '.tiktok.com',
+        youtube: '.youtube.com',
+        xiaohongshu: '.xiaohongshu.com',
+        linkedin: '.linkedin.com',
+      };
+      const defaultDomain = domainMap[platform] || `.${platform}.com`;
+
       if (Array.isArray(parsed)) {
         return parsed.map(c => ({
           name: c.name,
           value: c.value,
-          domain: c.domain || `.${platform}.com`,
+          domain: this.normalizeDomain(platform, c.domain || defaultDomain),
           path: c.path || '/',
           expires: c.expirationDate ? Math.floor(c.expirationDate) : c.expires,
           httpOnly: c.httpOnly || false,
@@ -288,18 +312,10 @@ export class CookieManager {
       }
 
       if (typeof parsed === 'object') {
-        const domainMap: Record<string, string> = {
-          instagram: '.instagram.com',
-          twitter: '.x.com',
-          tiktok: '.tiktok.com',
-          youtube: '.youtube.com',
-          xiaohongshu: '.xiaohongshu.com',
-          linkedin: '.linkedin.com',
-        };
         return Object.entries(parsed).map(([name, value]) => ({
           name,
           value: String(value),
-          domain: domainMap[platform] || `.${platform}.com`,
+          domain: defaultDomain,
           path: '/',
           secure: true,
           sameSite: 'None' as const,

@@ -118,6 +118,18 @@ export class InstagramScraper implements PlatformScraper {
           await randomDelay(1000, 2000);
         } catch {}
 
+        // Check if homepage redirected to login
+        const homeUrl = page.url();
+        if (homeUrl.includes('/accounts/login') || homeUrl.includes('/challenge')) {
+          logger.error(`[Instagram] Redirected to login from homepage — cookies expired or invalid. URL: ${homeUrl}`);
+          await this.browser.closeContext(sessionId);
+          if (attempt === maxBrowserRetries) {
+            logger.info(`[Instagram] All attempts failed due to login redirect, trying API fallback...`);
+            yield* this.searchByHashtagAPI(cleanTag, maxResults);
+          }
+          continue;
+        }
+
         // Navigate directly to /popular/ URL (Instagram redirects /explore/tags/ here anyway)
         const popularUrl = `https://www.instagram.com/popular/${encodeURIComponent(cleanTag)}/`;
         logger.info(`[Instagram] Loading: ${popularUrl}`);
@@ -137,6 +149,28 @@ export class InstagramScraper implements PlatformScraper {
 
         const finalUrl = page.url();
         logger.info(`[Instagram] Page loaded: ${finalUrl}`);
+
+        // Check if search page redirected to login
+        if (finalUrl.includes('/accounts/login') || finalUrl.includes('/challenge')) {
+          logger.error(`[Instagram] Search page redirected to login — cookies expired. URL: ${finalUrl}`);
+          await this.browser.closeContext(sessionId);
+          if (attempt === maxBrowserRetries) {
+            yield* this.searchByHashtagAPI(cleanTag, maxResults);
+          }
+          continue;
+        }
+
+        // If /popular/ yielded no intercepted data, try alternative URLs
+        if (collectedPosts.length === 0 && !finalUrl.includes('/popular/')) {
+          logger.info(`[Instagram] /popular/ URL redirected, trying /explore/tags/...`);
+          await page.goto(`https://www.instagram.com/explore/tags/${encodeURIComponent(cleanTag)}/`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000,
+          });
+          await randomDelay(4000, 6000);
+          const altUrl = page.url();
+          logger.info(`[Instagram] Explore tags URL: ${altUrl}`);
+        }
 
         const pageData = await this.extractEmbeddedData(page);
         if (pageData.length > 0) {

@@ -78,10 +78,18 @@ export class YouTubeScraper implements PlatformScraper {
 
       await randomDelay(4000, 6000);
 
+      // Log page info for debugging
+      const currentUrl = page.url();
+      const pageTitle = await page.title().catch(() => 'unknown');
+      logger.info(`[YouTube] Page loaded. URL: ${currentUrl}, Title: "${pageTitle}"`);
+
       // Try to dismiss consent dialog
       try {
         const consentBtn = await page.$('button[aria-label*="Accept"], tp-yt-paper-button.ytd-consent-bump-v2-lightbox');
-        if (consentBtn) await consentBtn.click();
+        if (consentBtn) {
+          await consentBtn.click();
+          logger.info(`[YouTube] Dismissed consent dialog`);
+        }
         await randomDelay(1000, 2000);
       } catch {}
 
