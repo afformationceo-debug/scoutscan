@@ -206,6 +206,18 @@ api.get('/platforms', (c) => {
   return c.json({ platforms });
 });
 
+// Get scraping cookies for a platform (returns stored JSON)
+api.get('/platforms/:platform/cookies', (c) => {
+  const platform = c.req.param('platform');
+  try {
+    const row = db.prepare('SELECT cookie_json, cookie_count, updated_at FROM scraping_cookies WHERE platform = ?').get(platform) as any;
+    if (!row) return c.json({ platform, cookies: null, cookieCount: 0 });
+    return c.json({ platform, cookies: row.cookie_json, cookieCount: row.cookie_count, updatedAt: row.updated_at });
+  } catch {
+    return c.json({ platform, cookies: null, cookieCount: 0 });
+  }
+});
+
 // Upload scraping cookies (platform-level, separate from DM account cookies)
 api.post('/platforms/:platform/cookies', async (c) => {
   const platform = c.req.param('platform');

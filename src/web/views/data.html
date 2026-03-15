@@ -168,17 +168,18 @@
         <div x-show="!loading && profiles.length === 0" class="text-center py-12 text-kaia-muted">프로필이 없습니다.</div>
 
         <!-- Column Headers -->
-        <div x-show="!loading && profiles.length > 0" class="grid grid-cols-[24px_44px_1fr_80px_56px_40px_40px_52px_52px_56px_80px] gap-0 items-center border-b border-dark-border px-1" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
+        <div x-show="!loading && profiles.length > 0" class="grid grid-cols-[24px_44px_minmax(120px,1.2fr)_minmax(100px,0.8fr)_72px_52px_36px_36px_44px_44px_48px_72px] gap-0 items-center border-b border-dark-border px-1" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
           <div class="py-2.5"></div>
           <div class="py-2.5 px-1">플랫폼</div>
           <div class="py-2.5 px-1">유저명</div>
+          <div class="py-2.5 px-1 truncate">바이오</div>
           <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='followers'; load()">팔로워</div>
           <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='engagement'; load()">참여율</div>
           <div class="py-2.5 text-center">등급</div>
           <div class="py-2.5 text-center cursor-pointer hover:text-[#BFF009]" @click="sortBy='country'; load()">국가</div>
           <div class="py-2.5 text-center">AI</div>
           <div class="py-2.5 text-center">DM</div>
-          <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='posts'; load()">게시물</div>
+          <div class="py-2.5 text-center" title="이메일/링크">연락</div>
           <div class="py-2.5 px-1 cursor-pointer hover:text-[#BFF009]" @click="sortBy='added'; load()">추가일</div>
         </div>
 
@@ -187,7 +188,7 @@
           <div>
             <!-- Main row: compact single-line -->
             <div @click="p._expanded = !p._expanded"
-                 class="grid grid-cols-[24px_44px_1fr_80px_56px_40px_40px_52px_52px_56px_80px] gap-0 items-center px-1 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
+                 class="grid grid-cols-[24px_44px_minmax(120px,1.2fr)_minmax(100px,0.8fr)_72px_52px_36px_36px_44px_44px_48px_72px] gap-0 items-center px-1 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
                  style="font-size:12px;">
               <div class="py-1.5 text-center">
                 <svg :class="p._expanded ? 'rotate-90' : ''" class="w-3 h-3 text-[#919DB5] transition-transform inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
@@ -196,10 +197,12 @@
                 <span class="badge text-[9px] px-1.5" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform.slice(0,2).toUpperCase()"></span>
               </div>
               <div class="py-1.5 px-1 truncate overflow-hidden min-w-0">
-                <span class="text-[#BFF009] font-medium text-[11px]" x-text="'@' + (p.username.length > 20 ? p.username.slice(0,20) + '..' : p.username)"></span>
+                <a :href="p.platform === 'instagram' ? 'https://instagram.com/' + p.username : p.platform === 'twitter' ? 'https://x.com/' + p.username : p.platform === 'tiktok' ? 'https://tiktok.com/@' + p.username : p.platform === 'youtube' ? 'https://youtube.com/@' + p.username : '#'"
+                   target="_blank" @click.stop class="text-[#BFF009] font-medium text-[11px] hover:underline" x-text="'@' + (p.username.length > 18 ? p.username.slice(0,18) + '..' : p.username)"></a>
                 <span x-show="p.is_verified" class="text-[#BFF009] text-[8px]">&#10003;</span>
-                <span x-show="p.full_name && p.full_name !== 'None' && p.full_name.length <= 12" class="text-[#919DB5] text-[10px] ml-1" x-text="p.full_name"></span>
+                <span x-show="p.full_name && p.full_name !== 'None' && p.full_name.length <= 10" class="text-[#919DB5] text-[10px] ml-1" x-text="p.full_name"></span>
               </div>
+              <div class="py-1.5 px-1 truncate overflow-hidden min-w-0 text-[10px] text-[#666]" x-text="p.bio ? p.bio.replace(/\n/g,' ').substring(0,40) : ''"></div>
               <div class="py-1.5 px-1 text-right text-white text-[11px]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.followers_count)"></div>
               <div class="py-1.5 px-1 text-right text-[11px]" style="font-family:'IBM Plex Mono',monospace">
                 <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(1) + '%' : '-'"
@@ -220,7 +223,13 @@
               <div class="py-1.5 text-center">
                 <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full" :class="p.dm_status === 'sent' ? 'bg-[#4CE275]/12 text-[#4CE275]' : p.dm_status === 'replied' ? 'bg-[#60A5FA]/12 text-[#60A5FA]' : p.dm_status === 'blacklist' ? 'bg-[#E85B56]/12 text-[#E85B56]' : 'text-[#919DB5]'" x-text="p.dm_status === 'pending' ? '-' : p.dm_status"></span>
               </div>
-              <div class="py-1.5 px-1 text-right text-[11px] text-[#919DB5]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.posts_count)"></div>
+              <div class="py-1.5 text-center flex items-center justify-center gap-1">
+                <span x-show="p.contact_email" class="text-[#BFF009] text-[10px]" title="이메일 있음">@</span>
+                <a x-show="p.external_url" :href="p.external_url" target="_blank" @click.stop class="text-[#60A5FA] text-[10px] hover:text-white" title="외부 링크">
+                  <svg class="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                </a>
+                <span x-show="!p.contact_email && !p.external_url" class="text-[#2E2E2E] text-[10px]">-</span>
+              </div>
               <div class="py-1.5 px-1 text-[10px] text-[#919DB5] whitespace-nowrap" x-text="formatDateShort(p.first_seen_at)"></div>
             </div>
 

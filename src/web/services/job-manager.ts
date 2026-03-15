@@ -23,6 +23,14 @@ class JobManager extends EventEmitter {
   private sseClients: SSEClient[] = [];
   private geoClassifier = new GeoClassifier();
 
+  /** Load active proxy URLs from DB */
+  private getProxyUrls(): string[] {
+    try {
+      const rows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+      return rows.map((r: any) => r.url).filter(Boolean);
+    } catch { return []; }
+  }
+
   /** Run GeoClassifier on a profile and persist result */
   private geoClassify(profile: InfluencerProfile): void {
     try {
@@ -143,7 +151,7 @@ class JobManager extends EventEmitter {
     // Broadcast global scraping_started notification
     sseManager.broadcast('global', 'scraping_started', { jobId, platform, keyword: hashtag, pairId });
 
-    const engine = new ScrapingEngine({ platforms: [platform] });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
     let count = 0;
     let latestPostTimestamp = '';
     const collectedPosts: Post[] = [];
@@ -382,7 +390,7 @@ class JobManager extends EventEmitter {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
-    const engine = new ScrapingEngine({ platforms: [platform] });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
 
     try {
       const profile = await engine.getProfile(platform, username);
@@ -404,7 +412,7 @@ class JobManager extends EventEmitter {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
-    const engine = new ScrapingEngine({ platforms: [platform] });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
     let profilesCount = 0;
 
     try {

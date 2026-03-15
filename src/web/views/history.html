@@ -1,5 +1,5 @@
 <!-- History Page -->
-<div x-data="historyPage()" x-init="load()">
+<div x-data="historyPage()" x-init="load(); $nextTick(() => initSSE())" @destroy="destroySSE()">
   <!-- Header + Quick Stats -->
   <div class="flex items-center justify-between mb-6">
     <h2 class="text-2xl font-heading font-bold text-white">스크래핑 이력</h2>

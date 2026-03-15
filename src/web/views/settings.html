@@ -36,16 +36,17 @@
 
           <!-- Cookie Upload Toggle -->
           <div class="mt-3 pt-3 border-t border-dark-border/30">
-            <button @click="p._showUpload = !p._showUpload" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
+            <button @click="p._showUpload = !p._showUpload; if(p._showUpload && p.hasCookies && !p._cookieLoaded) { loadExistingCookie(p); }" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
               <svg :class="p._showUpload ? 'rotate-90' : ''" class="w-3 h-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
               <span x-text="p.hasCookies ? '쿠키 교체' : '쿠키 등록'"></span>
             </button>
             <div x-show="p._showUpload" x-transition class="mt-2">
+              <div x-show="p._cookieLoading" class="text-[11px] text-accent animate-pulse mb-2">기존 쿠키 불러오는 중...</div>
               <textarea x-model="p._cookieInput" rows="4"
                         :placeholder="'[{&quot;name&quot;:&quot;sessionid&quot;,&quot;value&quot;:&quot;...&quot;,&quot;domain&quot;:&quot;.' + p.platform + '.com&quot;}]'"
                         class="w-full rounded-lg border px-3 py-2 text-xs font-mono"></textarea>
               <div class="flex items-center justify-between mt-2">
-                <p class="text-[10px] text-kaia-muted/50">EditThisCookie에서 추출한 JSON 붙여넣기</p>
+                <p class="text-[10px] text-kaia-muted/50">EditThisCookie에서 추출한 JSON 붙여넣기 <span x-show="p._cookieLoaded" class="text-success">(기존 값 로드됨)</span></p>
                 <button @click="uploadPlatformCookie(p)" class="btn-accent px-3 py-1 rounded-lg text-[11px]">저장</button>
               </div>
               <div x-show="p._uploadResult" class="mt-2 text-[11px] p-2 rounded-lg"
@@ -179,16 +180,31 @@
       </template>
     </div>
 
-    <!-- Platform Proxy Recommendation -->
-    <div class="mt-4 p-3 rounded-lg bg-accent/5 border border-accent/20">
-      <p class="text-[11px] text-accent font-medium mb-1">플랫폼별 프록시 권장사항</p>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-kaia-text">
-        <div>TikTok → <span class="text-[#FF9800]">Mobile</span> / Residential</div>
-        <div>Instagram → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
-        <div>Twitter/X → <span class="text-[#4CE275]">Residential</span> / ISP</div>
-        <div>YouTube → <span class="text-[#666]">Datacenter</span> / Residential</div>
-        <div>LinkedIn → <span class="text-[#4CE275]">Residential</span> / ISP</div>
-        <div>Xiaohongshu → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
+    <!-- Proxy Guide -->
+    <div class="mt-4 space-y-3">
+      <div class="p-3 rounded-lg bg-accent/5 border border-accent/20">
+        <p class="text-[11px] text-accent font-medium mb-2">프록시란?</p>
+        <p class="text-[10px] text-kaia-text leading-relaxed">프록시는 스크래핑 시 서버 IP 대신 다른 IP를 사용하여 플랫폼 차단을 우회합니다. <strong class="text-white">Railway/서버 환경에서는 프록시 없이 TikTok, Instagram 스크래핑이 차단됩니다.</strong> 프록시 추가 후 자동으로 모든 스크래핑 작업에 적용됩니다.</p>
+      </div>
+      <div class="p-3 rounded-lg bg-dark-hover/50 border border-dark-border">
+        <p class="text-[11px] text-white font-medium mb-2">프록시 유형 설명</p>
+        <div class="space-y-1.5 text-[10px] text-kaia-text">
+          <div><span class="text-[#4CE275] font-medium">Residential</span> — 실제 가정용 IP. 가장 안전. Bright Data, Smartproxy 등에서 구매. 월 $10~50</div>
+          <div><span class="text-[#FF9800] font-medium">Mobile</span> — 모바일 통신사 IP. TikTok에 가장 효과적. 가격 높음</div>
+          <div><span class="text-[#2196F3] font-medium">ISP</span> — 인터넷 서비스 제공자 IP. 빠르고 안정적. Twitter/LinkedIn에 적합</div>
+          <div><span class="text-[#999] font-medium">Datacenter</span> — 데이터센터 IP. 가장 저렴하나 차단 위험 높음. YouTube만 가능</div>
+        </div>
+      </div>
+      <div class="p-3 rounded-lg bg-accent/5 border border-accent/20">
+        <p class="text-[11px] text-accent font-medium mb-1">플랫폼별 프록시 권장</p>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-kaia-text">
+          <div>TikTok → <span class="text-[#FF9800] font-bold">Mobile 필수</span></div>
+          <div>Instagram → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
+          <div>Twitter/X → <span class="text-[#4CE275]">Residential</span> / ISP</div>
+          <div>YouTube → 프록시 불필요 (공개 API)</div>
+          <div>LinkedIn → <span class="text-[#4CE275]">Residential</span> / ISP</div>
+          <div>Xiaohongshu → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
+        </div>
       </div>
     </div>
   </div>

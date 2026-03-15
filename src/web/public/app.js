@@ -1752,6 +1752,70 @@ function historyPage() {
       this.load();
     },
 
+    // SSE real-time updates
+    _globalSSE: null,
+    _jobSSEs: {},
+
+    initSSE() {
+      // Global SSE for new jobs and completions
+      this._globalSSE = new EventSource('/api/global/stream');
+      this._globalSSE.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'scraping_started' || msg.type === 'scraping_completed' || msg.type === 'job_completed') {
+            this.load();
+          }
+        } catch {}
+      };
+
+      // Monitor running jobs
+      this._pollInterval = setInterval(() => {
+        const running = this.jobs.filter(j => j.status === 'running');
+        for (const job of running) {
+          if (!this._jobSSEs[job.id]) {
+            this._startJobSSE(job.id);
+          }
+        }
+      }, 5000);
+    },
+
+    _startJobSSE(jobId) {
+      const es = new EventSource(`/api/jobs/${jobId}/stream`);
+      this._jobSSEs[jobId] = es;
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          const job = this.jobs.find(j => j.id === jobId);
+          if (!job) return;
+          if (msg.type === 'progress' || msg.type === 'post') {
+            job.resultCount = msg.data?.count || msg.data?.resultCount || job.resultCount;
+          }
+          if (msg.type === 'status' && msg.data?.status) {
+            job.status = msg.data.status;
+            if (msg.data.status === 'completed' || msg.data.status === 'failed') {
+              job.resultCount = msg.data.resultCount || job.resultCount;
+              job.completedAt = msg.data.completedAt || new Date().toISOString();
+              es.close();
+              delete this._jobSSEs[jobId];
+              // Refresh stats
+              this.stats.completed = this.jobs.filter(j => j.status === 'completed').length;
+              this.stats.running = this.jobs.filter(j => j.status === 'running').length;
+              this.stats.failed = this.jobs.filter(j => j.status === 'failed').length;
+              this.stats.totalResults = this.jobs.reduce((sum, j) => sum + (j.resultCount || 0), 0);
+            }
+          }
+        } catch {}
+      };
+      es.onerror = () => { es.close(); delete this._jobSSEs[jobId]; };
+    },
+
+    destroySSE() {
+      if (this._globalSSE) this._globalSSE.close();
+      if (this._pollInterval) clearInterval(this._pollInterval);
+      for (const es of Object.values(this._jobSSEs)) es.close();
+      this._jobSSEs = {};
+    },
+
     calcDuration(start, end) {
       if (!start || !end) return '-';
       const ms = new Date(end) - new Date(start);
@@ -2013,6 +2077,24 @@ function settingsPage() {
       if (!confirm(`"${proxy.name}" 프록시를 삭제하시겠습니까?`)) return;
       await fetch(`/api/proxies/${proxy.id}`, { method: 'DELETE' });
       this.load();
+    },
+
+    async loadExistingCookie(p) {
+      p._cookieLoading = true;
+      try {
+        const res = await fetch(`/api/platforms/${p.platform}/cookies`);
+        const data = await res.json();
+        if (data.cookies) {
+          try {
+            const parsed = JSON.parse(data.cookies);
+            p._cookieInput = JSON.stringify(parsed, null, 2);
+          } catch {
+            p._cookieInput = data.cookies;
+          }
+          p._cookieLoaded = true;
+        }
+      } catch { /* ignore */ }
+      p._cookieLoading = false;
     },
 
     async uploadPlatformCookie(p) {
