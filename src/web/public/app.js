@@ -583,7 +583,12 @@ function keywordsPage() {
         try {
           const d = JSON.parse(e.data);
           job.status = 'completed';
-          job.phase = `완료 — ${d.postsCount || 0}P, ${d.profilesCount || 0}명 추출`;
+          if (d.cookieWarning && (d.postsCount || 0) === 0) {
+            job.phase = `0건 — 쿠키/프록시 확인 필요`;
+            job.cookieWarning = d.cookieWarning;
+          } else {
+            job.phase = `완료 — ${d.postsCount || 0}P, ${d.profilesCount || 0}명 추출`;
+          }
           job.percent = 100;
           job.completedAt = new Date().toISOString();
           job.sse?.close();
@@ -617,6 +622,13 @@ function keywordsPage() {
 
     getJobProgress(pairId) {
       return this._runningJobs[pairId] || null;
+    },
+
+    getPlatformCookieStatus(platform) {
+      // YouTube doesn't need cookies
+      if (platform === 'youtube') return true;
+      const p = this.platformCookies?.find(c => c.platform === platform);
+      return p?.hasCookies || false;
     },
 
     _getElapsed(pairId) {
@@ -835,14 +847,18 @@ function keywordsPage() {
       if (target.lastJobResult) {
         try {
           const r = JSON.parse(target.lastJobResult);
+          const hasCookieWarning = r.cookieWarning && (r.posts || 0) === 0;
           return {
             status: target.lastJobStatus || 'completed',
             phase: target.lastJobStatus === 'failed'
               ? `오류: ${(r.error || '').substring(0, 50)}`
-              : `완료 — ${r.posts || 0}P, ${r.profiles || 0}명 추출`,
+              : hasCookieWarning
+                ? `0건 — 쿠키/프록시 확인 필요`
+                : `완료 — ${r.posts || 0}P, ${r.profiles || 0}명 추출`,
             percent: target.lastJobStatus === 'completed' ? 100 : 0,
             counts: { posts: r.posts || 0, profiles: r.profiles || 0 },
             completedAt: r.completedAt || r.failedAt,
+            cookieWarning: r.cookieWarning || null,
           };
         } catch { return null; }
       }
@@ -2188,7 +2204,11 @@ function liveDashboard() {
 
       this._sse.addEventListener('scraping_completed', (e) => {
         const d = JSON.parse(e.data);
-        this.activities.unshift({ type: 'scraping_completed', message: `스크래핑 완료: ${d.postsCount || 0}P, ${d.profilesCount || 0}명`, ts: ts() });
+        const msg = d.cookieWarning
+          ? `스크래핑 0건 — ${d.cookieWarning}`
+          : `스크래핑 완료: ${d.postsCount || 0}P, ${d.profilesCount || 0}명`;
+        const type = d.cookieWarning ? 'cookie_warning' : 'scraping_completed';
+        this.activities.unshift({ type, message: msg, ts: ts() });
         if (this.activities.length > 50) this.activities.pop();
         const kw = this.keywords.find(k => k.pairId === d.pairId);
         if (kw) { kw._running = false; kw._phase = ''; }

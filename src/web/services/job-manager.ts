@@ -128,6 +128,14 @@ class JobManager extends EventEmitter {
     this.sseClients = this.sseClients.filter(c => c.id !== clientId);
   }
 
+  /** Check if a job is already running for this pairId */
+  isJobRunningForPairId(pairId: string): boolean {
+    const row = db.prepare(
+      `SELECT COUNT(*) as count FROM keyword_targets WHERE pair_id = ? AND last_job_status = 'running'`
+    ).get(pairId) as any;
+    return (row?.count || 0) > 0;
+  }
+
   private async runHashtagJob(jobId: string, platform: Platform, hashtag: string, maxResults: number, enrichProfiles = true, since?: string, pairId?: string, until?: string): Promise<void> {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
@@ -137,6 +145,7 @@ class JobManager extends EventEmitter {
 
     const engine = new ScrapingEngine({ platforms: [platform] });
     let count = 0;
+    let latestPostTimestamp = '';
     const collectedPosts: Post[] = [];
 
     try {
@@ -148,6 +157,10 @@ class JobManager extends EventEmitter {
         count++;
         collectedPosts.push(post);
         insertPost(jobId, post);
+        // Track latest post timestamp for delta scraping
+        if (post.timestamp && post.timestamp > latestPostTimestamp) {
+          latestPostTimestamp = post.timestamp;
+        }
         updateJobStatus(jobId, 'running', { resultCount: count });
         this.sendSSE(jobId, 'post', post);
         this.sendSSE(jobId, 'progress', { phase: 'posts', count, total: maxResults });
@@ -196,7 +209,7 @@ class JobManager extends EventEmitter {
             try {
               const profile = await engine.getProfile(platform, username);
               insertProfile(jobId, profile);
-              upsertInfluencer(profile);
+              upsertInfluencer(profile, pairId);
               this.geoClassify(profile);
               profilesCount++;
               consecutiveFailures = 0;
@@ -247,7 +260,8 @@ class JobManager extends EventEmitter {
                 await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
                 const profile = await engine.getProfile(platform, username);
                 insertProfile(jobId, profile);
-                upsertInfluencer(profile);
+                upsertInfluencer(profile, pairId);
+                this.geoClassify(profile);
                 profilesCount++;
                 this.sendSSE(jobId, 'profile', profile);
                 this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
@@ -296,19 +310,48 @@ class JobManager extends EventEmitter {
         }
       }
 
+      // Detect 0-result scraping (likely cookie/proxy issue)
+      let cookieWarning = '';
+      if (count === 0) {
+        const needsCookies = ['instagram', 'tiktok', 'twitter'];
+        if (needsCookies.includes(platform)) {
+          const { CookieManager } = await import('../../core/cookie-manager.js');
+          const cm = new CookieManager();
+          const hasCookies = cm.hasCookies(platform);
+          if (!hasCookies) {
+            cookieWarning = `${platform} 쿠키 없음 — 설정에서 쿠키를 등록해주세요`;
+          } else {
+            cookieWarning = `${platform} 쿠키가 만료되었거나 IP가 차단되었을 수 있습니다 — 쿠키 재등록 또는 프록시 설정을 확인하세요`;
+          }
+          sseManager.broadcast('global', 'cookie_warning', {
+            platform, pairId,
+            message: cookieWarning,
+          });
+        }
+      }
+
       updateJobStatus(jobId, 'completed', { resultCount: count });
-      this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount });
+      this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount, cookieWarning });
 
       // Broadcast global scraping_completed notification
-      sseManager.broadcast('global', 'scraping_completed', { jobId, postsCount: count, profilesCount, pairId });
+      sseManager.broadcast('global', 'scraping_completed', { jobId, postsCount: count, profilesCount, pairId, cookieWarning });
 
-      // Update keyword target totalExtracted and job status
+      // Update keyword target totalExtracted, job status, and last post timestamp for delta scraping
       if (pairId) {
         const target = getKeywordTarget(pairId);
         if (target) {
-          updateKeywordTarget(target.id, { totalExtracted: (target.totalExtracted || 0) + count });
+          const updateFields: any = { totalExtracted: (target.totalExtracted || 0) + count };
+
+          // Save the latest post timestamp for delta scraping on next run
+          if (latestPostTimestamp) {
+            updateFields.lastPostTimestamp = latestPostTimestamp;
+          }
+
+          updateKeywordTarget(target.id, updateFields);
         }
-        const resultJson = JSON.stringify({ posts: count, profiles: profilesCount, completedAt: new Date().toISOString() });
+        const resultObj: any = { posts: count, profiles: profilesCount, completedAt: new Date().toISOString() };
+        if (cookieWarning) resultObj.cookieWarning = cookieWarning;
+        const resultJson = JSON.stringify(resultObj);
         db.prepare(`UPDATE keyword_targets SET last_job_status = 'completed', last_job_result = ? WHERE pair_id = ?`).run(resultJson, pairId);
       }
 
@@ -374,6 +417,7 @@ class JobManager extends EventEmitter {
             const profile = await engine.getProfile(platform, username);
             insertProfile(jobId, profile);
             upsertInfluencer(profile);
+            this.geoClassify(profile);
             profilesCount++;
             consecutiveFailures = 0;
             this.sendSSE(jobId, 'profile', profile);

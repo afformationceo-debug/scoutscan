@@ -496,7 +496,12 @@
           <template x-for="t in targets" :key="t.id">
             <tr class="border-b border-dark-border/30">
               <td class="px-3 py-2 text-accent font-medium whitespace-nowrap" x-text="t.pairId"></td>
-              <td class="px-3 py-2"><span class="badge" :class="'badge-' + (t.platform === 'instagram' ? 'ig' : t.platform === 'twitter' ? 'tw' : t.platform === 'tiktok' ? 'tt' : t.platform === 'youtube' ? 'yt' : 'xhs')" x-text="t.platform"></span></td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="badge" :class="'badge-' + (t.platform === 'instagram' ? 'ig' : t.platform === 'twitter' ? 'tw' : t.platform === 'tiktok' ? 'tt' : t.platform === 'youtube' ? 'yt' : 'xhs')" x-text="t.platform"></span>
+                  <span class="w-1.5 h-1.5 rounded-full" :class="getPlatformCookieStatus(t.platform) ? 'bg-success' : 'bg-error'" :title="getPlatformCookieStatus(t.platform) ? '쿠키 정상' : '쿠키 없음 — 설정에서 등록'"></span>
+                </div>
+              </td>
               <td class="px-3 py-2 text-white font-medium" x-text="t.region"></td>
               <td class="px-3 py-2 text-white" x-text="t.keyword"></td>
               <!-- Editable: 주기 -->
@@ -579,6 +584,12 @@
                       <span x-show="getLastResult(t).counts?.ai > 0" class="text-warning">
                         <span class="text-kaia-muted/60">AI</span> <span class="font-mono text-white" x-text="getLastResult(t).counts.ai + (getLastResult(t).counts.aiTotal ? '/' + getLastResult(t).counts.aiTotal : '')"></span>
                       </span>
+                    </div>
+                    <!-- Cookie Warning (when 0 results due to cookie/proxy issue) -->
+                    <div x-show="getLastResult(t).cookieWarning" class="mt-1.5 flex items-center gap-1.5 p-1.5 rounded bg-error/10 border border-error/20">
+                      <svg class="w-3 h-3 text-error flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                      <span class="text-[10px] text-error leading-tight" x-text="getLastResult(t).cookieWarning"></span>
+                      <a href="/settings" class="text-[9px] text-error font-bold hover:underline flex-shrink-0 ml-auto">설정</a>
                     </div>
                   </div>
                 </template>
