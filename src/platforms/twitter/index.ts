@@ -69,12 +69,11 @@ export class TwitterScraper implements PlatformScraper {
         logger.warn(`[Twitter] No cookies found — Twitter requires login for search. Results may be empty.`);
       }
 
+      // Do NOT block media/fonts for Twitter — it can prevent tweet rendering on some setups
       const page = await this.browser.createPage(sessionId, {
-        blockMedia: true,
-        blockFonts: true,
         interceptResponses: (url, body) => {
-          // Intercept all potential Twitter API responses (GraphQL, REST API, adaptive search)
-          if (url.includes('/graphql/') || url.includes('/api/') || url.includes('/i/api/') || url.includes('SearchTimeline') || url.includes('adaptive.json')) {
+          // Intercept Twitter API responses (GraphQL, REST API, adaptive search)
+          if (url.includes('/graphql/') || url.includes('/i/api/') || url.includes('SearchTimeline') || url.includes('adaptive.json')) {
             interceptedCount++;
             const before = collectedPosts.length;
             this.extractTweets(body, collectedPosts);
@@ -86,9 +85,7 @@ export class TwitterScraper implements PlatformScraper {
         },
       });
 
-      // Navigate to Twitter search — use keyword search (NOT hashtag-only)
-      // For pure hashtag searches, include #; for keywords, use plain text
-      const isHashtag = /^[a-zA-Z0-9_\u3000-\u9FFF\uAC00-\uD7AF]+$/.test(cleanTag) && cleanTag.length < 30;
+      // Navigate to Twitter search
       const query = encodeURIComponent(cleanTag);
       const searchUrl = `https://x.com/search?q=${query}&src=typed_query&f=live`;
       logger.info(`[Twitter] Search URL: ${searchUrl}`);
@@ -97,7 +94,7 @@ export class TwitterScraper implements PlatformScraper {
         timeout: 30000,
       });
 
-      await randomDelay(4000, 6000);
+      await randomDelay(5000, 7000);
 
       // Check if we got redirected to login
       const currentUrl = page.url();
@@ -109,11 +106,20 @@ export class TwitterScraper implements PlatformScraper {
         await this.browser.closeContext(sessionId);
         return;
       }
-      logger.info(`[Twitter] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets so far`);
 
-      // Fallback: if API interception captured nothing, extract from rendered DOM
+      // Wait for tweet articles to appear in DOM (max 10 seconds)
+      try {
+        await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
+        logger.info(`[Twitter] Tweet articles found in DOM`);
+      } catch {
+        logger.warn(`[Twitter] No tweet articles appeared within 10s`);
+      }
+
+      logger.info(`[Twitter] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets from API`);
+
+      // Primary method: DOM extraction (more reliable than API interception)
       if (collectedPosts.length === 0) {
-        logger.info(`[Twitter] API interception yielded 0 tweets, trying DOM extraction...`);
+        logger.info(`[Twitter] Trying DOM extraction...`);
         const domTweets = await this.extractTweetsFromDOM(page);
         for (const t of domTweets) {
           collectedPosts.push(t);
@@ -219,7 +225,6 @@ export class TwitterScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
-        blockMedia: true,
         interceptResponses: (url, body) => {
           if (url.includes('UserByScreenName') || url.includes('UserBy')) {
             try {

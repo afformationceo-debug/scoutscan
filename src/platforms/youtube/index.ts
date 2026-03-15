@@ -93,10 +93,22 @@ export class YouTubeScraper implements PlatformScraper {
         await randomDelay(1000, 2000);
       } catch {}
 
-      // Extract from initial page data
+      // Extract from initial page data (ytInitialData)
       const embedded = await this.extractEmbeddedSearchResults(page);
       for (const post of embedded) {
         collectedPosts.push(post);
+      }
+
+      // Fallback: DOM-based extraction if embedded data yields nothing
+      if (collectedPosts.length === 0) {
+        logger.info(`[YouTube] No embedded data found, trying DOM extraction...`);
+        const domVideos = await this.extractVideosFromDOM(page);
+        for (const post of domVideos) {
+          collectedPosts.push(post);
+        }
+        logger.info(`[YouTube] DOM extraction found ${domVideos.length} videos`);
+      } else {
+        logger.info(`[YouTube] Embedded data: ${collectedPosts.length} videos`);
       }
 
       // Yield initial
@@ -394,6 +406,77 @@ export class YouTubeScraper implements PlatformScraper {
       externalUrl: metadata.channelUrl || '',
       scrapedAt: new Date().toISOString(),
     };
+  }
+
+  /** Extract videos from rendered DOM (fallback when ytInitialData is unavailable) */
+  private async extractVideosFromDOM(page: any): Promise<Post[]> {
+    try {
+      const items = await page.evaluate(() => {
+        const results: any[] = [];
+        // ytd-video-renderer is the standard search result component
+        const renderers = document.querySelectorAll('ytd-video-renderer, ytd-rich-item-renderer');
+        renderers.forEach((el: Element) => {
+          try {
+            const titleEl = el.querySelector('#video-title, a#video-title-link');
+            const title = titleEl?.textContent?.trim() || '';
+            const href = titleEl?.getAttribute('href') || '';
+            const videoId = href.match(/[?&]v=([^&]+)/)?.[1] || href.match(/\/shorts\/([^?]+)/)?.[1] || '';
+
+            const channelEl = el.querySelector('ytd-channel-name a, #channel-info a, .ytd-channel-name a');
+            const channelName = channelEl?.textContent?.trim() || '';
+            const channelUrl = channelEl?.getAttribute('href') || '';
+
+            const viewsEl = el.querySelector('#metadata-line span, .inline-metadata-item');
+            const viewsText = viewsEl?.textContent || '0';
+            const viewCount = parseInt(viewsText.replace(/[^0-9]/g, '')) || 0;
+
+            if (videoId) {
+              results.push({ videoId, title, channelName, channelUrl, viewCount });
+            }
+          } catch {}
+        });
+
+        // Also extract from links
+        if (results.length === 0) {
+          const links = document.querySelectorAll('a[href*="watch?v="]');
+          const seen = new Set<string>();
+          links.forEach(a => {
+            const href = a.getAttribute('href') || '';
+            const match = href.match(/[?&]v=([^&]+)/);
+            if (match && !seen.has(match[1])) {
+              seen.add(match[1]);
+              results.push({ videoId: match[1], title: a.textContent?.trim() || '', channelName: '', channelUrl: '', viewCount: 0 });
+            }
+          });
+        }
+
+        return results;
+      });
+
+      return items.map((item: any) => ({
+        id: item.videoId,
+        platform: 'youtube' as const,
+        url: `https://www.youtube.com/watch?v=${item.videoId}`,
+        caption: item.title,
+        hashtags: (item.title.match(/#[\w\u0080-\uffff]+/g) || []).map((h: string) => h.toLowerCase()),
+        mentions: [],
+        likesCount: 0,
+        commentsCount: 0,
+        viewsCount: item.viewCount,
+        mediaType: 'video' as const,
+        mediaUrls: [],
+        timestamp: new Date().toISOString(),
+        owner: {
+          username: item.channelUrl?.replace(/^\/@/, '') || item.channelName,
+          id: '',
+          fullName: item.channelName,
+          profilePicUrl: '',
+        },
+      }));
+    } catch (err) {
+      logger.warn(`[YouTube] DOM extraction failed: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   /** Parse subscriber count text like "1.2M subscribers" */
