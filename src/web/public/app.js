@@ -995,9 +995,10 @@ function dataPage() {
         for (const cp of statsData.campaigns) this.campaignMap[cp.id] = cp.name;
       }
 
-      // Enrich profiles with campaign name
+      // Enrich profiles with campaign name + init expand state
       this.profiles = (profileData.influencers || []).map(p => {
         p._campaignName = p.dm_campaign_id ? (this.campaignMap[p.dm_campaign_id] || p.dm_campaign_id) : '';
+        p._expanded = false;
         return p;
       });
       this.total = profileData.total;
@@ -1614,14 +1615,74 @@ function historyPage() {
   return {
     jobs: [],
     total: 0,
-    limit: 20,
+    limit: 50,
     offset: 0,
+    loading: false,
+    filterPlatform: '',
+    filterStatus: '',
+    filterType: '',
+    filterSearch: '',
+    selectedJobs: [],
+    stats: { completed: 0, running: 0, failed: 0, totalResults: 0 },
+
+    get filteredJobs() {
+      return this.jobs.filter(j => {
+        if (this.filterPlatform && j.platform !== this.filterPlatform) return false;
+        if (this.filterStatus && j.status !== this.filterStatus) return false;
+        if (this.filterType && j.type !== this.filterType) return false;
+        if (this.filterSearch && !j.query.toLowerCase().includes(this.filterSearch.toLowerCase())) return false;
+        return true;
+      });
+    },
+
+    hasFilters() {
+      return this.filterPlatform || this.filterStatus || this.filterType || this.filterSearch;
+    },
+
+    resetFilters() {
+      this.filterPlatform = '';
+      this.filterStatus = '';
+      this.filterType = '';
+      this.filterSearch = '';
+      this.offset = 0;
+      this.load();
+    },
+
+    toggleSelect(jobId) {
+      const idx = this.selectedJobs.indexOf(jobId);
+      if (idx >= 0) this.selectedJobs.splice(idx, 1);
+      else this.selectedJobs.push(jobId);
+    },
+
+    toggleSelectAll(e) {
+      if (e.target.checked) {
+        this.selectedJobs = this.filteredJobs.map(j => j.id);
+      } else {
+        this.selectedJobs = [];
+      }
+    },
+
+    async bulkDelete() {
+      if (!confirm(`${this.selectedJobs.length}건의 작업을 삭제하시겠습니까?`)) return;
+      for (const id of this.selectedJobs) {
+        await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
+      }
+      this.selectedJobs = [];
+      this.load();
+    },
 
     async load() {
+      this.loading = true;
       const res = await fetch(`/api/jobs?limit=${this.limit}&offset=${this.offset}`);
       const data = await res.json();
-      this.jobs = data.jobs;
+      this.jobs = (data.jobs || []).map(j => { j._expanded = false; return j; });
       this.total = data.total;
+      // Compute stats from loaded jobs
+      this.stats.completed = this.jobs.filter(j => j.status === 'completed').length;
+      this.stats.running = this.jobs.filter(j => j.status === 'running').length;
+      this.stats.failed = this.jobs.filter(j => j.status === 'failed').length;
+      this.stats.totalResults = this.jobs.reduce((sum, j) => sum + (j.resultCount || 0), 0);
+      this.loading = false;
     },
 
     async rerun(job) {
@@ -1656,9 +1717,28 @@ function historyPage() {
     async remove(jobId) {
       if (!confirm('이 작업과 모든 데이터를 삭제하시겠습니까?')) return;
       await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+      this.selectedJobs = this.selectedJobs.filter(id => id !== jobId);
       this.load();
     },
+
+    calcDuration(start, end) {
+      if (!start || !end) return '-';
+      const ms = new Date(end) - new Date(start);
+      if (ms < 60000) return Math.round(ms / 1000) + '초';
+      if (ms < 3600000) return Math.round(ms / 60000) + '분';
+      return (ms / 3600000).toFixed(1) + '시간';
+    },
   };
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  const h = d.getHours().toString().padStart(2, '0');
+  const min = d.getMinutes().toString().padStart(2, '0');
+  return `${m}/${day} ${h}:${min}`;
 }
 
 // ─── Comment Templates Page Component ───
@@ -1846,16 +1926,92 @@ function settingsPage() {
   return {
     platforms: [],
     campaignCookies: [],
+    proxies: [],
+    newProxy: { name: '', url: '', type: 'residential', provider: 'custom', country: '' },
+    proxyMsg: null,
 
     async load() {
-      const [platformRes, campaignRes] = await Promise.all([
+      const [platformRes, campaignRes, proxyRes] = await Promise.all([
         fetch('/api/platforms'),
         fetch('/api/campaigns'),
+        fetch('/api/proxies'),
       ]);
       const platformData = await platformRes.json();
       const campaignData = await campaignRes.json();
-      this.platforms = platformData.platforms;
+      this.platforms = (platformData.platforms || []).map(p => ({
+        ...p,
+        _showUpload: false,
+        _cookieInput: '',
+        _uploadResult: null,
+      }));
       this.campaignCookies = campaignData.campaigns || [];
+      this.proxies = await proxyRes.json();
+    },
+
+    async addProxy() {
+      if (!this.newProxy.name || !this.newProxy.url) {
+        this.proxyMsg = { ok: false, text: '이름과 URL을 입력해주세요.' };
+        return;
+      }
+      try {
+        const res = await fetch('/api/proxies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.newProxy),
+        });
+        if (res.ok) {
+          this.newProxy = { name: '', url: '', type: 'residential', provider: 'custom', country: '' };
+          this.proxyMsg = { ok: true, text: '프록시가 추가되었습니다.' };
+          this.load();
+        }
+      } catch (e) {
+        this.proxyMsg = { ok: false, text: '추가 실패: ' + e.message };
+      }
+    },
+
+    async toggleProxy(proxy) {
+      await fetch(`/api/proxies/${proxy.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: proxy.is_active ? 0 : 1 }),
+      });
+      this.load();
+    },
+
+    async deleteProxy(proxy) {
+      if (!confirm(`"${proxy.name}" 프록시를 삭제하시겠습니까?`)) return;
+      await fetch(`/api/proxies/${proxy.id}`, { method: 'DELETE' });
+      this.load();
+    },
+
+    async uploadPlatformCookie(p) {
+      if (!p._cookieInput || !p._cookieInput.trim()) {
+        p._uploadResult = { success: false, message: '쿠키 JSON을 입력해주세요.' };
+        return;
+      }
+      try {
+        JSON.parse(p._cookieInput); // validate JSON
+      } catch {
+        p._uploadResult = { success: false, message: '유효하지 않은 JSON 형식입니다.' };
+        return;
+      }
+      try {
+        const res = await fetch(`/api/platforms/${p.platform}/cookies`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookies: p._cookieInput }),
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          p._uploadResult = { success: true, message: `${data.cookieCount}개 쿠키가 저장되었습니다.` };
+          p._cookieInput = '';
+          setTimeout(() => { this.load(); }, 1000);
+        } else {
+          p._uploadResult = { success: false, message: data.error || '저장 실패' };
+        }
+      } catch (err) {
+        p._uploadResult = { success: false, message: '네트워크 오류: ' + err.message };
+      }
     },
 
     async checkCampaignCookie(campaign) {

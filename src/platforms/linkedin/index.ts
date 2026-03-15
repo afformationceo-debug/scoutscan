@@ -50,7 +50,7 @@ export class LinkedInScraper implements PlatformScraper {
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('linkedin');
 
       const collectedPosts: Post[] = [];
 
@@ -116,7 +116,7 @@ export class LinkedInScraper implements PlatformScraper {
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('linkedin');
 
       let profileData: any = null;
 

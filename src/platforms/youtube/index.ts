@@ -47,7 +47,7 @@ export class YouTubeScraper implements PlatformScraper {
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('youtube');
 
       const collectedPosts: Post[] = [];
 
@@ -166,11 +166,11 @@ export class YouTubeScraper implements PlatformScraper {
   async getProfile(channelHandle: string, options?: ScrapingOptions): Promise<InfluencerProfile> {
     const cleanHandle = channelHandle.replace(/^@/, '');
     logger.info(`[YouTube] Fetching channel: @${cleanHandle}`);
+    const sessionId = randomUUID();
 
     try {
       await this.browser.launch({ headless: true });
-      const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('youtube');
 
       let channelData: any = null;
 
@@ -229,7 +229,6 @@ export class YouTubeScraper implements PlatformScraper {
       }
 
       await this.browser.closeContext(sessionId);
-      await this.browser.closeAll();
 
       if (!channelData) {
         throw new Error(`Could not extract YouTube channel data for @${cleanHandle}`);
@@ -237,7 +236,7 @@ export class YouTubeScraper implements PlatformScraper {
 
       return this.parseChannel(channelData, cleanHandle);
     } catch (error) {
-      await this.browser.closeAll();
+      await this.browser.closeContext(sessionId).catch(() => {});
       throw error;
     }
   }

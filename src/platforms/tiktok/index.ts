@@ -48,7 +48,7 @@ export class TikTokScraper implements PlatformScraper {
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('tiktok');
 
       const collectedPosts: Post[] = [];
 
@@ -94,13 +94,17 @@ export class TikTokScraper implements PlatformScraper {
         logger.error(`[TikTok] Redirected to login/captcha — cookies may be invalid. URL: ${currentUrl}`);
       }
 
-      // Try to extract from page embedded data
-      const embedded = await this.extractEmbeddedData(page, cleanTag);
-      for (const post of embedded) {
-        collectedPosts.push(post);
+      // Try to extract from page embedded data (raw items → parse to Post format)
+      const embeddedRaw = await this.extractEmbeddedData(page, cleanTag);
+      for (const raw of embeddedRaw) {
+        try {
+          collectedPosts.push(this.parseVideo(raw));
+        } catch {
+          // Skip items that can't be parsed
+        }
       }
 
-      logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embedded.length})`);
+      logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embeddedRaw.length})`);
 
       // Yield initial
       while (collectedPosts.length > 0 && yielded < maxResults) {
@@ -158,11 +162,11 @@ export class TikTokScraper implements PlatformScraper {
   async getProfile(username: string, options?: ScrapingOptions): Promise<InfluencerProfile> {
     const cleanUser = username.replace(/^@/, '');
     logger.info(`[TikTok] Fetching profile: @${cleanUser}`);
+    const sessionId = randomUUID();
 
     try {
       await this.browser.launch({ headless: true });
-      const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('tiktok');
 
       let profileData: any = null;
 
@@ -221,7 +225,6 @@ export class TikTokScraper implements PlatformScraper {
       }
 
       await this.browser.closeContext(sessionId);
-      await this.browser.closeAll();
 
       if (!profileData) {
         throw new Error(`Could not extract TikTok profile for @${cleanUser}`);
@@ -229,7 +232,7 @@ export class TikTokScraper implements PlatformScraper {
 
       return this.parseProfile(profileData, cleanUser);
     } catch (error) {
-      await this.browser.closeAll();
+      await this.browser.closeContext(sessionId).catch(() => {});
       throw error;
     }
   }

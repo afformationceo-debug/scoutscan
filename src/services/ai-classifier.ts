@@ -158,10 +158,11 @@ Rules:
 - If mostly Japanese text → JP, Korean text → KR, Chinese simplified → CN, Chinese traditional → TW, Thai → TH, etc.
 - If unclear, use "UNKNOWN" for country
 - Confidence should be 0.0 to 1.0 based on how certain you are
+- IMPORTANT: The "reason" field MUST be written in Korean (한국어). Explain why you classified this profile as influencer or business, and how you determined the country.
 
 Return ONLY a JSON array with exactly one object per profile, in order:
 [
-  {"username": "...", "is_influencer": true/false, "country": "XX", "confidence": 0.0-1.0, "reason": "short explanation"}
+  {"username": "...", "is_influencer": true/false, "country": "XX", "confidence": 0.0-1.0, "reason": "한국어로 분류 사유 작성"}
 ]`;
 
     const response = await this.openai.chat.completions.create({

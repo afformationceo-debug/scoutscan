@@ -258,6 +258,19 @@ db.exec(`
     cookie_count INTEGER DEFAULT 0,
     updated_at TEXT NOT NULL
   );
+
+  -- Table 10: proxy_settings (proxy URL storage)
+  CREATE TABLE IF NOT EXISTS proxy_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    type TEXT DEFAULT 'datacenter',
+    provider TEXT DEFAULT 'custom',
+    country TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 // ─── ALTER TABLE migrations (idempotent) ───

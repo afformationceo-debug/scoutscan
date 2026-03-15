@@ -72,7 +72,7 @@ export class InstagramScraper implements PlatformScraper {
 
     for (let attempt = 0; attempt <= maxBrowserRetries; attempt++) {
       const region = REGIONS[attempt % REGIONS.length];
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('instagram');
 
       const sessionId = randomUUID();
 
@@ -505,7 +505,7 @@ export class InstagramScraper implements PlatformScraper {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const region = REGIONS[attempt % REGIONS.length];
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('instagram');
 
       try {
         const result = await this.getProfileOnce(username, region, proxy);

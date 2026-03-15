@@ -1280,4 +1280,46 @@ api.post('/debug/twitter-dom-test', async (c) => {
   }
 });
 
+// ─── Proxy Management ───
+
+api.get('/proxies', (c) => {
+  const proxies = db.prepare('SELECT * FROM proxy_settings ORDER BY is_active DESC, created_at DESC').all();
+  return c.json(proxies);
+});
+
+api.post('/proxies', async (c) => {
+  const { name, url, type, provider, country } = await c.req.json();
+  if (!name || !url) return c.json({ error: 'name and url required' }, 400);
+  const now = new Date().toISOString();
+  const result = db.prepare(
+    'INSERT INTO proxy_settings (name, url, type, provider, country, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
+  ).run(name, url, type || 'residential', provider || 'custom', country || null, now, now);
+  return c.json({ id: result.lastInsertRowid, name, url, type, provider, country });
+});
+
+api.patch('/proxies/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const sets: string[] = [];
+  const params: any[] = [];
+  for (const key of ['name', 'url', 'type', 'provider', 'country', 'is_active']) {
+    if (body[key] !== undefined) {
+      sets.push(`${key} = ?`);
+      params.push(body[key]);
+    }
+  }
+  if (sets.length === 0) return c.json({ error: 'nothing to update' }, 400);
+  sets.push('updated_at = ?');
+  params.push(new Date().toISOString());
+  params.push(id);
+  db.prepare(`UPDATE proxy_settings SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  return c.json({ ok: true });
+});
+
+api.delete('/proxies/:id', (c) => {
+  const id = c.req.param('id');
+  db.prepare('DELETE FROM proxy_settings WHERE id = ?').run(id);
+  return c.json({ ok: true });
+});
+
 export { api };

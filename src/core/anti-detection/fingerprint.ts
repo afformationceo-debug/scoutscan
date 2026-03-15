@@ -64,18 +64,20 @@ const GPU_PROFILES: GPUProfile[] = [
 ];
 
 const CHROME_VERSIONS = [
-  { full: '120.0.6099.109', major: '120' },
-  { full: '121.0.6167.85', major: '121' },
-  { full: '122.0.6261.94', major: '122' },
-  { full: '123.0.6312.86', major: '123' },
-  { full: '124.0.6367.91', major: '124' },
-  { full: '125.0.6422.76', major: '125' },
+  { full: '128.0.6613.120', major: '128' },
+  { full: '129.0.6668.89', major: '129' },
+  { full: '130.0.6723.91', major: '130' },
+  { full: '131.0.6778.85', major: '131' },
+  { full: '132.0.6834.110', major: '132' },
+  { full: '133.0.6917.65', major: '133' },
 ];
 
 const OS_PROFILES = [
   { ua: 'Macintosh; Intel Mac OS X 10_15_7', platform: 'MacIntel' },
-  { ua: 'Macintosh; Intel Mac OS X 14_0', platform: 'MacIntel' },
+  { ua: 'Macintosh; Intel Mac OS X 14_4_1', platform: 'MacIntel' },
+  { ua: 'Macintosh; Intel Mac OS X 15_0', platform: 'MacIntel' },
   { ua: 'Windows NT 10.0; Win64; x64', platform: 'Win32' },
+  { ua: 'Windows NT 11.0; Win64; x64', platform: 'Win32' },
   { ua: 'X11; Linux x86_64', platform: 'Linux x86_64' },
 ];
 
@@ -288,6 +290,66 @@ export function generateFingerprintInjectionScript(fp: BrowserFingerprint): stri
       Object.defineProperty(navigator.connection, 'effectiveType', { get: () => '4g' });
       Object.defineProperty(navigator.connection, 'rtt', { get: () => ${50 + Math.floor(Math.random() * 100)} });
       Object.defineProperty(navigator.connection, 'downlink', { get: () => ${5 + Math.floor(Math.random() * 15)} });
+    }
+
+    // 10. WebRTC leak protection (prevents real IP exposure through STUN)
+    var origRTCPeerConnection = window.RTCPeerConnection;
+    if (origRTCPeerConnection) {
+      window.RTCPeerConnection = function(config) {
+        if (config && config.iceServers) {
+          config.iceServers = config.iceServers.filter(function(s) {
+            var urls = Array.isArray(s.urls) ? s.urls : [s.urls || ''];
+            return !urls.some(function(u) { return u.indexOf('stun:') === 0; });
+          });
+        }
+        return new origRTCPeerConnection(config);
+      };
+      window.RTCPeerConnection.prototype = origRTCPeerConnection.prototype;
+    }
+
+    // 11. AudioContext fingerprint noise
+    var origGetFloatFrequencyData = AnalyserNode.prototype.getFloatFrequencyData;
+    AnalyserNode.prototype.getFloatFrequencyData = function(array) {
+      origGetFloatFrequencyData.call(this, array);
+      for (var i = 0; i < array.length; i++) {
+        array[i] += seededNoise(seed + i + 1000) * 0.01;
+      }
+    };
+
+    // 12. Prevent automation detection via stack traces
+    var origGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    try {
+      var origGetterWebdriver = origGetOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+      if (origGetterWebdriver && origGetterWebdriver.get) {
+        Object.defineProperty(Navigator.prototype, 'webdriver', {
+          get: function() { return false; },
+          configurable: true
+        });
+      }
+    } catch(e) {}
+
+    // 13. Battery API spoofing (used for fingerprinting)
+    if (navigator.getBattery) {
+      navigator.getBattery = function() {
+        return Promise.resolve({
+          charging: true,
+          chargingTime: 0,
+          dischargingTime: Infinity,
+          level: 0.85 + seededNoise(seed + 5000) * 0.1,
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return true; }
+        });
+      };
+    }
+
+    // 14. Speech synthesis voices (consistent per fingerprint)
+    if (window.speechSynthesis) {
+      var origGetVoices = window.speechSynthesis.getVoices;
+      window.speechSynthesis.getVoices = function() {
+        var voices = origGetVoices.call(window.speechSynthesis);
+        return voices.slice(0, ${8 + Math.floor(Math.random() * 5)});
+      };
     }
   `;
 }

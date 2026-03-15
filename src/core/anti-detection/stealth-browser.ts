@@ -145,6 +145,21 @@ export class StealthBrowser {
       });
     }
 
+    // Block known bot-detection tracking scripts (reduce fingerprint exposure)
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      const blockedDomains = [
+        'datadome.co', 'perimeterx.net', 'kasada.io',
+        'hcaptcha.com/1/api.js', 'challenges.cloudflare.com',
+        'px-cdn.net', 'px-cloud.net',
+      ];
+      if (blockedDomains.some(d => url.includes(d))) {
+        route.abort();
+      } else {
+        route.fallback();
+      }
+    });
+
     // Response interception for data capture
     if (options.interceptResponses) {
       page.on('response', async (response) => {
@@ -160,6 +175,60 @@ export class StealthBrowser {
     }
 
     return page;
+  }
+
+  /** Detect if a page shows a CAPTCHA or bot challenge */
+  async detectChallenge(page: Page): Promise<{ detected: boolean; type: string }> {
+    try {
+      const result = await page.evaluate(() => {
+        const html = document.documentElement.innerHTML.toLowerCase();
+        const title = document.title.toLowerCase();
+        const url = window.location.href.toLowerCase();
+
+        // Cloudflare challenge
+        if (html.includes('cf-challenge') || html.includes('cloudflare') && html.includes('ray id')) {
+          return { detected: true, type: 'cloudflare' };
+        }
+        // hCaptcha
+        if (html.includes('hcaptcha') || html.includes('h-captcha')) {
+          return { detected: true, type: 'hcaptcha' };
+        }
+        // reCAPTCHA
+        if (html.includes('recaptcha') || html.includes('g-recaptcha')) {
+          return { detected: true, type: 'recaptcha' };
+        }
+        // DataDome
+        if (html.includes('datadome') || html.includes('dd.js')) {
+          return { detected: true, type: 'datadome' };
+        }
+        // PerimeterX
+        if (html.includes('perimeterx') || html.includes('_pxhd')) {
+          return { detected: true, type: 'perimeterx' };
+        }
+        // Instagram challenge
+        if (url.includes('/challenge/') || html.includes('challenge_required') || html.includes('confirm it')) {
+          return { detected: true, type: 'instagram_challenge' };
+        }
+        // TikTok CAPTCHA (slide puzzle)
+        if (html.includes('captcha') && html.includes('tiktok') || html.includes('verify-bar')) {
+          return { detected: true, type: 'tiktok_captcha' };
+        }
+        // Twitter/X age gate or login wall
+        if (url.includes('/i/flow/login') || (html.includes('log in') && html.includes('x.com'))) {
+          return { detected: true, type: 'twitter_login_wall' };
+        }
+        // Generic bot detection
+        if (title.includes('access denied') || title.includes('blocked') || title.includes('robot') ||
+            html.includes('automated') && html.includes('blocked')) {
+          return { detected: true, type: 'generic_block' };
+        }
+
+        return { detected: false, type: 'none' };
+      });
+      return result;
+    } catch {
+      return { detected: false, type: 'error' };
+    }
   }
 
   /** Get cookies from a context */

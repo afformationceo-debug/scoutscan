@@ -52,7 +52,7 @@ export class TwitterScraper implements PlatformScraper {
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('twitter');
 
       const collectedPosts: Post[] = [];
 
@@ -218,11 +218,11 @@ export class TwitterScraper implements PlatformScraper {
 
   async getProfile(username: string, options?: ScrapingOptions): Promise<InfluencerProfile> {
     logger.info(`[Twitter] Fetching profile: @${username}`);
+    const sessionId = randomUUID();
 
     try {
       await this.browser.launch({ headless: true });
-      const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('twitter');
 
       let profileData: any = null;
 
@@ -270,7 +270,6 @@ export class TwitterScraper implements PlatformScraper {
       }
 
       await this.browser.closeContext(sessionId);
-      await this.browser.closeAll();
 
       if (!profileData) {
         throw new Error(`Could not extract Twitter profile for @${username}`);
@@ -278,7 +277,7 @@ export class TwitterScraper implements PlatformScraper {
 
       return this.parseProfile(profileData, username);
     } catch (error) {
-      await this.browser.closeAll();
+      await this.browser.closeContext(sessionId).catch(() => {});
       throw error;
     }
   }

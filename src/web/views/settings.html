@@ -1,31 +1,53 @@
 <!-- Settings Page -->
 <div x-data="settingsPage()" x-init="load()">
-  <h2 class="text-2xl font-heading font-bold text-white mb-6">설정</h2>
-
-  <!-- Guide Box -->
-  <div class="guide-box mb-6">
-    <p><strong>설정</strong>에서는 스크래핑용 플랫폼 쿠키와 캠페인별 DM 발송 쿠키를 확인합니다. 스크래핑을 시작하려면 먼저 해당 플랫폼의 쿠키를 등록해야 합니다. <strong>EditThisCookie</strong> 등의 확장 프로그램으로 쿠키를 추출하여 저장하세요.</p>
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-heading font-bold text-white">설정</h2>
+    <button @click="load()" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[11px] px-3 py-1.5">상태 새로고침</button>
   </div>
 
   <!-- Platform Cookie Status (Scraping) -->
   <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
-    <h3 class="text-base font-heading font-semibold text-white mb-4">플랫폼 쿠키 상태 <span class="text-xs text-kaia-muted font-normal">(스크래핑용)</span></h3>
-    <p class="text-sm text-kaia-text mb-4">
-      브라우저 확장 프로그램으로 각 플랫폼의 쿠키를 추출하여
-      <code class="bg-dark-subtle px-1.5 py-0.5 rounded text-accent font-mono text-xs">cookies/</code> 디렉토리에 JSON 파일로 저장하세요.
-    </p>
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-heading font-semibold text-white">플랫폼 쿠키 상태 <span class="text-xs text-kaia-muted font-normal">(스크래핑용)</span></h3>
+      <div class="flex items-center gap-2 text-[11px]">
+        <span class="text-success" x-text="platforms.filter(p => p.hasCookies).length + '개 활성'"></span>
+        <span class="text-kaia-muted">/</span>
+        <span class="text-kaia-muted" x-text="platforms.length + '개 플랫폼'"></span>
+      </div>
+    </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
       <template x-for="p in platforms" :key="p.platform">
         <div class="border rounded-lg p-4 transition-colors"
              :class="p.hasCookies ? 'border-success/30 bg-success/5' : 'border-dark-border'">
           <div class="flex items-center justify-between mb-2">
-            <h4 class="font-semibold capitalize text-white text-sm" x-text="p.platform"></h4>
-            <span class="text-lg" x-text="p.hasCookies ? '\u2713' : '\u2717'"
-                  :class="p.hasCookies ? 'text-success' : 'text-error'"></span>
+            <div class="flex items-center gap-2">
+              <span class="badge text-[10px]" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform.slice(0,2).toUpperCase()"></span>
+              <h4 class="font-semibold capitalize text-white text-sm" x-text="p.platform"></h4>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full" :class="p.hasCookies ? 'bg-success' : 'bg-error'"></span>
           </div>
-          <p class="text-sm text-kaia-text" x-text="p.hasCookies ? p.cookieCount + '개 쿠키 로드됨' : '쿠키 없음'"></p>
-          <p class="text-xs text-kaia-muted mt-1 font-mono" x-text="'cookies/' + p.platform + '.json'"></p>
+          <p class="text-[12px] text-kaia-text" x-text="p.hasCookies ? p.cookieCount + '개 쿠키 로드됨' : '쿠키 없음'"></p>
+
+          <!-- Cookie Upload Toggle -->
+          <div class="mt-3 pt-3 border-t border-dark-border/30">
+            <button @click="p._showUpload = !p._showUpload" class="text-[11px] text-accent hover:text-accent-hover flex items-center gap-1">
+              <svg :class="p._showUpload ? 'rotate-90' : ''" class="w-3 h-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              <span x-text="p.hasCookies ? '쿠키 교체' : '쿠키 등록'"></span>
+            </button>
+            <div x-show="p._showUpload" x-transition class="mt-2">
+              <textarea x-model="p._cookieInput" rows="4"
+                        :placeholder="'[{&quot;name&quot;:&quot;sessionid&quot;,&quot;value&quot;:&quot;...&quot;,&quot;domain&quot;:&quot;.' + p.platform + '.com&quot;}]'"
+                        class="w-full rounded-lg border px-3 py-2 text-xs font-mono"></textarea>
+              <div class="flex items-center justify-between mt-2">
+                <p class="text-[10px] text-kaia-muted/50">EditThisCookie에서 추출한 JSON 붙여넣기</p>
+                <button @click="uploadPlatformCookie(p)" class="btn-accent px-3 py-1 rounded-lg text-[11px]">저장</button>
+              </div>
+              <div x-show="p._uploadResult" class="mt-2 text-[11px] p-2 rounded-lg"
+                   :class="p._uploadResult?.success ? 'bg-success/10 text-success' : 'bg-error/10 text-error'"
+                   x-text="p._uploadResult?.message"></div>
+            </div>
+          </div>
         </div>
       </template>
     </div>
@@ -33,14 +55,15 @@
 
   <!-- Campaign Cookie Status (DM) -->
   <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
-    <h3 class="text-base font-heading font-semibold text-white mb-4">캠페인 DM 쿠키 <span class="text-xs text-kaia-muted font-normal">(캠페인별 발송 계정)</span></h3>
-    <p class="text-sm text-kaia-text mb-4">
-      각 캠페인에 등록된 발송 계정 쿠키 상태입니다.
-      <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 관리</a>에서 쿠키를 업로드하세요.
-    </p>
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-heading font-semibold text-white">캠페인 DM 쿠키 <span class="text-xs text-kaia-muted font-normal">(캠페인별 발송 계정)</span></h3>
+      <a href="/data?tab=campaigns" class="text-[11px] text-accent hover:text-accent-hover">캠페인 관리</a>
+    </div>
 
-    <div x-show="campaignCookies.length === 0" class="text-center py-8 text-kaia-muted">
-      등록된 캠페인이 없습니다. <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 생성</a>을 먼저 진행하세요.
+    <div x-show="campaignCookies.length === 0" class="text-center py-8">
+      <svg class="w-8 h-8 mx-auto text-kaia-muted/30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <p class="text-kaia-muted text-sm mb-2">등록된 캠페인이 없습니다</p>
+      <a href="/data?tab=campaigns" class="badge badge-accent cursor-pointer hover:opacity-80 text-[11px]">캠페인 생성</a>
     </div>
 
     <div x-show="campaignCookies.length > 0" class="space-y-2">
@@ -74,33 +97,144 @@
     </div>
   </div>
 
-  <!-- Instructions -->
-  <div class="bg-dark-card border border-dark-border rounded-lg p-6">
-    <h3 class="text-base font-heading font-semibold text-white mb-4">쿠키 추가 방법</h3>
-    <ol class="list-decimal list-inside space-y-2 text-sm text-kaia-text">
-      <li>쿠키 추출 브라우저 확장 프로그램을 설치하세요 (예: Chrome용 <strong class="text-white">EditThisCookie</strong>, Firefox용 <strong class="text-white">Cookie-Editor</strong>)</li>
-      <li>대상 플랫폼(Instagram, Twitter, TikTok)에 로그인하세요</li>
-      <li>확장 프로그램에서 쿠키를 JSON으로 내보내세요</li>
-      <li>
-        <strong class="text-white">스크래핑용:</strong>
-        <code class="bg-dark-subtle px-1.5 py-0.5 rounded text-accent font-mono text-xs">cookies/&lt;플랫폼&gt;.json</code> 으로 저장
-      </li>
-      <li>
-        <strong class="text-white">DM 캠페인용:</strong>
-        <a href="/data?tab=campaigns" class="text-accent hover:text-accent-hover">캠페인 관리</a>에서 Cookie 버튼으로 직접 업로드
-      </li>
-      <li>이 페이지를 새로고침하여 쿠키가 로드되었는지 확인하세요</li>
-    </ol>
-    <div class="mt-4 p-3 bg-dark-body rounded-lg">
-      <p class="text-xs text-kaia-muted/50 mb-1 font-semibold">플랫폼별 필수 쿠키:</p>
-      <div class="text-xs font-mono text-kaia-text space-y-0.5">
-        <p><span class="text-white">Instagram:</span> sessionid, csrftoken, ds_user_id</p>
-        <p><span class="text-white">Twitter:</span> auth_token, ct0, twid</p>
-        <p><span class="text-white">TikTok:</span> sessionid, tt_csrf_token, msToken, ttwid</p>
+  <!-- Proxy Management -->
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-heading font-semibold text-white">프록시 설정 <span class="text-xs text-kaia-muted font-normal">(레지덴셜/모바일/ISP)</span></h3>
+      <span class="text-[11px] text-kaia-muted" x-text="proxies.filter(p => p.is_active).length + '/' + proxies.length + '개 활성'"></span>
+    </div>
+
+    <!-- Add Proxy Form -->
+    <div class="border border-dark-border rounded-lg p-4 mb-4 bg-dark-hover/30">
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div>
+          <label class="block text-[10px] text-kaia-muted mb-1">이름</label>
+          <input x-model="newProxy.name" type="text" placeholder="예: BrightData KR" class="w-full rounded-lg border px-3 py-2 text-xs">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-[10px] text-kaia-muted mb-1">프록시 URL</label>
+          <input x-model="newProxy.url" type="text" placeholder="http://user:pass@host:port" class="w-full rounded-lg border px-3 py-2 text-xs font-mono">
+        </div>
+        <div>
+          <label class="block text-[10px] text-kaia-muted mb-1">유형</label>
+          <select x-model="newProxy.type" class="w-full rounded-lg border px-3 py-2 text-xs">
+            <option value="residential">Residential</option>
+            <option value="mobile">Mobile</option>
+            <option value="isp">ISP</option>
+            <option value="datacenter">Datacenter</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] text-kaia-muted mb-1">국가</label>
+          <input x-model="newProxy.country" type="text" placeholder="KR" maxlength="2" class="w-full rounded-lg border px-3 py-2 text-xs uppercase">
+        </div>
+        <div>
+          <button @click="addProxy()" class="btn-accent w-full px-3 py-2 rounded-lg text-[11px]">추가</button>
+        </div>
+      </div>
+      <div x-show="proxyMsg" x-transition class="mt-2 text-[11px] px-3 py-1.5 rounded-lg"
+           :class="proxyMsg?.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'"
+           x-text="proxyMsg?.text"></div>
+      <p class="mt-2 text-[10px] text-kaia-muted/60">
+        Bright Data: <span class="font-mono">http://brd-customer-xxx-zone-residential-country-kr:pass@brd.superproxy.io:22225</span><br>
+        Apify: <span class="font-mono">http://groups-RESIDENTIAL,country-KR:pass@proxy.apify.com:8000</span>
+      </p>
+    </div>
+
+    <!-- Proxy List -->
+    <div x-show="proxies.length === 0" class="text-center py-6 text-kaia-muted text-sm">
+      등록된 프록시가 없습니다. Instagram/TikTok 스크래핑에는 레지덴셜 프록시가 필요합니다.
+    </div>
+    <div x-show="proxies.length > 0" class="space-y-2">
+      <template x-for="proxy in proxies" :key="proxy.id">
+        <div class="border rounded-lg p-3 flex items-center justify-between transition-colors"
+             :class="proxy.is_active ? 'border-accent/30 bg-accent/5' : 'border-dark-border opacity-50'">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0"
+                  :class="proxy.is_active ? 'bg-accent' : 'bg-kaia-muted'"></span>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-white font-medium text-sm" x-text="proxy.name"></span>
+                <span class="badge text-[9px]"
+                      :class="proxy.type === 'residential' ? 'bg-[#4CE275]/15 text-[#4CE275]' : proxy.type === 'mobile' ? 'bg-[#FF9800]/15 text-[#FF9800]' : proxy.type === 'isp' ? 'bg-[#2196F3]/15 text-[#2196F3]' : 'bg-[#666]/15 text-[#999]'"
+                      x-text="proxy.type"></span>
+                <span x-show="proxy.country" class="badge text-[9px] bg-white/5 text-kaia-text" x-text="proxy.country"></span>
+                <span x-show="proxy.provider !== 'custom'" class="text-[9px] text-kaia-muted" x-text="proxy.provider"></span>
+              </div>
+              <p class="text-[10px] text-kaia-muted font-mono truncate mt-0.5" x-text="proxy.url.replace(/:[^@:]+@/, ':***@')"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 ml-3">
+            <button @click="toggleProxy(proxy)" class="text-[10px] px-2 py-1 rounded border border-dark-border"
+                    :class="proxy.is_active ? 'text-kaia-text hover:text-error' : 'text-success hover:text-success'"
+                    x-text="proxy.is_active ? '비활성화' : '활성화'"></button>
+            <button @click="deleteProxy(proxy)" class="text-[10px] text-error/60 hover:text-error px-2 py-1">삭제</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Platform Proxy Recommendation -->
+    <div class="mt-4 p-3 rounded-lg bg-accent/5 border border-accent/20">
+      <p class="text-[11px] text-accent font-medium mb-1">플랫폼별 프록시 권장사항</p>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px] text-kaia-text">
+        <div>TikTok → <span class="text-[#FF9800]">Mobile</span> / Residential</div>
+        <div>Instagram → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
+        <div>Twitter/X → <span class="text-[#4CE275]">Residential</span> / ISP</div>
+        <div>YouTube → <span class="text-[#666]">Datacenter</span> / Residential</div>
+        <div>LinkedIn → <span class="text-[#4CE275]">Residential</span> / ISP</div>
+        <div>Xiaohongshu → <span class="text-[#4CE275]">Residential</span> / Mobile</div>
       </div>
     </div>
-    <div class="mt-4">
-      <button @click="load()" class="btn-accent px-4 py-2 rounded-lg text-sm">상태 새로고침</button>
+  </div>
+
+  <!-- System Info -->
+  <div class="bg-dark-card border border-dark-border rounded-lg p-6 mb-6">
+    <h3 class="text-base font-heading font-semibold text-white mb-4">시스템 정보</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-[12px]">
+      <div>
+        <span class="text-kaia-muted block mb-1">서버 상태</span>
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-success"></span><span class="text-success font-medium">온라인</span></span>
+      </div>
+      <div>
+        <span class="text-kaia-muted block mb-1">포트</span>
+        <span class="text-white font-mono">3000</span>
+      </div>
+      <div>
+        <span class="text-kaia-muted block mb-1">데이터베이스</span>
+        <span class="text-white font-mono">SQLite (WAL)</span>
+      </div>
+      <div>
+        <span class="text-kaia-muted block mb-1">동시 실행</span>
+        <span class="text-white font-mono">3 브라우저</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instructions (collapsible) -->
+  <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
+    <div x-data="{open: false}">
+      <button @click="open = !open" class="w-full px-6 py-4 flex items-center justify-between hover:bg-dark-hover transition-colors">
+        <h3 class="text-base font-heading font-semibold text-white">쿠키 추가 방법</h3>
+        <svg :class="open ? 'rotate-180' : ''" class="w-4 h-4 text-kaia-muted transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div x-show="open" x-transition class="px-6 pb-6">
+        <ol class="list-decimal list-inside space-y-2 text-sm text-kaia-text">
+          <li>쿠키 추출 브라우저 확장 프로그램을 설치하세요 (예: Chrome용 <strong class="text-white">EditThisCookie</strong>, Firefox용 <strong class="text-white">Cookie-Editor</strong>)</li>
+          <li>대상 플랫폼(Instagram, Twitter, TikTok)에 로그인하세요</li>
+          <li>확장 프로그램에서 쿠키를 JSON으로 내보내세요</li>
+          <li>위 플랫폼 카드에서 <strong class="text-accent">쿠키 등록</strong>을 클릭하고 JSON을 붙여넣으세요</li>
+          <li>또는 <code class="bg-dark-subtle px-1.5 py-0.5 rounded text-accent font-mono text-xs">cookies/&lt;플랫폼&gt;.json</code>으로 직접 저장</li>
+        </ol>
+        <div class="mt-4 p-3 bg-dark-body rounded-lg">
+          <p class="text-xs text-kaia-muted/50 mb-1 font-semibold">플랫폼별 필수 쿠키:</p>
+          <div class="text-xs font-mono text-kaia-text space-y-0.5">
+            <p><span class="text-white">Instagram:</span> sessionid, csrftoken, ds_user_id</p>
+            <p><span class="text-white">Twitter:</span> auth_token, ct0, twid</p>
+            <p><span class="text-white">TikTok:</span> sessionid, tt_csrf_token, msToken, ttwid</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

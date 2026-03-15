@@ -2,12 +2,16 @@ import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { api } from './routes/api.js';
 import { sse } from './routes/sse.js';
 import { pages } from './routes/pages.js';
 import { recoverStuckJobs, migrateCookiesFromFilesystemToDB } from './services/db.js';
 import { scheduler } from '../services/scheduler.js';
+import { seedInitialUser, authenticateUser, createSession, validateSession, deleteSession } from './services/auth.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 // ─── Browser Context Pool + Engine Initialization ───
 
@@ -28,8 +32,12 @@ CookieManager.setDbAdapter(cookieDbAdapter);
 const migratedCookies = migrateCookiesFromFilesystemToDB();
 if (migratedCookies > 0) console.log(`[Startup] Migrated ${migratedCookies} cookie file(s) from filesystem to DB`);
 
-// 1. Create shared infrastructure
-const proxyRouter = new ProxyRouter();
+// 1. Create shared infrastructure (load proxies from DB)
+import { db } from './services/db.js';
+const proxyRows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+const proxyUrls = proxyRows.map((r: any) => r.url).filter(Boolean);
+if (proxyUrls.length > 0) console.log(`[Startup] Loaded ${proxyUrls.length} proxy(s) from DB`);
+const proxyRouter = new ProxyRouter(proxyUrls);
 const stealthBrowser = new StealthBrowser(proxyRouter);
 const cookieManager = new CookieManager();
 
@@ -50,6 +58,9 @@ registry.engagementEngine = engagementEngine;
 registry.pool = pool;
 registry.cookieHealthService = cookieHealthService;
 
+// Seed initial user (creates user + migrates existing data)
+seedInitialUser();
+
 const app = new Hono();
 
 // Middleware
@@ -57,6 +68,81 @@ app.use('*', cors());
 
 // Static files
 app.use('/public/*', serveStatic({ root: 'src/web/' }));
+
+// ─── Login Page & Auth Routes (no auth required) ───
+
+const loginViewPath = join(import.meta.dirname, 'views', 'login.html');
+
+app.get('/login', (c) => {
+  // If already logged in, redirect to dashboard
+  const sessionId = getCookie(c, 'session_id');
+  if (sessionId) {
+    const user = validateSession(sessionId);
+    if (user) return c.redirect('/');
+  }
+  const html = readFileSync(loginViewPath, 'utf-8');
+  return c.html(html);
+});
+
+app.post('/login', async (c) => {
+  const body = await c.req.json();
+  const { email, password } = body;
+
+  if (!email || !password) {
+    return c.json({ success: false, error: '이메일과 비밀번호를 입력하세요.' }, 400);
+  }
+
+  const user = authenticateUser(email, password);
+  if (!user) {
+    return c.json({ success: false, error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, 401);
+  }
+
+  const sessionId = createSession(user.id);
+  setCookie(c, 'session_id', sessionId, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'Lax',
+    maxAge: 7 * 24 * 60 * 60, // 7 days
+    secure: process.env.NODE_ENV === 'production',
+  });
+
+  return c.json({ success: true, user: { email: user.email, name: user.name } });
+});
+
+app.get('/logout', (c) => {
+  const sessionId = getCookie(c, 'session_id');
+  if (sessionId) {
+    deleteSession(sessionId);
+    deleteCookie(c, 'session_id', { path: '/' });
+  }
+  return c.redirect('/login');
+});
+
+// ─── Auth Middleware (protect everything else) ───
+
+app.use('*', async (c, next) => {
+  // Skip auth for login, static files
+  const path = c.req.path;
+  if (path === '/login' || path.startsWith('/public/')) {
+    return next();
+  }
+
+  const sessionId = getCookie(c, 'session_id');
+  const user = sessionId ? validateSession(sessionId) : null;
+
+  if (!user) {
+    // API requests get 401, page requests get redirected
+    if (path.startsWith('/api/')) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    return c.redirect('/login');
+  }
+
+  // Store user in context for downstream use
+  c.set('user' as any, user);
+  c.set('userId' as any, user.id);
+  return next();
+});
 
 // API routes
 app.route('/api', api);

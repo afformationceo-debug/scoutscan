@@ -5,6 +5,10 @@ export interface ProxyConfig {
   port: number;
   username?: string;
   password?: string;
+  type?: 'datacenter' | 'residential' | 'mobile' | 'isp';
+  provider?: 'brightdata' | 'apify' | 'custom';
+  country?: string;       // ISO country code for geo-targeting
+  sessionId?: string;     // For sticky sessions (same IP)
 }
 
 export interface SessionData {

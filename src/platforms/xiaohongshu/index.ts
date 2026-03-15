@@ -51,7 +51,7 @@ export class XiaohongshuScraper implements PlatformScraper {
     try {
       await this.browser.launch({ browserType: 'chromium', headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('xiaohongshu');
 
       const collectedPosts: Post[] = [];
 
@@ -130,7 +130,7 @@ export class XiaohongshuScraper implements PlatformScraper {
     try {
       await this.browser.launch({ browserType: 'chromium', headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getRotatingProxy();
+      const proxy = this.proxyRouter.getProxyForPlatform('xiaohongshu');
 
       let profileData: any = null;
 
