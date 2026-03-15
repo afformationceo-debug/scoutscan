@@ -1145,4 +1145,117 @@ api.post('/debug/scrape-test/:platform', async (c) => {
   }
 });
 
+// Debug endpoint: run Twitter scraper's exact DOM extraction logic
+api.post('/debug/twitter-dom-test', async (c) => {
+  const diag: Record<string, any> = { steps: [] as string[] };
+
+  try {
+    const { StealthBrowser } = await import('../../core/anti-detection/index.js');
+    const { ProxyRouter } = await import('../../core/proxy.js');
+    const { randomUUID } = await import('crypto');
+
+    const cm = new CookieManager();
+    const proxyRouter = new ProxyRouter();
+    const browser = new StealthBrowser(proxyRouter);
+
+    await browser.launch({ headless: true });
+    const sessionId = randomUUID();
+    await browser.createStealthContext(sessionId, { region: 'US' });
+
+    // Load cookies
+    if (cm.hasCookies('twitter')) {
+      const cookies = cm.loadCookies('twitter');
+      await browser.setCookies(sessionId, cm.toPlaywrightCookies(cookies));
+      diag.steps.push(`Set ${cookies.length} cookies`);
+    }
+
+    // Create page WITH interceptResponses (same as actual scraper)
+    let interceptedCount = 0;
+    const apiTweets: any[] = [];
+    const page = await browser.createPage(sessionId, {
+      interceptResponses: (url, body) => {
+        if (url.includes('/graphql/') || url.includes('/i/api/') || url.includes('SearchTimeline') || url.includes('adaptive.json')) {
+          interceptedCount++;
+          diag.steps.push(`API intercepted: ${url.split('?')[0].slice(-60)} (${body.length} bytes)`);
+        }
+      },
+    });
+
+    // Navigate DIRECTLY to search (same as scraper - NOT home first)
+    const searchUrl = 'https://x.com/search?q=%E9%9F%93%E5%9B%BD%E7%BE%8E%E5%AE%B9&src=typed_query&f=live';
+    diag.steps.push(`Navigating to: ${searchUrl}`);
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    diag.steps.push(`Page loaded, waiting 6s...`);
+    await new Promise(r => setTimeout(r, 6000));
+
+    const currentUrl = page.url();
+    const pageTitle = await page.title();
+    diag.steps.push(`URL: ${currentUrl}, Title: "${pageTitle}"`);
+    diag.interceptedCount = interceptedCount;
+
+    // waitForSelector (same as scraper)
+    try {
+      await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
+      diag.steps.push('waitForSelector: found tweets');
+    } catch {
+      diag.steps.push('waitForSelector: TIMED OUT - no tweets in DOM');
+    }
+
+    // DOM extraction (same as scraper's extractTweetsFromDOM)
+    const domResult = await page.evaluate(() => {
+      const results: any[] = [];
+      const debug: string[] = [];
+      const tweetEls = document.querySelectorAll('article[data-testid="tweet"]');
+      debug.push(`article[data-testid="tweet"]: ${tweetEls.length}`);
+      debug.push(`all articles: ${document.querySelectorAll('article').length}`);
+      debug.push(`tweetText elements: ${document.querySelectorAll('[data-testid="tweetText"]').length}`);
+      debug.push(`URL: ${window.location.href}`);
+
+      tweetEls.forEach((el: Element) => {
+        try {
+          const textEl = el.querySelector('[data-testid="tweetText"]');
+          const text = textEl?.textContent || '';
+          const userLinks = el.querySelectorAll('a[href^="/"]');
+          let username = '';
+          for (const link of userLinks) {
+            const href = (link as HTMLAnchorElement).href || '';
+            const match = href.match(/\/([A-Za-z0-9_]+)$/);
+            if (match && !['search', 'explore', 'home', 'notifications', 'messages', 'i', 'settings'].includes(match[1])) {
+              username = match[1];
+              break;
+            }
+          }
+          let tweetId = '';
+          const timeEl = el.querySelector('time');
+          if (timeEl) {
+            const parentLink = timeEl.closest('a');
+            if (parentLink) {
+              const idMatch = parentLink.href?.match(/\/status\/(\d+)/);
+              if (idMatch) tweetId = idMatch[1];
+            }
+          }
+          const timestamp = timeEl?.getAttribute('datetime') || '';
+          if (username || text) {
+            results.push({ id: tweetId, text: text.slice(0, 100), username, timestamp });
+          }
+        } catch {}
+      });
+
+      return { results, debug };
+    });
+
+    diag.domDebug = domResult.debug;
+    diag.domTweets = domResult.results;
+    diag.domTweetCount = domResult.results.length;
+    diag.steps.push(`DOM extraction: ${domResult.results.length} tweets`);
+
+    await browser.closeContext(sessionId);
+    await browser.closeAll();
+    return c.json(diag);
+  } catch (err) {
+    diag.error = (err as Error).message;
+    return c.json(diag, 500);
+  }
+});
+
 export { api };
