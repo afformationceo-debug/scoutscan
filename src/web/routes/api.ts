@@ -1082,6 +1082,50 @@ api.post('/debug/scrape-test/:platform', async (c) => {
         const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
         diag.bodyTextPreview = bodyText.slice(0, 300);
         diag.steps.push(`Body text preview: "${bodyText.slice(0, 150)}..."`);
+
+        // Step 5: DOM analysis — check what elements exist for data extraction
+        const domAnalysis = await page.evaluate((plat: string) => {
+          const analysis: Record<string, any> = {};
+
+          if (plat === 'twitter') {
+            // Check tweet article elements
+            analysis.tweetArticles = document.querySelectorAll('article[data-testid="tweet"]').length;
+            analysis.tweetArticlesAlt = document.querySelectorAll('article').length;
+            analysis.tweetTexts = document.querySelectorAll('[data-testid="tweetText"]').length;
+            analysis.cellInnerDivs = document.querySelectorAll('[data-testid="cellInnerDiv"]').length;
+            // Check what data-testid attributes exist
+            const testIds = new Set<string>();
+            document.querySelectorAll('[data-testid]').forEach(el => testIds.add(el.getAttribute('data-testid') || ''));
+            analysis.dataTestIds = Array.from(testIds).slice(0, 30);
+            // Sample tweet text
+            const firstTweet = document.querySelector('[data-testid="tweetText"]');
+            analysis.firstTweetText = firstTweet?.textContent?.slice(0, 100) || null;
+          } else if (plat === 'instagram') {
+            analysis.articles = document.querySelectorAll('article').length;
+            analysis.links = document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').length;
+            analysis.jsonScripts = document.querySelectorAll('script[type="application/json"]').length;
+            analysis.jsonLd = document.querySelectorAll('script[type="application/ld+json"]').length;
+            // Check for ytInitialData (wrong platform but check anyway)
+            analysis.hasSharedData = !!(window as any)._sharedData;
+          } else if (plat === 'tiktok') {
+            analysis.videoCards = document.querySelectorAll('[class*="DivItemContainer"], [data-e2e="search-card-item"]').length;
+            analysis.videoLinks = document.querySelectorAll('a[href*="/video/"]').length;
+            analysis.hasUniversalData = !!(window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__;
+            analysis.hasSigiState = !!(window as any).SIGI_STATE;
+            // Check for search results container
+            analysis.searchResultItems = document.querySelectorAll('[class*="search"]').length;
+          } else if (plat === 'youtube') {
+            analysis.videoRenderers = document.querySelectorAll('ytd-video-renderer').length;
+            analysis.richItemRenderers = document.querySelectorAll('ytd-rich-item-renderer').length;
+            analysis.videoLinks = document.querySelectorAll('a[href*="watch?v="]').length;
+            analysis.hasYtInitialData = !!(window as any).ytInitialData;
+          }
+
+          return analysis;
+        }, platform);
+
+        diag.domAnalysis = domAnalysis;
+        diag.steps.push(`DOM analysis: ${JSON.stringify(domAnalysis)}`);
       }
     }
 
