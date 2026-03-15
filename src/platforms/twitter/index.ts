@@ -59,10 +59,12 @@ export class TwitterScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       // Inject saved cookies if available
-      if (this.cookieManager.hasCookies('twitter')) {
+      const hasCookies = this.cookieManager.hasCookies('twitter');
+      logger.info(`[Twitter] hasCookies('twitter') = ${hasCookies}`);
+      if (hasCookies) {
         const cookies = this.cookieManager.loadCookies('twitter');
+        logger.info(`[Twitter] Loaded ${cookies.length} cookies, critical: ${cookies.filter(c => ['auth_token','ct0','twid'].includes(c.name)).map(c => c.name).join(',') || 'NONE'}`);
         await this.browser.setCookies(sessionId, this.cookieManager.toPlaywrightCookies(cookies));
-        logger.info(`[Twitter] Loaded ${cookies.length} saved cookies`);
       } else {
         logger.warn(`[Twitter] No cookies found — Twitter requires login for search. Results may be empty.`);
       }
@@ -99,13 +101,25 @@ export class TwitterScraper implements PlatformScraper {
 
       // Check if we got redirected to login
       const currentUrl = page.url();
-      if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login')) {
+      const pageTitle = await page.title().catch(() => 'unknown');
+      logger.info(`[Twitter] Page loaded. URL: ${currentUrl}, Title: "${pageTitle}"`);
+
+      if (currentUrl.includes('/login') || currentUrl.includes('/i/flow/login') || pageTitle.includes('Log in')) {
         logger.error(`[Twitter] Redirected to login page — cookies are invalid or missing. Please update Twitter cookies in settings.`);
         await this.browser.closeContext(sessionId);
         return;
       }
+      logger.info(`[Twitter] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets so far`);
 
-      logger.info(`[Twitter] Page loaded. Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets so far`);
+      // Fallback: if API interception captured nothing, extract from rendered DOM
+      if (collectedPosts.length === 0) {
+        logger.info(`[Twitter] API interception yielded 0 tweets, trying DOM extraction...`);
+        const domTweets = await this.extractTweetsFromDOM(page);
+        for (const t of domTweets) {
+          collectedPosts.push(t);
+        }
+        logger.info(`[Twitter] DOM extraction found ${domTweets.length} tweets`);
+      }
 
       // Yield initial posts
       while (collectedPosts.length > 0 && yielded < maxResults) {
@@ -147,6 +161,18 @@ export class TwitterScraper implements PlatformScraper {
         }
 
         if (consecutiveOld >= 20) break;
+        if (collectedPosts.length === 0) {
+          // Try DOM extraction after each scroll as fallback
+          const domTweets = await this.extractTweetsFromDOM(page);
+          // Deduplicate by checking existing IDs
+          const existingIds = new Set(collectedPosts.map(p => p.id));
+          for (const t of domTweets) {
+            if (t.id && !existingIds.has(t.id)) {
+              collectedPosts.push(t);
+              existingIds.add(t.id);
+            }
+          }
+        }
         if (i > 3 && collectedPosts.length === 0) {
           logger.info(`[Twitter] No more tweets found after ${i + 1} scrolls (intercepted ${interceptedCount} responses total)`);
           break;
@@ -292,6 +318,107 @@ export class TwitterScraper implements PlatformScraper {
       if (body.length > 100) {
         logger.debug(`[Twitter] Failed to parse intercepted response (${body.length} bytes): ${(err as Error).message}`);
       }
+    }
+  }
+
+  /** Fallback: extract tweets directly from the rendered page DOM */
+  private async extractTweetsFromDOM(page: any): Promise<Post[]> {
+    try {
+      const tweets = await page.evaluate(() => {
+        const results: any[] = [];
+        // Twitter/X renders tweet articles with data-testid="tweet"
+        const tweetEls = document.querySelectorAll('article[data-testid="tweet"]');
+        tweetEls.forEach((el: Element) => {
+          try {
+            // Get tweet text
+            const textEl = el.querySelector('[data-testid="tweetText"]');
+            const text = textEl?.textContent || '';
+
+            // Get username from the user link (format: /@username)
+            const userLinks = el.querySelectorAll('a[href^="/"]');
+            let username = '';
+            let fullName = '';
+            for (const link of userLinks) {
+              const href = (link as HTMLAnchorElement).href || '';
+              const match = href.match(/\/([A-Za-z0-9_]+)$/);
+              if (match && !['search', 'explore', 'home', 'notifications', 'messages', 'i', 'settings'].includes(match[1])) {
+                username = match[1];
+                // The display name is usually in the parent of the link
+                const nameSpan = link.querySelector('span');
+                if (nameSpan) fullName = nameSpan.textContent || '';
+                break;
+              }
+            }
+
+            // Get tweet link (contains /status/ID)
+            let tweetUrl = '';
+            let tweetId = '';
+            const timeEl = el.querySelector('time');
+            if (timeEl) {
+              const parentLink = timeEl.closest('a');
+              if (parentLink) {
+                tweetUrl = parentLink.href || '';
+                const idMatch = tweetUrl.match(/\/status\/(\d+)/);
+                if (idMatch) tweetId = idMatch[1];
+              }
+            }
+
+            // Get timestamp
+            const timestamp = timeEl?.getAttribute('datetime') || '';
+
+            // Get engagement counts
+            const ariaLabels = el.querySelectorAll('[aria-label]');
+            let likes = 0, replies = 0, views = 0;
+            ariaLabels.forEach((e: Element) => {
+              const label = e.getAttribute('aria-label') || '';
+              const likeMatch = label.match(/(\d+)\s*(likes?|いいね)/i);
+              const replyMatch = label.match(/(\d+)\s*(repl|返信)/i);
+              const viewMatch = label.match(/(\d+)\s*(views?|表示)/i);
+              if (likeMatch) likes = parseInt(likeMatch[1]);
+              if (replyMatch) replies = parseInt(replyMatch[1]);
+              if (viewMatch) views = parseInt(viewMatch[1]);
+            });
+
+            if (username || text) {
+              results.push({
+                id: tweetId,
+                text,
+                username,
+                fullName,
+                url: tweetUrl,
+                timestamp,
+                likes,
+                replies,
+                views,
+              });
+            }
+          } catch {}
+        });
+        return results;
+      });
+
+      return tweets.map((t: any) => ({
+        id: t.id || '',
+        platform: 'twitter' as const,
+        url: t.url || `https://x.com/${t.username}/status/${t.id}`,
+        caption: t.text,
+        hashtags: (t.text.match(/#[\w\u0080-\uffff]+/g) || []).map((h: string) => h.toLowerCase()),
+        mentions: (t.text.match(/@[\w]+/g) || []).map((m: string) => m.toLowerCase()),
+        likesCount: t.likes || 0,
+        commentsCount: t.replies || 0,
+        viewsCount: t.views || 0,
+        mediaType: 'image' as const,
+        mediaUrls: [],
+        timestamp: t.timestamp || new Date().toISOString(),
+        owner: {
+          username: t.username,
+          id: '',
+          fullName: t.fullName,
+        },
+      }));
+    } catch (err) {
+      logger.warn(`[Twitter] DOM extraction failed: ${(err as Error).message}`);
+      return [];
     }
   }
 

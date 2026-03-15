@@ -437,8 +437,8 @@
               </td>
               <td class="px-3 py-2 text-right num text-white">
                 <span x-text="formatNumber(t._liveExtracted || t.totalExtracted)"></span>
-                <span x-show="getJobProgress(t.pairId) && getJobProgress(t.pairId).counts.posts > 0 && getJobProgress(t.pairId).status === 'running'"
-                      class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + getJobProgress(t.pairId).counts.posts"></span>
+                <span x-show="getJobProgress(t.pairId)?.counts?.posts > 0 && getJobProgress(t.pairId)?.status === 'running'"
+                      class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + (getJobProgress(t.pairId)?.counts?.posts || 0)"></span>
               </td>
               <!-- INLINE PROGRESS / LAST RESULT (persistent) -->
               <td class="px-3 py-2" colspan="1">
@@ -499,7 +499,7 @@
                 <button @click="toggleActive(t)" class="badge" :class="t.isActive ? 'badge-success' : 'badge-c'" x-text="t.isActive ? 'ON' : 'OFF'"></button>
               </td>
               <td class="px-3 py-2 text-center whitespace-nowrap space-x-1">
-                <button @click="runNow(t)" :disabled="!t.isActive || (getJobProgress(t.pairId) && getJobProgress(t.pairId).status === 'running')" class="badge badge-accent hover:opacity-80 disabled:opacity-30 cursor-pointer">Run</button>
+                <button @click="runNow(t)" :disabled="!t.isActive || getJobProgress(t.pairId)?.status === 'running'" class="badge badge-accent hover:opacity-80 disabled:opacity-30 cursor-pointer">Run</button>
                 <button @click="removeKeyword(t.id)" class="badge badge-error hover:opacity-80 cursor-pointer">삭제</button>
               </td>
             </tr>

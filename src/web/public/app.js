@@ -1128,7 +1128,7 @@ function campaignsPage() {
     showCreateForm: false,
     showCookieUpload: false,
     showEditModal: false,
-    editCampaign: null,
+    editCampaign: {},
     cookieUploadCampaign: null,
     cookieSenderUsername: '',
     cookieJsonText: '',
