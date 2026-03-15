@@ -78,9 +78,7 @@ export class TwitterScraper implements PlatformScraper {
             const before = collectedPosts.length;
             this.extractTweets(body, collectedPosts);
             const extracted = collectedPosts.length - before;
-            if (extracted > 0) {
-              logger.info(`[Twitter] Intercepted ${extracted} tweets from: ${url.split('?')[0].slice(-60)}`);
-            }
+            logger.info(`[Twitter] API intercept #${interceptedCount}: ${url.split('?')[0].slice(-80)} — extracted: ${extracted}, body: ${body.length}bytes`);
           }
         },
       });
@@ -110,21 +108,33 @@ export class TwitterScraper implements PlatformScraper {
       // Wait for tweet articles to appear in DOM (max 10 seconds)
       try {
         await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
-        logger.info(`[Twitter] Tweet articles found in DOM`);
+        const tweetCount = await page.$$eval('article[data-testid="tweet"]', (els: Element[]) => els.length).catch(() => 0);
+        logger.info(`[Twitter] Tweet articles found in DOM: ${tweetCount}`);
       } catch {
-        logger.warn(`[Twitter] No tweet articles appeared within 10s`);
+        // Log page state for debugging
+        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 300) || '').catch(() => '');
+        logger.warn(`[Twitter] No tweet articles appeared within 10s. Body preview: ${bodyText}`);
       }
 
-      logger.info(`[Twitter] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} tweets from API`);
+      logger.info(`[Twitter] After initial wait: intercepted=${interceptedCount} API responses, collected=${collectedPosts.length} tweets from API`);
 
-      // Primary method: DOM extraction (more reliable than API interception)
-      if (collectedPosts.length === 0) {
-        logger.info(`[Twitter] Trying DOM extraction...`);
-        const domTweets = await this.extractTweetsFromDOM(page);
+      // Always try DOM extraction (more reliable than API interception on deployed environments)
+      logger.info(`[Twitter] Running DOM extraction...`);
+      const domTweets = await this.extractTweetsFromDOM(page);
+      logger.info(`[Twitter] DOM extraction returned ${domTweets.length} tweets`);
+
+      // Merge: DOM tweets as primary, API-intercepted as supplement
+      if (domTweets.length > 0) {
+        const existingIds = new Set(collectedPosts.map(p => p.id));
         for (const t of domTweets) {
-          collectedPosts.push(t);
+          if (!existingIds.has(t.id)) {
+            collectedPosts.push(t);
+            existingIds.add(t.id);
+          }
         }
-        logger.info(`[Twitter] DOM extraction found ${domTweets.length} tweets`);
+        logger.info(`[Twitter] After merge: ${collectedPosts.length} total tweets`);
+      } else if (collectedPosts.length === 0) {
+        logger.warn(`[Twitter] Both API interception and DOM extraction returned 0 tweets`);
       }
 
       // Yield initial posts
@@ -331,8 +341,19 @@ export class TwitterScraper implements PlatformScraper {
     try {
       const tweets = await page.evaluate(() => {
         const results: any[] = [];
+        const debugInfo: string[] = [];
         // Twitter/X renders tweet articles with data-testid="tweet"
         const tweetEls = document.querySelectorAll('article[data-testid="tweet"]');
+        debugInfo.push(`Found ${tweetEls.length} article[data-testid="tweet"] elements`);
+        debugInfo.push(`URL: ${window.location.href}`);
+        debugInfo.push(`Title: ${document.title}`);
+        if (tweetEls.length === 0) {
+          // Try alternative selectors
+          const allArticles = document.querySelectorAll('article');
+          debugInfo.push(`Alternative: ${allArticles.length} <article> elements total`);
+          const cellDivs = document.querySelectorAll('[data-testid="cellInnerDiv"]');
+          debugInfo.push(`cellInnerDiv elements: ${cellDivs.length}`);
+        }
         tweetEls.forEach((el: Element) => {
           try {
             // Get tweet text
@@ -397,12 +418,22 @@ export class TwitterScraper implements PlatformScraper {
                 views,
               });
             }
-          } catch {}
+          } catch (e) {
+            debugInfo.push(`Error parsing tweet: ${(e as Error).message}`);
+          }
         });
-        return results;
+        debugInfo.push(`Extracted ${results.length} tweets from DOM`);
+        return { results, debugInfo };
       });
 
-      return tweets.map((t: any) => ({
+      // Log debug info from inside page.evaluate
+      if (tweets.debugInfo) {
+        for (const info of tweets.debugInfo) {
+          logger.info(`[Twitter DOM] ${info}`);
+        }
+      }
+
+      return (tweets.results || []).map((t: any) => ({
         id: t.id || '',
         platform: 'twitter' as const,
         url: t.url || `https://x.com/${t.username}/status/${t.id}`,
