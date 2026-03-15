@@ -1,6 +1,5 @@
 import { ProxyConfig } from './types.js';
 import { logger } from '../utils/logger.js';
-import { randomUUID } from 'crypto';
 
 /**
  * Proxy Router - Enterprise-grade proxy management

@@ -73,6 +73,9 @@ app.use('*', cors());
 // Static files
 app.use('/public/*', serveStatic({ root: 'src/web/' }));
 
+// ─── Health Check (no auth, used by Railway) ───
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
 // ─── Login Page & Auth Routes (no auth required) ───
 
 const loginViewPath = join(import.meta.dirname, 'views', 'login.html');
@@ -125,9 +128,9 @@ app.get('/logout', (c) => {
 // ─── Auth Middleware (protect everything else) ───
 
 app.use('*', async (c, next) => {
-  // Skip auth for login, static files
+  // Skip auth for login, static files, health check
   const path = c.req.path;
-  if (path === '/login' || path.startsWith('/public/')) {
+  if (path === '/login' || path === '/health' || path.startsWith('/public/')) {
     return next();
   }
 
