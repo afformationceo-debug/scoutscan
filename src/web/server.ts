@@ -7,7 +7,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { api } from './routes/api.js';
 import { sse } from './routes/sse.js';
 import { pages } from './routes/pages.js';
-import { recoverStuckJobs, migrateCookiesFromFilesystemToDB } from './services/db.js';
+import { recoverStuckJobs, migrateCookiesFromFilesystemToDB, db } from './services/db.js';
 import { scheduler } from '../services/scheduler.js';
 import { seedInitialUser, authenticateUser, createSession, validateSession, deleteSession } from './services/auth.js';
 import { readFileSync } from 'fs';
@@ -33,10 +33,14 @@ const migratedCookies = migrateCookiesFromFilesystemToDB();
 if (migratedCookies > 0) console.log(`[Startup] Migrated ${migratedCookies} cookie file(s) from filesystem to DB`);
 
 // 1. Create shared infrastructure (load proxies from DB)
-import { db } from './services/db.js';
-const proxyRows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
-const proxyUrls = proxyRows.map((r: any) => r.url).filter(Boolean);
-if (proxyUrls.length > 0) console.log(`[Startup] Loaded ${proxyUrls.length} proxy(s) from DB`);
+let proxyUrls: string[] = [];
+try {
+  const proxyRows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+  proxyUrls = proxyRows.map((r: any) => r.url).filter(Boolean);
+  if (proxyUrls.length > 0) console.log(`[Startup] Loaded ${proxyUrls.length} proxy(s) from DB`);
+} catch {
+  // Table may not exist yet on first boot
+}
 const proxyRouter = new ProxyRouter(proxyUrls);
 const stealthBrowser = new StealthBrowser(proxyRouter);
 const cookieManager = new CookieManager();
