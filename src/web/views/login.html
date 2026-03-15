@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Social Scraper - 로그인</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            dark: { body: '#0F1015', card: '#181B21', hover: '#222730', border: '#2F3541', subtle: '#13141A' },
+            accent: { DEFAULT: '#BFF009', hover: '#D4FF3D', dim: 'rgba(191,240,9,0.12)' },
+            success: '#4CE275', error: '#E85B56', warning: '#FFB74D', info: '#60A5FA',
+            kaia: { green: '#7EDA6C', muted: '#919DB5', text: '#ADB6C8' },
+          },
+          fontFamily: {
+            sans: ['Inter', 'Pretendard', 'system-ui', 'sans-serif'],
+            heading: ['Manrope', 'Pretendard', 'system-ui', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { background: #0F1015; color: #FFFFFF; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #13141A; }
+    ::-webkit-scrollbar-thumb { background: #2F3541; border-radius: 3px; }
+    input {
+      background: #13141A !important; border: 1px solid #2F3541 !important; color: #FFFFFF !important;
+      font-size: 14px; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input::placeholder { color: #919DB5 !important; opacity: 0.6; }
+    input:focus {
+      outline: none !important; border-color: #BFF009 !important;
+      box-shadow: 0 0 0 2px rgba(191,240,9,0.15) !important;
+    }
+    .btn-accent { background: #BFF009; color: #0F1015; font-weight: 700; transition: all 0.2s; }
+    .btn-accent:hover { background: #D4FF3D; box-shadow: 0 0 20px rgba(191,240,9,0.2); }
+    .btn-accent:disabled { opacity: 0.35; }
+  </style>
+</head>
+<body class="h-full font-sans antialiased flex items-center justify-center">
+  <div class="w-full max-w-sm px-6">
+    <!-- Logo -->
+    <div class="flex flex-col items-center mb-10">
+      <div class="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mb-4">
+        <svg class="w-7 h-7 text-dark-body" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+      </div>
+      <h1 class="font-heading font-bold text-2xl tracking-tight"><span class="text-accent">Social</span> <span class="text-white">Scraper</span></h1>
+      <p class="text-kaia-muted text-sm mt-2">계정에 로그인하세요</p>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm" method="POST" action="/login" class="space-y-4">
+      <div>
+        <label class="block text-xs text-kaia-muted font-medium mb-1.5 uppercase tracking-wider">이메일</label>
+        <input type="email" name="email" required autocomplete="email" autofocus
+               placeholder="이메일 주소 입력"
+               class="w-full rounded-lg px-4 py-3">
+      </div>
+      <div>
+        <label class="block text-xs text-kaia-muted font-medium mb-1.5 uppercase tracking-wider">비밀번호</label>
+        <input type="password" name="password" required autocomplete="current-password"
+               placeholder="비밀번호 입력"
+               class="w-full rounded-lg px-4 py-3">
+      </div>
+
+      <!-- Error message -->
+      <div id="loginError" style="display:none" class="text-sm text-error bg-error/10 border border-error/20 rounded-lg px-4 py-2.5"></div>
+
+      <button type="submit" class="btn-accent w-full rounded-lg py-3 text-sm mt-2">로그인</button>
+    </form>
+
+    <p class="text-center text-kaia-muted text-xs mt-8">&copy; 2026 Social Scraper. All rights reserved.</p>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const email = form.email.value;
+      const password = form.password.value;
+      const errorEl = document.getElementById('loginError');
+      const btn = form.querySelector('button[type="submit"]');
+
+      btn.disabled = true;
+      btn.textContent = '로그인 중...';
+      errorEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/';
+        } else {
+          errorEl.textContent = data.error || '로그인에 실패했습니다.';
+          errorEl.style.display = 'block';
+        }
+      } catch {
+        errorEl.textContent = '서버 연결에 실패했습니다.';
+        errorEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '로그인';
+      }
+    });
+  </script>
+</body>
+</html>

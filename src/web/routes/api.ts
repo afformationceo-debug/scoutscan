@@ -623,6 +623,7 @@ api.get('/campaigns/:id/activity', (c) => {
     SELECT q.id, q.influencer_key, q.execute_status, q.engagement_status, q.error_message,
            q.account_username, q.executed_at, q.created_at, q.message_rendered,
            q.liked_post_url, q.comment_text, q.commented_post_url,
+           q.reply_detected, q.reply_detected_at,
            m.username, m.full_name, m.followers_count, m.profile_pic_url, m.detected_country, m.ai_country
     FROM dm_action_queue q
     LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
@@ -642,7 +643,11 @@ api.get('/campaigns/:id/activity', (c) => {
     SELECT execute_status, COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? GROUP BY execute_status
   `).all(id) as any[];
 
-  return c.json({ activity: rows, summary: Object.fromEntries(summary.map((s: any) => [s.execute_status, s.cnt])) });
+  const replyCount = (db.prepare(
+    `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND reply_detected = 1`
+  ).get(id) as any)?.cnt || 0;
+
+  return c.json({ activity: rows, summary: Object.fromEntries(summary.map((s: any) => [s.execute_status, s.cnt])), replyCount });
 });
 
 // Campaign targets (assigned influencers)
@@ -834,6 +839,17 @@ api.get('/dashboard/stats', (c) => {
   const keywords = db.prepare('SELECT COUNT(*) as cnt FROM keyword_targets WHERE is_active = 1').get() as any;
   const totalExtracted = (db.prepare('SELECT SUM(total_extracted) as total FROM keyword_targets').get() as any)?.total || 0;
 
+  // Scraping success rate: (completed jobs with resultCount > 0) / (total completed jobs)
+  const scrapingStats = db.prepare(`
+    SELECT
+      COUNT(*) as totalCompleted,
+      SUM(CASE WHEN result_count > 0 THEN 1 ELSE 0 END) as successCount
+    FROM jobs WHERE status = 'completed'
+  `).get() as any;
+  const scrapingSuccessRate = scrapingStats?.totalCompleted > 0
+    ? Math.round((scrapingStats.successCount / scrapingStats.totalCompleted) * 100)
+    : 0;
+
   return c.json({
     totalInfluencers,
     aiClassified,
@@ -844,6 +860,8 @@ api.get('/dashboard/stats', (c) => {
     totalPending: dmStats?.pending || 0,
     activeKeywords: keywords?.cnt || 0,
     totalExtracted,
+    scrapingSuccessRate,
+    scrapingTotalCompleted: scrapingStats?.totalCompleted || 0,
   });
 });
 

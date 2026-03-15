@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
     "crawlee": "^3.11.0",
     "dotenv": "^16.4.0",
@@ -31,6 +32,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/node-cron": "^3.0.11",

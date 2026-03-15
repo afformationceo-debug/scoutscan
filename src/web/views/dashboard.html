@@ -1,35 +1,67 @@
 <div x-data="liveDashboard()" x-init="init()">
+  <!-- Header + Quick Actions -->
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-heading font-bold text-white">대시보드</h2>
+    <div class="flex items-center gap-2">
+      <a href="/data?tab=keywords" class="badge badge-accent cursor-pointer hover:opacity-80 text-[11px] px-3 py-1.5">키워드 등록</a>
+      <a href="/data?tab=campaigns" class="badge bg-info/15 text-info cursor-pointer hover:opacity-80 text-[11px] px-3 py-1.5">캠페인 관리</a>
+      <a href="/settings" class="badge bg-dark-hover text-kaia-text cursor-pointer hover:text-white text-[11px] px-3 py-1.5">설정</a>
+    </div>
+  </div>
+
   <!-- Summary Stats Row -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
-      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">전체 인플루언서</div>
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-[11px] text-kaia-muted uppercase tracking-wider">전체 인플루언서</div>
+        <svg class="w-4 h-4 text-accent/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </div>
       <div class="text-2xl font-heading font-bold text-white font-mono" x-text="formatNumber(stats.totalInfluencers)"></div>
       <div class="text-[11px] text-kaia-muted mt-1">AI 분류: <span class="text-accent" x-text="formatNumber(stats.aiClassified)"></span></div>
     </div>
-    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
-      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">활성 캠페인</div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-[11px] text-kaia-muted uppercase tracking-wider">활성 캠페인</div>
+        <svg class="w-4 h-4 text-success/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      </div>
       <div class="text-2xl font-heading font-bold text-accent font-mono" x-text="stats.activeCampaigns"></div>
       <div class="text-[11px] text-kaia-muted mt-1">전체: <span class="text-white" x-text="stats.totalCampaigns"></span></div>
     </div>
-    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
-      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">DM 발송</div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-[11px] text-kaia-muted uppercase tracking-wider">DM 발송</div>
+        <svg class="w-4 h-4 text-info/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+      </div>
       <div class="text-2xl font-heading font-bold text-success font-mono" x-text="formatNumber(stats.totalSent)"></div>
       <div class="text-[11px] text-kaia-muted mt-1">실패: <span class="text-error" x-text="stats.totalFailed"></span> | 대기: <span class="text-warning" x-text="stats.totalPending"></span></div>
     </div>
-    <div class="bg-dark-card border border-dark-border rounded-lg p-4">
-      <div class="text-[11px] text-kaia-muted uppercase tracking-wider mb-1">스크래핑 키워드</div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-[11px] text-kaia-muted uppercase tracking-wider">스크래핑 키워드</div>
+        <svg class="w-4 h-4 text-warning/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+      </div>
       <div class="text-2xl font-heading font-bold text-info font-mono" x-text="stats.activeKeywords"></div>
       <div class="text-[11px] text-kaia-muted mt-1">누적 수집: <span class="text-white" x-text="formatNumber(stats.totalExtracted)"></span></div>
+    </div>
+    <div class="bg-dark-card border border-dark-border rounded-lg p-4 card-glow">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-[11px] text-kaia-muted uppercase tracking-wider">스크래핑 성공률</div>
+        <svg class="w-4 h-4 text-success/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="text-2xl font-heading font-bold font-mono" :class="stats.scrapingSuccessRate >= 80 ? 'text-success' : stats.scrapingSuccessRate >= 50 ? 'text-warning' : 'text-error'" x-text="stats.scrapingSuccessRate + '%'"></div>
+      <div class="text-[11px] text-kaia-muted mt-1">완료: <span class="text-white" x-text="stats.scrapingTotalCompleted"></span>건</div>
     </div>
   </div>
 
   <!-- Cookie Health Banner -->
   <div x-show="expiredCookies.length > 0" class="bg-error/10 border border-error/30 rounded-lg p-3 mb-4">
     <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-error flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
       <span class="text-error text-sm font-semibold">쿠키 만료 경고</span>
       <template x-for="a in expiredCookies" :key="a.platform + ':' + a.username">
         <span class="badge badge-error text-[10px]" x-text="a.platform + ':@' + a.username"></span>
       </template>
+      <a href="/settings" class="ml-auto text-[11px] text-error hover:underline">설정에서 확인</a>
     </div>
   </div>
 
@@ -42,10 +74,13 @@
           <span class="live-dot"></span>
           <h3 class="text-sm font-semibold text-white">스크래핑 현황</h3>
         </div>
-        <span class="text-[11px] text-kaia-muted" x-text="keywords.length + '개 키워드'"></span>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-kaia-muted" x-text="keywords.length + '개 키워드'"></span>
+          <a href="/data?tab=keywords" class="text-[10px] text-accent hover:text-accent-hover">관리</a>
+        </div>
       </div>
       <div class="max-h-[400px] overflow-y-auto">
-        <table class="min-w-full data-table">
+        <table class="min-w-full data-table" x-show="keywords.length > 0">
           <thead>
             <tr class="border-b border-dark-border">
               <th class="px-3 py-2 text-left">키워드</th>
@@ -77,7 +112,11 @@
             </template>
           </tbody>
         </table>
-        <div x-show="keywords.length === 0" class="text-center text-kaia-muted py-8 text-sm">키워드가 없습니다. 데이터 관리에서 등록하세요.</div>
+        <div x-show="keywords.length === 0" class="text-center py-10">
+          <svg class="w-8 h-8 mx-auto text-kaia-muted/30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+          <p class="text-kaia-muted text-sm mb-3">등록된 키워드가 없습니다</p>
+          <a href="/data?tab=keywords" class="badge badge-accent cursor-pointer hover:opacity-80 text-[11px]">키워드 등록하기</a>
+        </div>
       </div>
     </div>
 
@@ -88,10 +127,13 @@
           <span class="live-dot"></span>
           <h3 class="text-sm font-semibold text-white">캠페인 현황</h3>
         </div>
-        <span class="text-[11px] text-kaia-muted" x-text="campaigns.length + '개 캠페인'"></span>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-kaia-muted" x-text="campaigns.length + '개 캠페인'"></span>
+          <a href="/data?tab=campaigns" class="text-[10px] text-accent hover:text-accent-hover">관리</a>
+        </div>
       </div>
       <div class="max-h-[400px] overflow-y-auto">
-        <table class="min-w-full data-table">
+        <table class="min-w-full data-table" x-show="campaigns.length > 0">
           <thead>
             <tr class="border-b border-dark-border">
               <th class="px-3 py-2 text-left">캠페인</th>
@@ -112,7 +154,7 @@
                 <td class="px-3 py-2 text-right num text-success text-[12px]" x-text="c.total_sent || 0"></td>
                 <td class="px-3 py-2 text-right num text-error text-[12px]" x-text="c.total_failed || 0"></td>
                 <td class="px-3 py-2 text-right num text-warning text-[12px]" x-text="Math.max(0, (c.total_queued || 0) - (c.total_sent || 0) - (c.total_failed || 0))"></td>
-                <td class="px-3 py-2 text-center">
+                <td class="py-2 text-center">
                   <span class="badge text-[10px]"
                         :class="c.status === 'active' || c.status === 'processing' ? 'badge-success' : c.status === 'completed' ? 'badge-info' : c.status === 'paused' ? 'badge-warning' : 'badge-c'"
                         x-text="c.status"></span>
@@ -121,7 +163,11 @@
             </template>
           </tbody>
         </table>
-        <div x-show="campaigns.length === 0" class="text-center text-kaia-muted py-8 text-sm">캠페인이 없습니다. 데이터 관리에서 생성하세요.</div>
+        <div x-show="campaigns.length === 0" class="text-center py-10">
+          <svg class="w-8 h-8 mx-auto text-kaia-muted/30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <p class="text-kaia-muted text-sm mb-3">등록된 캠페인이 없습니다</p>
+          <a href="/data?tab=campaigns" class="badge badge-accent cursor-pointer hover:opacity-80 text-[11px]">캠페인 만들기</a>
+        </div>
       </div>
     </div>
   </div>
@@ -129,7 +175,7 @@
   <!-- Platform Cookie Status (compact) -->
   <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
     <template x-for="p in platforms" :key="p.platform">
-      <div class="bg-dark-card border border-dark-border rounded-lg p-3 text-center" :class="p.hasCookies ? 'border-success/20' : 'border-error/20'">
+      <div class="bg-dark-card border rounded-lg p-3 text-center card-glow" :class="p.hasCookies ? 'border-success/20' : 'border-error/20'">
         <div class="text-[11px] text-kaia-muted capitalize" x-text="p.platform"></div>
         <div class="flex items-center justify-center gap-1 mt-1">
           <span class="w-1.5 h-1.5 rounded-full" :class="p.hasCookies ? 'bg-success' : 'bg-error'"></span>
@@ -141,9 +187,15 @@
 
   <!-- Activity Feed -->
   <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
-    <div class="px-4 py-3 border-b border-dark-border flex items-center gap-2">
-      <span class="live-dot"></span>
-      <h3 class="text-sm font-semibold text-white">실시간 활동</h3>
+    <div class="px-4 py-3 border-b border-dark-border flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="live-dot"></span>
+        <h3 class="text-sm font-semibold text-white">실시간 활동</h3>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-kaia-muted" x-text="activities.length + '건'"></span>
+        <a href="/history" class="text-[10px] text-accent hover:text-accent-hover">전체 이력</a>
+      </div>
     </div>
     <div class="max-h-[300px] overflow-y-auto p-3 space-y-1.5 font-mono text-[11px]">
       <template x-for="(a, idx) in activities" :key="idx">
@@ -167,7 +219,11 @@
                 }" x-text="a.message"></span>
         </div>
       </template>
-      <div x-show="activities.length === 0" class="text-center text-kaia-muted py-8">활동이 없습니다. 스크래핑이나 캠페인을 시작하세요.</div>
+      <div x-show="activities.length === 0" class="text-center py-10">
+        <svg class="w-8 h-8 mx-auto text-kaia-muted/30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <p class="text-kaia-muted text-sm">활동이 없습니다</p>
+        <p class="text-kaia-muted/50 text-[11px] mt-1">스크래핑이나 캠페인을 시작하면 여기에 실시간으로 표시됩니다</p>
+      </div>
     </div>
   </div>
 </div>

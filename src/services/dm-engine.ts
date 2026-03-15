@@ -446,9 +446,13 @@ export class DMEngine {
     if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
     if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
 
-    // Exclude already queued
+    // Exclude already queued in this campaign
     conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE campaign_id = ?)`);
     params.push(campaignId);
+
+    // Exclude influencers who already received a successful DM in ANY campaign
+    conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE execute_status = 'success')`);
+
 
     const where = `WHERE ${conditions.join(' AND ')}`;
     const candidates = db.prepare(
@@ -588,6 +592,36 @@ export class DMEngine {
     if (hasBizCategory && hasWeakUsername) return true;
 
     return false;
+  }
+
+  /** Placeholder: check inbox for replies after sending DM.
+   *  TODO: implement per-platform inbox checking logic.
+   */
+  async checkForReply(platform: string, account: any, recipientUsername: string, queueItemId: number): Promise<boolean> {
+    // Placeholder — actual inbox checking will be implemented per platform.
+    // When implemented, this should:
+    // 1. Open the conversation with recipientUsername
+    // 2. Check if there's a new message from them
+    // 3. If reply detected, update the queue item and campaign stats
+    const replyDetected = false;
+
+    if (replyDetected) {
+      const now = new Date().toISOString();
+      db.prepare(`UPDATE dm_action_queue SET reply_detected = 1, reply_detected_at = ? WHERE id = ?`)
+        .run(now, queueItemId);
+      // Also increment the campaign's total_replied counter
+      db.prepare(`UPDATE dm_campaigns SET total_replied = total_replied + 1, updated_at = ? WHERE campaign_id = (SELECT campaign_id FROM dm_action_queue WHERE id = ?)`)
+        .run(now, queueItemId);
+    }
+    return replyDetected;
+  }
+
+  /** Get reply count for a campaign */
+  getReplyCount(campaignId: string): number {
+    const row = db.prepare(
+      `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND reply_detected = 1`
+    ).get(campaignId) as any;
+    return row?.cnt || 0;
   }
 
   private formatNumber(num: number): string {

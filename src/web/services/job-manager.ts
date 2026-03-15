@@ -330,7 +330,11 @@ class JobManager extends EventEmitter {
         }
       }
 
-      updateJobStatus(jobId, 'completed', { resultCount: count });
+      // Save cookie warning as error field so it's visible in history UI
+      updateJobStatus(jobId, 'completed', {
+        resultCount: count,
+        error: cookieWarning || undefined,
+      });
       this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount, cookieWarning });
 
       // Broadcast global scraping_completed notification
@@ -467,8 +471,20 @@ class JobManager extends EventEmitter {
         await Promise.allSettled(retryTasks);
       }
 
-      updateJobStatus(jobId, 'completed', { resultCount: profilesCount });
-      this.sendSSE(jobId, 'complete', { postsCount: 0, profilesCount });
+      // Detect 0-result re-enrichment (likely cookie/proxy issue)
+      let reEnrichWarning = '';
+      if (profilesCount === 0) {
+        const needsCookies = ['instagram', 'tiktok', 'twitter'];
+        if (needsCookies.includes(platform)) {
+          reEnrichWarning = `${platform} 쿠키가 만료되었거나 없습니다. 설정에서 확인하세요.`;
+        }
+      }
+
+      updateJobStatus(jobId, 'completed', {
+        resultCount: profilesCount,
+        error: reEnrichWarning || undefined,
+      });
+      this.sendSSE(jobId, 'complete', { postsCount: 0, profilesCount, cookieWarning: reEnrichWarning });
     } catch (error) {
       updateJobStatus(jobId, 'failed', { error: (error as Error).message, resultCount: profilesCount });
       this.sendSSE(jobId, 'error', { message: (error as Error).message });

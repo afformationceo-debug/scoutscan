@@ -28,6 +28,11 @@
             <span class="w-2.5 h-2.5 rounded-full" :class="p.hasCookies ? 'bg-success' : 'bg-error'"></span>
           </div>
           <p class="text-[12px] text-kaia-text" x-text="p.hasCookies ? p.cookieCount + '개 쿠키 로드됨' : '쿠키 없음'"></p>
+          <p x-show="p.hasCookies && p.updatedAt" class="text-[11px] text-kaia-muted mt-0.5">
+            <span>등록일: </span>
+            <span x-text="timeAgo(p.updatedAt)"></span>
+            <span class="ml-1 text-[10px] text-kaia-muted/60" x-text="'(' + formatDate(p.updatedAt) + ')'"></span>
+          </p>
 
           <!-- Cookie Upload Toggle -->
           <div class="mt-3 pt-3 border-t border-dark-border/30">

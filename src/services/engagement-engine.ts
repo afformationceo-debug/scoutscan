@@ -111,8 +111,10 @@ export class EngagementEngine {
     if (category) { conditions.push('category = ?'); params.push(category); }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    // Weighted selection: less-used templates have higher chance of being picked.
+    // Weight = 1 / (usage_count + 1), then use cumulative random selection via SQL.
     return db.prepare(
-      `SELECT * FROM comment_templates ${where} ORDER BY RANDOM() LIMIT 1`
+      `SELECT * FROM comment_templates ${where} ORDER BY (CAST(usage_count AS REAL) + 1) ASC, RANDOM() LIMIT 1`
     ).get(...params) as any || null;
   }
 

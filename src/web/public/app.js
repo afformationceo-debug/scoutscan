@@ -19,6 +19,21 @@ function formatDateKST(dateStr) {
   return d.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) + ' ' + d.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const d = new Date(dateStr);
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+  if (diffMin < 1) return '방금 전';
+  if (diffMin < 60) return diffMin + '분 전';
+  if (diffHr < 24) return diffHr + '시간 전';
+  if (diffDay < 30) return diffDay + '일 전';
+  return Math.floor(diffDay / 30) + '개월 전';
+}
+
 function exportJob(jobId, format) {
   window.location.href = `/api/jobs/${jobId}/export?format=${format}`;
 }
@@ -2112,6 +2127,8 @@ function liveDashboard() {
       totalPending: 0,
       activeKeywords: 0,
       totalExtracted: 0,
+      scrapingSuccessRate: 0,
+      scrapingTotalCompleted: 0,
     },
     keywords: [],
     campaigns: [],
@@ -2172,6 +2189,8 @@ function liveDashboard() {
         this.stats.totalPending = statsData.totalPending || 0;
         this.stats.activeKeywords = statsData.activeKeywords || 0;
         this.stats.totalExtracted = statsData.totalExtracted || 0;
+        this.stats.scrapingSuccessRate = statsData.scrapingSuccessRate || 0;
+        this.stats.scrapingTotalCompleted = statsData.scrapingTotalCompleted || 0;
 
         // Keywords
         this.keywords = keywordsData.targets || [];

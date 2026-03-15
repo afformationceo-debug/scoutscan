@@ -94,6 +94,11 @@ export class SchedulerService {
     if (!target) throw new Error(`Keyword target not found: ${pairId}`);
     if (!target.isActive) throw new Error(`Keyword target is inactive: ${pairId}`);
 
+    // Prevent duplicate jobs
+    if (target.lastJobStatus === 'running') {
+      throw new Error(`Job already running for ${pairId}`);
+    }
+
     return this.runScheduledJob(target);
   }
 
@@ -103,7 +108,7 @@ export class SchedulerService {
     const targets = listKeywordTargets();
 
     const due = targets.filter(t =>
-      t.isActive && t.nextScrapeAt && t.nextScrapeAt <= now
+      t.isActive && t.nextScrapeAt && t.nextScrapeAt <= now && t.lastJobStatus !== 'running'
     );
 
     if (due.length === 0) return;

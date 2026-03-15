@@ -18,8 +18,8 @@ interface CookieEntry {
  * When set, DB is the primary source of truth; filesystem is best-effort cache.
  */
 export interface CookieDbAdapter {
-  getPlatformCookieJson(platform: string): string | null;
-  savePlatformCookieJson(platform: string, json: string, count: number): void;
+  getPlatformCookieJson(platform: string, userId?: string): string | null;
+  savePlatformCookieJson(platform: string, json: string, count: number, userId?: string): void;
   getAccountCookieJson(platform: string, username: string): string | null;
   saveAccountCookieJson(platform: string, username: string, json: string, count: number): void;
   hasAccountCookie(platform: string, username: string): boolean;

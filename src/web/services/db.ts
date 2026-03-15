@@ -319,6 +319,9 @@ const alterMigrations = [
   `ALTER TABLE dm_action_queue ADD COLUMN commented_post_url TEXT`,
   // dm_accounts: store actual cookie JSON in DB (ephemeral filesystem safe)
   `ALTER TABLE dm_accounts ADD COLUMN cookie_json TEXT`,
+  // dm_action_queue: reply detection tracking
+  `ALTER TABLE dm_action_queue ADD COLUMN reply_detected INTEGER DEFAULT 0`,
+  `ALTER TABLE dm_action_queue ADD COLUMN reply_detected_at TEXT`,
 ];
 
 for (const sql of alterMigrations) {
@@ -618,14 +621,29 @@ export function getJobPostsRaw(jobId: string): any[] {
 import type { CookieDbAdapter } from '../../core/cookie-manager.js';
 
 export const cookieDbAdapter: CookieDbAdapter = {
-  getPlatformCookieJson(platform: string): string | null {
+  getPlatformCookieJson(platform: string, userId?: string): string | null {
+    if (userId) {
+      // Try user-specific cookies first, then fall back to unscoped
+      const row = db.prepare('SELECT cookie_json FROM scraping_cookies WHERE platform = ? AND user_id = ?').get(platform, userId) as any;
+      if (row?.cookie_json) return row.cookie_json;
+    }
     const row = db.prepare('SELECT cookie_json FROM scraping_cookies WHERE platform = ?').get(platform) as any;
     return row?.cookie_json || null;
   },
 
-  savePlatformCookieJson(platform: string, json: string, count: number): void {
-    db.prepare('INSERT OR REPLACE INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at) VALUES (?, ?, ?, ?)')
-      .run(platform, json, count, new Date().toISOString());
+  savePlatformCookieJson(platform: string, json: string, count: number, userId?: string): void {
+    if (userId) {
+      db.prepare('UPDATE scraping_cookies SET cookie_json = ?, cookie_count = ?, updated_at = ?, user_id = ? WHERE platform = ?')
+        .run(json, count, new Date().toISOString(), userId, platform);
+      const changes = db.prepare('SELECT changes() as c').get() as any;
+      if (!changes?.c) {
+        db.prepare('INSERT INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at, user_id) VALUES (?, ?, ?, ?, ?)')
+          .run(platform, json, count, new Date().toISOString(), userId);
+      }
+    } else {
+      db.prepare('INSERT OR REPLACE INTO scraping_cookies (platform, cookie_json, cookie_count, updated_at) VALUES (?, ?, ?, ?)')
+        .run(platform, json, count, new Date().toISOString());
+    }
   },
 
   getAccountCookieJson(platform: string, username: string): string | null {
