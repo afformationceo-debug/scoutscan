@@ -168,15 +168,15 @@
         <div x-show="!loading && profiles.length === 0" class="text-center py-12 text-kaia-muted">프로필이 없습니다.</div>
 
         <!-- Column Headers -->
-        <div x-show="!loading && profiles.length > 0" class="grid grid-cols-[24px_54px_1fr_80px_64px_48px_48px_140px_56px_64px_88px] gap-0 items-center border-b border-dark-border px-1" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
+        <div x-show="!loading && profiles.length > 0" class="grid grid-cols-[24px_44px_1fr_80px_56px_40px_40px_52px_52px_56px_80px] gap-0 items-center border-b border-dark-border px-1" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
           <div class="py-2.5"></div>
           <div class="py-2.5 px-1">플랫폼</div>
-          <div class="py-2.5 px-2">유저명</div>
+          <div class="py-2.5 px-1">유저명</div>
           <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='followers'; load()">팔로워</div>
           <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='engagement'; load()">참여율</div>
           <div class="py-2.5 text-center">등급</div>
           <div class="py-2.5 text-center cursor-pointer hover:text-[#BFF009]" @click="sortBy='country'; load()">국가</div>
-          <div class="py-2.5 px-1">AI분류 / 이유</div>
+          <div class="py-2.5 text-center">AI</div>
           <div class="py-2.5 text-center">DM</div>
           <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='posts'; load()">게시물</div>
           <div class="py-2.5 px-1 cursor-pointer hover:text-[#BFF009]" @click="sortBy='added'; load()">추가일</div>
@@ -187,48 +187,41 @@
           <div>
             <!-- Main row: compact single-line -->
             <div @click="p._expanded = !p._expanded"
-                 class="grid grid-cols-[24px_54px_1fr_80px_64px_48px_48px_140px_56px_64px_88px] gap-0 items-center px-1 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
-                 style="font-size:13px;">
-              <div class="py-2 text-center">
+                 class="grid grid-cols-[24px_44px_1fr_80px_56px_40px_40px_52px_52px_56px_80px] gap-0 items-center px-1 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
+                 style="font-size:12px;">
+              <div class="py-1.5 text-center">
                 <svg :class="p._expanded ? 'rotate-90' : ''" class="w-3 h-3 text-[#919DB5] transition-transform inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
               </div>
-              <div class="py-2 px-1">
-                <span class="badge text-[10px]" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform.slice(0,2).toUpperCase()"></span>
+              <div class="py-1.5 px-1">
+                <span class="badge text-[9px] px-1.5" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform.slice(0,2).toUpperCase()"></span>
               </div>
-              <div class="py-2 px-2 truncate">
-                <span class="text-[#BFF009] font-medium" x-text="'@' + p.username"></span>
-                <span x-show="p.is_verified" class="text-[#BFF009] text-[9px] ml-0.5">&#10003;</span>
-                <span x-show="p.full_name && p.full_name !== 'None'" class="text-[#919DB5] text-[11px] ml-1" x-text="p.full_name"></span>
+              <div class="py-1.5 px-1 truncate overflow-hidden min-w-0">
+                <span class="text-[#BFF009] font-medium text-[11px]" x-text="'@' + (p.username.length > 20 ? p.username.slice(0,20) + '..' : p.username)"></span>
+                <span x-show="p.is_verified" class="text-[#BFF009] text-[8px]">&#10003;</span>
+                <span x-show="p.full_name && p.full_name !== 'None' && p.full_name.length <= 12" class="text-[#919DB5] text-[10px] ml-1" x-text="p.full_name"></span>
               </div>
-              <div class="py-2 px-1 text-right text-white" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.followers_count)"></div>
-              <div class="py-2 px-1 text-right" style="font-family:'IBM Plex Mono',monospace">
+              <div class="py-1.5 px-1 text-right text-white text-[11px]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.followers_count)"></div>
+              <div class="py-1.5 px-1 text-right text-[11px]" style="font-family:'IBM Plex Mono',monospace">
                 <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(1) + '%' : '-'"
                       :class="p.engagement_rate >= 3 ? 'text-[#4CE275]' : p.engagement_rate >= 1 ? 'text-[#BFF009]' : 'text-[#919DB5]'"></span>
               </div>
-              <div class="py-2 text-center">
-                <span class="badge text-[10px]" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || '-'"></span>
+              <div class="py-1.5 text-center">
+                <span class="text-[9px] font-bold px-1 py-0.5 rounded" :class="p.scout_tier === 'S' ? 'text-[#FFB74D]' : p.scout_tier === 'A' ? 'text-[#4CE275]' : p.scout_tier === 'B' ? 'text-[#60A5FA]' : 'text-[#919DB5]'" x-text="p.scout_tier || '-'"></span>
               </div>
-              <!-- Unified Country: AI-first, geo fallback, with source tag -->
-              <div class="py-2 text-center text-[12px]">
+              <div class="py-1.5 text-center text-[10px]">
                 <span class="text-white font-medium" x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : (p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : '-'"
                       :class="{'text-[#2E2E2E]': !((p.ai_country && p.ai_country !== 'UNKNOWN') || (p.detected_country && p.detected_country !== 'UNKNOWN'))}"></span>
-                <span x-show="p.ai_country && p.ai_country !== 'UNKNOWN'" class="text-[8px] text-[#BFF009] ml-0.5 opacity-60">AI</span>
-                <span x-show="!(p.ai_country && p.ai_country !== 'UNKNOWN') && p.detected_country && p.detected_country !== 'UNKNOWN'" class="text-[8px] text-[#919DB5] ml-0.5">geo</span>
               </div>
-              <!-- AI Classification + Reason -->
-              <div class="py-1.5 px-1 text-[11px] leading-tight" :title="p.ai_reason || ''">
-                <div>
-                  <span x-show="p.ai_is_influencer === 1" class="text-[#4CE275] font-bold">인플</span>
-                  <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-[#E85B56] font-bold">업체</span>
-                  <span x-show="!p.ai_classified_at" class="text-[#2E2E2E]">-</span>
-                </div>
-                <div x-show="p.ai_reason" class="text-[9px] text-[#919DB5] line-clamp-1 mt-0.5" x-text="p.ai_reason"></div>
+              <div class="py-1.5 text-center" :title="p.ai_reason || ''">
+                <span x-show="p.ai_is_influencer === 1" class="text-[#4CE275] text-[10px] font-bold">인플</span>
+                <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-[#E85B56] text-[10px] font-bold">업체</span>
+                <span x-show="!p.ai_classified_at" class="text-[#2E2E2E] text-[10px]">-</span>
               </div>
-              <div class="py-2 text-center">
-                <span class="badge text-[10px]" :class="p.dm_status === 'sent' ? 'badge-success' : p.dm_status === 'replied' ? 'badge-info' : p.dm_status === 'blacklist' ? 'badge-error' : 'badge-c'" x-text="p.dm_status || 'pending'"></span>
+              <div class="py-1.5 text-center">
+                <span class="text-[9px] font-medium px-1.5 py-0.5 rounded-full" :class="p.dm_status === 'sent' ? 'bg-[#4CE275]/12 text-[#4CE275]' : p.dm_status === 'replied' ? 'bg-[#60A5FA]/12 text-[#60A5FA]' : p.dm_status === 'blacklist' ? 'bg-[#E85B56]/12 text-[#E85B56]' : 'text-[#919DB5]'" x-text="p.dm_status === 'pending' ? '-' : p.dm_status"></span>
               </div>
-              <div class="py-2 px-1 text-right text-[12px]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.posts_count)"></div>
-              <div class="py-2 px-1 text-[11px] text-[#919DB5] whitespace-nowrap" x-text="formatDate(p.first_seen_at)"></div>
+              <div class="py-1.5 px-1 text-right text-[11px] text-[#919DB5]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.posts_count)"></div>
+              <div class="py-1.5 px-1 text-[10px] text-[#919DB5] whitespace-nowrap" x-text="formatDateShort(p.first_seen_at)"></div>
             </div>
 
             <!-- Expanded Detail Panel -->
