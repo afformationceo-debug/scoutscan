@@ -162,94 +162,188 @@
         <button @click="resetFilters()" x-show="hasActiveFilters()" class="text-[10px] text-error hover:text-error/80 px-1">초기화</button>
       </div>
 
-      <!-- Profiles Table -->
-      <div class="overflow-x-auto">
+      <!-- Profiles Table (Compact + Expandable) -->
+      <div>
         <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
         <div x-show="!loading && profiles.length === 0" class="text-center py-12 text-kaia-muted">프로필이 없습니다.</div>
-        <table x-show="!loading && profiles.length > 0" class="min-w-full data-table">
-          <thead>
-            <tr class="border-b border-dark-border">
-              <th class="px-2 py-2.5 text-left">플랫폼</th>
-              <th class="px-2 py-2.5 text-left">유저명</th>
-              <th class="px-2 py-2.5 text-left">이름</th>
-              <th class="px-2 py-2.5 text-left">바이오</th>
-              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='followers'; load()">팔로워</th>
-              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='following'; load()">팔로잉</th>
-              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='posts'; load()">게시물</th>
-              <th class="px-2 py-2.5 text-right cursor-pointer hover:text-accent" @click="sortBy='engagement'; load()">참여율</th>
-              <th class="px-2 py-2.5 text-center">인증</th>
-              <th class="px-2 py-2.5 text-center">AI분류</th>
-              <th class="px-2 py-2.5 text-center cursor-pointer hover:text-accent" @click="sortBy='country'; load()">국가</th>
-              <th class="px-2 py-2.5 text-center">비공개</th>
-              <th class="px-2 py-2.5 text-left">카테고리</th>
-              <th class="px-2 py-2.5 text-left">이메일</th>
-              <th class="px-2 py-2.5 text-left">URL</th>
-              <th class="px-2 py-2.5 text-center">등급</th>
-              <th class="px-2 py-2.5 text-center">DM</th>
-              <th class="px-2 py-2.5 text-left text-[11px]">캠페인</th>
-              <th class="px-2 py-2.5 text-left text-[11px]">소스</th>
-              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='added'; load()">추가일</th>
-              <th class="px-2 py-2.5 text-left cursor-pointer hover:text-accent" @click="sortBy='updated'; load()">업데이트</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="p in profiles" :key="p.platform + ':' + p.username">
-              <tr class="border-b border-dark-border/30">
-                <td class="px-2 py-2"><span class="badge" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform"></span></td>
-                <td class="px-2 py-2 text-accent font-medium whitespace-nowrap" x-text="'@' + p.username"></td>
-                <td class="px-2 py-2 text-white whitespace-nowrap max-w-[140px] truncate" x-text="p.full_name || '-'"></td>
-                <td class="px-2 py-2 max-w-[200px]"><p class="line-clamp-2 text-[12px]" x-text="p.bio || '-'"></p></td>
-                <td class="px-2 py-2 text-right num text-white" x-text="formatNumber(p.followers_count)"></td>
-                <td class="px-2 py-2 text-right num" x-text="formatNumber(p.following_count)"></td>
-                <td class="px-2 py-2 text-right num" x-text="formatNumber(p.posts_count)"></td>
-                <td class="px-2 py-2 text-right num">
-                  <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(2) + '%' : '-'"
-                        :class="p.engagement_rate >= 3 ? 'text-success' : p.engagement_rate >= 1 ? 'text-accent' : 'text-kaia-muted'"></span>
-                </td>
-                <td class="px-2 py-2 text-center">
-                  <span x-show="p.is_verified" class="text-accent text-[11px] font-bold">Y</span>
-                  <span x-show="!p.is_verified" class="text-dark-border">-</span>
-                </td>
-                <td class="px-2 py-2 text-center" :title="p.ai_reason || ''">
-                  <span x-show="p.ai_is_influencer === 1" class="text-success text-[11px] font-bold">인플</span>
-                  <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-error text-[11px] font-bold">업체</span>
-                  <span x-show="!p.ai_classified_at" class="text-dark-border">-</span>
-                  <p x-show="p.ai_reason" class="text-[9px] text-kaia-muted mt-0.5 line-clamp-2" x-text="p.ai_reason"></p>
-                </td>
-                <td class="px-2 py-2 text-center whitespace-nowrap text-[12px]"
-                    :title="(p.ai_country ? 'AI: ' + p.ai_country + (p.ai_confidence ? ' (' + Math.round(p.ai_confidence*100) + '%)' : '') : '') + (p.detected_country ? (p.ai_country ? ' / ' : '') + 'Geo: ' + p.detected_country : '')">
-                  <span x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : (p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : '-'"
-                        :class="(p.ai_country && p.ai_country !== 'UNKNOWN') || (p.detected_country && p.detected_country !== 'UNKNOWN') ? 'text-white font-medium' : 'text-dark-border'"></span>
-                  <span x-show="p.ai_country && p.ai_country !== 'UNKNOWN'" class="text-[9px] text-accent/60 ml-0.5">AI</span>
-                  <span x-show="(!p.ai_country || p.ai_country === 'UNKNOWN') && p.detected_country && p.detected_country !== 'UNKNOWN'" class="text-[9px] text-kaia-muted/60 ml-0.5">geo</span>
-                </td>
-                <td class="px-2 py-2 text-center">
-                  <span x-show="p.is_private" class="text-error text-[11px] font-bold">Y</span>
-                  <span x-show="!p.is_private" class="text-dark-border">-</span>
-                </td>
-                <td class="px-2 py-2 text-[12px]" x-text="(p.category && p.category !== 'None') ? p.category : '-'"></td>
-                <td class="px-2 py-2 whitespace-nowrap text-[12px]">
+
+        <!-- Column Headers -->
+        <div x-show="!loading && profiles.length > 0" class="grid grid-cols-[24px_54px_1fr_80px_64px_48px_48px_140px_56px_64px_88px] gap-0 items-center border-b border-dark-border px-1" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
+          <div class="py-2.5"></div>
+          <div class="py-2.5 px-1">플랫폼</div>
+          <div class="py-2.5 px-2">유저명</div>
+          <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='followers'; load()">팔로워</div>
+          <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='engagement'; load()">참여율</div>
+          <div class="py-2.5 text-center">등급</div>
+          <div class="py-2.5 text-center cursor-pointer hover:text-[#BFF009]" @click="sortBy='country'; load()">국가</div>
+          <div class="py-2.5 px-1">AI분류 / 이유</div>
+          <div class="py-2.5 text-center">DM</div>
+          <div class="py-2.5 px-1 text-right cursor-pointer hover:text-[#BFF009]" @click="sortBy='posts'; load()">게시물</div>
+          <div class="py-2.5 px-1 cursor-pointer hover:text-[#BFF009]" @click="sortBy='added'; load()">추가일</div>
+        </div>
+
+        <!-- Profile Rows -->
+        <template x-for="p in profiles" :key="p.platform + ':' + p.username">
+          <div>
+            <!-- Main row: compact single-line -->
+            <div @click="p._expanded = !p._expanded"
+                 class="grid grid-cols-[24px_54px_1fr_80px_64px_48px_48px_140px_56px_64px_88px] gap-0 items-center px-1 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
+                 style="font-size:13px;">
+              <div class="py-2 text-center">
+                <svg :class="p._expanded ? 'rotate-90' : ''" class="w-3 h-3 text-[#919DB5] transition-transform inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              </div>
+              <div class="py-2 px-1">
+                <span class="badge text-[10px]" :class="'badge-' + (p.platform === 'instagram' ? 'ig' : p.platform === 'twitter' ? 'tw' : p.platform === 'tiktok' ? 'tt' : p.platform === 'youtube' ? 'yt' : 'xhs')" x-text="p.platform.slice(0,2).toUpperCase()"></span>
+              </div>
+              <div class="py-2 px-2 truncate">
+                <span class="text-[#BFF009] font-medium" x-text="'@' + p.username"></span>
+                <span x-show="p.is_verified" class="text-[#BFF009] text-[9px] ml-0.5">&#10003;</span>
+                <span x-show="p.full_name && p.full_name !== 'None'" class="text-[#919DB5] text-[11px] ml-1" x-text="p.full_name"></span>
+              </div>
+              <div class="py-2 px-1 text-right text-white" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.followers_count)"></div>
+              <div class="py-2 px-1 text-right" style="font-family:'IBM Plex Mono',monospace">
+                <span x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(1) + '%' : '-'"
+                      :class="p.engagement_rate >= 3 ? 'text-[#4CE275]' : p.engagement_rate >= 1 ? 'text-[#BFF009]' : 'text-[#919DB5]'"></span>
+              </div>
+              <div class="py-2 text-center">
+                <span class="badge text-[10px]" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || '-'"></span>
+              </div>
+              <!-- Unified Country: AI-first, geo fallback, with source tag -->
+              <div class="py-2 text-center text-[12px]">
+                <span class="text-white font-medium" x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : (p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : '-'"
+                      :class="{'text-[#2E2E2E]': !((p.ai_country && p.ai_country !== 'UNKNOWN') || (p.detected_country && p.detected_country !== 'UNKNOWN'))}"></span>
+                <span x-show="p.ai_country && p.ai_country !== 'UNKNOWN'" class="text-[8px] text-[#BFF009] ml-0.5 opacity-60">AI</span>
+                <span x-show="!(p.ai_country && p.ai_country !== 'UNKNOWN') && p.detected_country && p.detected_country !== 'UNKNOWN'" class="text-[8px] text-[#919DB5] ml-0.5">geo</span>
+              </div>
+              <!-- AI Classification + Reason -->
+              <div class="py-1.5 px-1 text-[11px] leading-tight" :title="p.ai_reason || ''">
+                <div>
+                  <span x-show="p.ai_is_influencer === 1" class="text-[#4CE275] font-bold">인플</span>
+                  <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-[#E85B56] font-bold">업체</span>
+                  <span x-show="!p.ai_classified_at" class="text-[#2E2E2E]">-</span>
+                </div>
+                <div x-show="p.ai_reason" class="text-[9px] text-[#919DB5] line-clamp-1 mt-0.5" x-text="p.ai_reason"></div>
+              </div>
+              <div class="py-2 text-center">
+                <span class="badge text-[10px]" :class="p.dm_status === 'sent' ? 'badge-success' : p.dm_status === 'replied' ? 'badge-info' : p.dm_status === 'blacklist' ? 'badge-error' : 'badge-c'" x-text="p.dm_status || 'pending'"></span>
+              </div>
+              <div class="py-2 px-1 text-right text-[12px]" style="font-family:'IBM Plex Mono',monospace" x-text="formatNumber(p.posts_count)"></div>
+              <div class="py-2 px-1 text-[11px] text-[#919DB5] whitespace-nowrap" x-text="formatDate(p.first_seen_at)"></div>
+            </div>
+
+            <!-- Expanded Detail Panel -->
+            <div x-show="p._expanded"
+                 x-transition:enter="transition ease-out duration-150"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition ease-in duration-100"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="bg-[#0F1015] border-b border-[#2E2E2E]/40 px-5 py-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3 text-[12px]">
+              <!-- Col 1: Profile Info -->
+              <div class="space-y-2">
+                <div class="text-[10px] text-kaia-muted uppercase tracking-wider font-semibold mb-1">프로필 정보</div>
+                <div>
+                  <span class="text-kaia-muted">팔로워: </span>
+                  <span class="text-white num" x-text="(p.followers_count || 0).toLocaleString()"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">팔로잉: </span>
+                  <span class="num" x-text="(p.following_count || 0).toLocaleString()"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">게시물: </span>
+                  <span class="num" x-text="(p.posts_count || 0).toLocaleString()"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">참여율: </span>
+                  <span :class="p.engagement_rate >= 3 ? 'text-success' : p.engagement_rate >= 1 ? 'text-accent' : ''"
+                        x-text="p.engagement_rate != null ? p.engagement_rate.toFixed(2) + '%' : '-'"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">인증: </span>
+                  <span x-text="p.is_verified ? 'Yes' : 'No'" :class="p.is_verified ? 'text-accent' : ''"></span>
+                  <span class="mx-1 text-dark-border">|</span>
+                  <span class="text-kaia-muted">비공개: </span>
+                  <span x-text="p.is_private ? 'Yes' : 'No'" :class="p.is_private ? 'text-error' : ''"></span>
+                </div>
+              </div>
+              <!-- Col 2: Bio & Category -->
+              <div class="space-y-2">
+                <div class="text-[10px] text-kaia-muted uppercase tracking-wider font-semibold mb-1">바이오</div>
+                <p class="text-kaia-text leading-relaxed whitespace-pre-line" style="max-height: 120px; overflow-y: auto;" x-text="p.bio || '(없음)'"></p>
+                <div x-show="p.category && p.category !== 'None'">
+                  <span class="text-kaia-muted">카테고리: </span>
+                  <span class="text-white" x-text="p.category"></span>
+                </div>
+              </div>
+              <!-- Col 3: AI & Geo -->
+              <div class="space-y-2">
+                <div class="text-[10px] text-kaia-muted uppercase tracking-wider font-semibold mb-1">AI 분류 & 위치</div>
+                <div>
+                  <span class="text-kaia-muted">AI 판정: </span>
+                  <span x-show="p.ai_is_influencer === 1" class="text-success font-medium">인플루언서</span>
+                  <span x-show="p.ai_is_influencer === 0 && p.ai_classified_at" class="text-error font-medium">업체</span>
+                  <span x-show="!p.ai_classified_at" class="text-kaia-muted">미분류</span>
+                </div>
+                <div x-show="p.ai_reason">
+                  <span class="text-kaia-muted">사유: </span>
+                  <span class="text-kaia-text" x-text="p.ai_reason"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">최종 국가: </span>
+                  <span class="text-white font-medium" x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : (p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : 'UNKNOWN'"></span>
+                </div>
+                <div class="text-[11px]">
+                  <span class="text-kaia-muted">AI: </span>
+                  <span x-text="(p.ai_country && p.ai_country !== 'UNKNOWN') ? p.ai_country : '-'"></span>
+                  <span x-show="p.ai_confidence" class="text-kaia-muted" x-text="'(' + Math.round((p.ai_confidence || 0)*100) + '%)'"></span>
+                  <span class="mx-1 text-dark-border">|</span>
+                  <span class="text-kaia-muted">Geo: </span>
+                  <span x-text="(p.detected_country && p.detected_country !== 'UNKNOWN') ? p.detected_country : '-'"></span>
+                  <span x-show="p.geo_confidence" class="text-kaia-muted" x-text="'(' + Math.round((p.geo_confidence || 0)*100) + '%)'"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">등급: </span>
+                  <span class="badge" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || 'C'"></span>
+                </div>
+              </div>
+              <!-- Col 4: Contact & Campaign -->
+              <div class="space-y-2">
+                <div class="text-[10px] text-kaia-muted uppercase tracking-wider font-semibold mb-1">연락처 & 캠페인</div>
+                <div>
+                  <span class="text-kaia-muted">이메일: </span>
                   <a x-show="p.contact_email" :href="'mailto:' + p.contact_email" class="text-accent hover:underline" x-text="p.contact_email"></a>
                   <span x-show="!p.contact_email" class="text-dark-border">-</span>
-                </td>
-                <td class="px-2 py-2 max-w-[160px] text-[12px]">
-                  <a x-show="p.external_url" :href="p.external_url" target="_blank" class="text-accent hover:underline truncate block" x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 30)"></a>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">URL: </span>
+                  <a x-show="p.external_url" :href="p.external_url" target="_blank" class="text-accent hover:underline" x-text="p.external_url?.replace(/^https?:\/\//, '').substring(0, 40)"></a>
                   <span x-show="!p.external_url" class="text-dark-border">-</span>
-                </td>
-                <td class="px-2 py-2 text-center">
-                  <span class="badge" :class="p.scout_tier === 'S' ? 'badge-s' : p.scout_tier === 'A' ? 'badge-a' : p.scout_tier === 'B' ? 'badge-b' : 'badge-c'" x-text="p.scout_tier || '-'"></span>
-                </td>
-                <td class="px-2 py-2 text-center">
+                </div>
+                <div>
+                  <span class="text-kaia-muted">DM 상태: </span>
                   <span class="badge" :class="p.dm_status === 'sent' ? 'badge-success' : p.dm_status === 'replied' ? 'badge-info' : p.dm_status === 'blacklist' ? 'badge-error' : 'badge-c'" x-text="p.dm_status || 'pending'"></span>
-                </td>
-                <td class="px-2 py-2 text-[10px] text-kaia-muted whitespace-nowrap max-w-[100px] truncate" :title="p._campaignName || ''" x-text="p._campaignName || '-'"></td>
-                <td class="px-2 py-2 text-[10px] text-kaia-muted whitespace-nowrap max-w-[120px] truncate" :title="p.source_pair_ids || ''" x-text="p.source_pair_ids || '-'"></td>
-                <td class="px-2 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="formatDate(p.first_seen_at)"></td>
-                <td class="px-2 py-2 text-[11px] text-kaia-muted whitespace-nowrap" x-text="formatDate(p.last_updated_at)"></td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">캠페인: </span>
+                  <span class="text-white" x-text="p._campaignName || '-'"></span>
+                </div>
+                <div>
+                  <span class="text-kaia-muted">소스: </span>
+                  <span class="text-kaia-text" x-text="p.source_pair_ids || '-'"></span>
+                </div>
+                <div class="text-[11px] text-kaia-muted pt-1 border-t border-dark-border/30">
+                  추가: <span x-text="formatDate(p.first_seen_at)"></span>
+                  <span class="mx-1">|</span>
+                  업데이트: <span x-text="formatDate(p.last_updated_at)"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+        </template>
       </div>
 
       <!-- Pagination -->
