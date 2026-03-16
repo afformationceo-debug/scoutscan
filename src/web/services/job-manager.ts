@@ -11,6 +11,7 @@ import { registry } from '../../services/registry.js';
 import { GeoClassifier } from '../../core/geo-classifier.js';
 import { AIClassifier } from '../../services/ai-classifier.js';
 import { sseManager } from './sse-manager.js';
+import { logger } from '../../utils/logger.js';
 
 interface SSEClient {
   id: string;
@@ -151,7 +152,9 @@ class JobManager extends EventEmitter {
     // Broadcast global scraping_started notification
     sseManager.broadcast('global', 'scraping_started', { jobId, platform, keyword: hashtag, pairId });
 
-    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
+    const proxyUrls = this.getProxyUrls();
+    logger.info(`[JobManager] Starting hashtag job: ${platform}/#${hashtag} (max: ${maxResults}, proxies: ${proxyUrls.length})`);
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls });
     let count = 0;
     let latestPostTimestamp = '';
     const collectedPosts: Post[] = [];
@@ -159,6 +162,7 @@ class JobManager extends EventEmitter {
     try {
       const scraper = (engine as any).scrapers.get(platform);
       if (!scraper) throw new Error(`Platform not available: ${platform}`);
+      logger.info(`[JobManager] Scraper obtained for ${platform}, starting searchByHashtag...`);
 
       // Phase 1: Collect posts
       for await (const post of scraper.searchByHashtag(hashtag, { maxResults, since, until })) {

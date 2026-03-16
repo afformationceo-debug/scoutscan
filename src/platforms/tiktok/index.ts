@@ -50,7 +50,7 @@ export class TikTokScraper implements PlatformScraper {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
       const proxy = this.proxyRouter.getProxyForPlatform('tiktok');
-      logger.info(`[TikTok] Using proxy: ${proxy ? proxy.server?.replace(/:[^:]+@/, ':***@') : 'NONE'}`);
+      logger.info(`[TikTok] Using proxy: ${proxy ? `${proxy.protocol}://${proxy.host}:${proxy.port} (${proxy.type}/${proxy.provider})` : 'NONE'}`);
 
       const collectedPosts: Post[] = [];
 

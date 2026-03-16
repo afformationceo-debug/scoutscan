@@ -82,6 +82,21 @@ export class ProxyRouter {
       const countryMatch = username.match(/country-([A-Z]{2})/);
       if (countryMatch) config.country = countryMatch[1];
     }
+    // Auto-detect Smartproxy
+    else if (parsed.hostname.includes('smartproxy.net') || parsed.hostname.includes('smartproxy.com')) {
+      config.provider = 'smartproxy';
+      // Smartproxy residential proxies typically use port 3120 or endpoint names
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.includes('residential') || lowerUrl.includes('resi') || parsed.port === '3120') {
+        config.type = 'residential';
+      } else if (lowerUrl.includes('mobile') || lowerUrl.includes('4g') || lowerUrl.includes('5g')) {
+        config.type = 'mobile';
+      } else if (lowerUrl.includes('isp')) {
+        config.type = 'isp';
+      } else {
+        config.type = 'datacenter';
+      }
+    }
     // Custom proxy — detect from URL hints
     else {
       config.provider = 'custom';
