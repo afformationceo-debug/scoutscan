@@ -120,6 +120,7 @@ function main() {
         min_followers, max_followers, message_template,
         daily_limit, max_retries, delay_min_sec, delay_max_sec,
         status, sender_username, cookie_json, cookie_status,
+        linked_keyword_group,
         total_queued, total_sent, total_failed, total_replied,
         created_at, updated_at
       ) VALUES (
@@ -127,6 +128,7 @@ function main() {
         @minFollowers, @maxFollowers, @messageTemplate,
         @dailyLimit, @maxRetries, @delayMinSec, @delayMaxSec,
         @status, @senderUsername, @cookieJson, @cookieStatus,
+        @linkedKeywordGroup,
         0, 0, 0, 0, @now, @now
       )
     `);
@@ -161,12 +163,16 @@ function main() {
       if (!senderUsername) { errors.push(`${rawName}: 발송 계정 식별 실패`); continue; }
 
       try {
+        // Auto-map: platform:country → linked_keyword_group
+        const linkedKeywordGroup = country ? `${platform}:${country}` : null;
+
         insertCampaign.run({
           id: crypto.randomUUID(), name: rawName, brand: brand || null,
           platform, targetCountry: country || null, targetTiers: null,
           minFollowers: null, maxFollowers: null, messageTemplate: message,
           dailyLimit, maxRetries: 2, delayMinSec: 45, delayMaxSec: 120,
-          status: 'draft', senderUsername, cookieJson, cookieStatus: 'valid', now,
+          status: 'draft', senderUsername, cookieJson, cookieStatus: 'valid',
+          linkedKeywordGroup, now,
         });
         upsertAccount.run({ platform, username: senderUsername, cookieJson, dailyLimit, now });
         migrated++;

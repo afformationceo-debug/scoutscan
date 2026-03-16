@@ -445,6 +445,14 @@ export class DMEngine {
     const campaign = db.prepare('SELECT * FROM dm_campaigns WHERE id = ?').get(campaignId) as any;
     if (!campaign) throw new Error('Campaign not found');
 
+    // Auto-fill linked_keyword_group if empty but platform+country exist
+    if (!campaign.linked_keyword_group && campaign.platform && campaign.target_country) {
+      const autoGroup = `${campaign.platform}:${campaign.target_country}`;
+      db.prepare('UPDATE dm_campaigns SET linked_keyword_group = ? WHERE id = ?').run(autoGroup, campaignId);
+      campaign.linked_keyword_group = autoGroup;
+      console.log(`[DMEngine] Auto-mapped keyword group for ${campaign.name}: ${autoGroup}`);
+    }
+
     const conditions: string[] = ['dm_status = \'pending\''];
     const params: any[] = [];
 

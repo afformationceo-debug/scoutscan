@@ -29,5 +29,18 @@ if [ ! -f /app/data/.seed-migrated ]; then
   node --import tsx/esm src/seed-migrate.ts || echo "[Start] Seed migration failed (non-fatal)"
 fi
 
+# One-time patch: auto-fill linked_keyword_group for existing campaigns (v2)
+if [ ! -f /app/data/.keyword-group-patched ] && [ -f /app/data/scraper.db ]; then
+  echo "[Patch] Auto-filling linked_keyword_group for existing campaigns..."
+  node -e "
+    const Database = require('better-sqlite3');
+    const db = new Database('/app/data/scraper.db');
+    const r = db.prepare(\"UPDATE dm_campaigns SET linked_keyword_group = platform || ':' || target_country WHERE linked_keyword_group IS NULL AND target_country IS NOT NULL AND target_country != ''\").run();
+    console.log('[Patch] Updated ' + r.changes + ' campaigns');
+    db.close();
+  " || echo "[Patch] Patch failed (non-fatal)"
+  touch /app/data/.keyword-group-patched
+fi
+
 echo "[Start] Launching server..."
 exec node --max-http-header-size=65536 --import tsx/esm src/web/server.ts
