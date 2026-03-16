@@ -312,18 +312,33 @@ export class TwitterScraper implements PlatformScraper {
   private extractTweets(body: string, posts: Post[]): void {
     try {
       const data = JSON.parse(body);
+      const beforeCount = posts.length;
 
       // Traverse the response to find tweet objects
       const findTweets = (obj: any, depth = 0): void => {
-        if (depth > 10 || !obj || typeof obj !== 'object') return;
+        if (depth > 15 || !obj || typeof obj !== 'object') return;
 
         // Check if this is a tweet result
-        if (obj.__typename === 'Tweet' || obj.tweet_results || obj.legacy?.full_text) {
-          const tweet = obj.legacy || obj.tweet_results?.result?.legacy || obj;
+        if (obj.__typename === 'Tweet' || (obj.rest_id && obj.legacy?.full_text)) {
+          const tweet = obj.legacy || obj;
           if (tweet.full_text || tweet.text) {
             posts.push(this.parseTweet(tweet, obj));
             return;
           }
+        }
+
+        // Handle tweet_results wrapper (common in SearchTimeline)
+        if (obj.tweet_results?.result) {
+          findTweets(obj.tweet_results.result, depth + 1);
+          return;
+        }
+
+        // Check timeline instructions (SearchTimeline response structure)
+        if (obj.instructions) {
+          for (const instr of Array.isArray(obj.instructions) ? obj.instructions : []) {
+            findTweets(instr, depth + 1);
+          }
+          return;
         }
 
         // Check timeline entries
@@ -336,6 +351,17 @@ export class TwitterScraper implements PlatformScraper {
 
         if (obj.content?.itemContent?.tweet_results) {
           findTweets(obj.content.itemContent.tweet_results.result, depth + 1);
+          return;
+        }
+
+        // Handle module items (promoted tweets, conversations)
+        if (obj.content?.items) {
+          for (const item of obj.content.items) findTweets(item, depth + 1);
+          return;
+        }
+
+        if (obj.item?.itemContent?.tweet_results) {
+          findTweets(obj.item.itemContent.tweet_results.result, depth + 1);
           return;
         }
 
@@ -353,8 +379,30 @@ export class TwitterScraper implements PlatformScraper {
       };
 
       findTweets(data);
+
+      // Debug: log extraction results for large responses
+      const extracted = posts.length - beforeCount;
+      if (body.length > 10000 && extracted === 0) {
+        // Log key structure for debugging
+        const keys = Object.keys(data);
+        const dataKeys = data.data ? Object.keys(data.data) : [];
+        const searchKeys = data.data?.search_by_raw_query ? Object.keys(data.data.search_by_raw_query) : [];
+        logger.warn(`[Twitter] Large response (${body.length}B) but 0 tweets extracted. Keys: ${keys.join(',')}, data: ${dataKeys.join(',')}, search: ${searchKeys.join(',')}`);
+        // Try to find instruction types
+        try {
+          const timeline = data.data?.search_by_raw_query?.search_timeline?.timeline;
+          if (timeline?.instructions) {
+            const instrTypes = timeline.instructions.map((i: any) => `${i.type}(entries:${i.entries?.length || 0})`);
+            logger.warn(`[Twitter] Instructions: ${instrTypes.join(', ')}`);
+            // Log first entry structure
+            const firstEntry = timeline.instructions.find((i: any) => i.entries?.length > 0)?.entries?.[0];
+            if (firstEntry) {
+              logger.warn(`[Twitter] First entry: type=${firstEntry.content?.__typename}, entryId=${firstEntry.entryId?.slice(0, 30)}, hasItemContent=${!!firstEntry.content?.itemContent}, hasTweetResults=${!!firstEntry.content?.itemContent?.tweet_results}`);
+            }
+          }
+        } catch {}
+      }
     } catch (err) {
-      // Only log if body looks like it might be relevant (not tiny error responses)
       if (body.length > 100) {
         logger.debug(`[Twitter] Failed to parse intercepted response (${body.length} bytes): ${(err as Error).message}`);
       }
