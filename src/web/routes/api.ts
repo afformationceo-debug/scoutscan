@@ -1104,8 +1104,11 @@ api.post('/debug/scrape-test/:platform', async (c) => {
       const searchUrl = searchUrls[platform];
       if (searchUrl) {
         diag.steps.push(`Testing search: ${searchUrl}...`);
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await new Promise(r => setTimeout(r, 5000));
+        await page.goto(searchUrl, { waitUntil: 'networkidle', timeout: 45000 }).catch(async () => {
+          // Fallback if networkidle times out
+          await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        });
+        await new Promise(r => setTimeout(r, 8000));
 
         const searchFinalUrl = page.url();
         const searchTitle = await page.title();

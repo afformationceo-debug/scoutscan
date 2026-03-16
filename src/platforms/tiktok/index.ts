@@ -80,12 +80,29 @@ export class TikTokScraper implements PlatformScraper {
       // Navigate to TikTok keyword search (NOT hashtag-only /tag/ URL)
       const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(cleanTag)}`;
       logger.info(`[TikTok] Search URL: ${searchUrl}`);
+
+      // First go to homepage to establish session with cookies
+      await page.goto('https://www.tiktok.com/', {
+        waitUntil: 'networkidle',
+        timeout: 30000,
+      }).catch(() => {});
+      await randomDelay(2000, 4000);
+
+      // Then navigate to search
       await page.goto(searchUrl, {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'networkidle',
         timeout: 45000,
       });
 
+      // Wait for content to render (TikTok is SPA, needs JS execution time)
       await randomDelay(5000, 8000);
+
+      // Wait for video elements to appear (up to 15s)
+      await page.waitForSelector('[data-e2e="search_top-item"], [class*="DivItemContainer"], a[href*="/video/"]', {
+        timeout: 15000,
+      }).catch(() => {
+        logger.warn(`[TikTok] No video elements found after 15s wait`);
+      });
 
       // Check for login/captcha redirect
       const currentUrl = page.url();
@@ -274,30 +291,89 @@ export class TikTokScraper implements PlatformScraper {
   /** Extract data from TikTok's embedded page state */
   private async extractEmbeddedData(page: any, tag: string): Promise<Post[]> {
     try {
-      return await page.evaluate((tagName: string) => {
+      const rawItems = await page.evaluate(() => {
         const items: any[] = [];
 
-        // __UNIVERSAL_DATA_FOR_REHYDRATION__
+        // Method 1: __UNIVERSAL_DATA_FOR_REHYDRATION__
         const ud = (window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__;
         if (ud) {
           const defaultScope = ud.__DEFAULT_SCOPE__ || {};
           for (const key of Object.keys(defaultScope)) {
             const scope = defaultScope[key];
-            if (scope?.itemList) {
-              items.push(...scope.itemList);
+            if (scope?.itemList) items.push(...scope.itemList);
+            // New TikTok structure: data.itemList
+            if (scope?.data?.itemList) items.push(...scope.data.itemList);
+            // Search results structure
+            if (scope?.searchResult) {
+              const sr = scope.searchResult;
+              if (sr?.itemList) items.push(...sr.itemList);
+              if (sr?.data) items.push(...(Array.isArray(sr.data) ? sr.data : []));
             }
+          }
+          // Also check top-level keys
+          if (ud.webapp?.['search-page']) {
+            const sp = ud.webapp['search-page'];
+            if (sp?.itemList) items.push(...sp.itemList);
           }
         }
 
-        // SIGI_STATE
+        // Method 2: SIGI_STATE
         const sigi = (window as any).SIGI_STATE;
         if (sigi?.ItemModule) {
           items.push(...Object.values(sigi.ItemModule));
         }
 
+        // Method 3: __NEXT_DATA__
+        const nd = (window as any).__NEXT_DATA__;
+        if (nd?.props?.pageProps) {
+          const pp = nd.props.pageProps;
+          if (pp?.itemList) items.push(...pp.itemList);
+          if (pp?.items) items.push(...pp.items);
+        }
+
+        // Method 4: Scan script tags for JSON data
+        if (items.length === 0) {
+          const scripts = document.querySelectorAll('script[type="application/json"]');
+          scripts.forEach(s => {
+            try {
+              const data = JSON.parse(s.textContent || '');
+              if (data?.itemList) items.push(...data.itemList);
+              if (data?.items) items.push(...data.items);
+            } catch {}
+          });
+        }
+
+        // Method 5: Extract from DOM video links directly
+        if (items.length === 0) {
+          const links = document.querySelectorAll('a[href*="/video/"]');
+          links.forEach(link => {
+            const href = link.getAttribute('href') || '';
+            const match = href.match(/@([^/]+)\/video\/(\d+)/);
+            if (match) {
+              items.push({
+                id: match[2],
+                author: { uniqueId: match[1] },
+                desc: link.textContent?.trim() || '',
+                stats: {},
+              });
+            }
+          });
+        }
+
         return items;
-      }, tag);
-    } catch {
+      });
+
+      logger.info(`[TikTok] extractEmbeddedData found ${rawItems.length} raw items`);
+
+      const posts: Post[] = [];
+      for (const raw of rawItems) {
+        try {
+          posts.push(this.parseVideo(raw));
+        } catch {}
+      }
+      return posts;
+    } catch (e) {
+      logger.error(`[TikTok] extractEmbeddedData failed: ${(e as Error).message}`);
       return [];
     }
   }
