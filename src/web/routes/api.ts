@@ -971,6 +971,15 @@ api.get('/dashboard/activity', (c) => {
   }
 });
 
+// ─── Debug: Server Logs ───
+
+api.get('/debug/logs', async (c) => {
+  const { getRecentLogs } = await import('../../utils/logger.js');
+  const filter = c.req.query('filter') || '';
+  const logs = getRecentLogs(filter);
+  return c.json({ count: logs.length, logs });
+});
+
 // ─── Debug: Scrape Test ───
 
 api.post('/debug/scrape-test/:platform', async (c) => {
