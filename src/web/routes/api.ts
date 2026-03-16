@@ -1154,8 +1154,34 @@ api.post('/debug/scrape-test/:platform', async (c) => {
             analysis.videoLinks = document.querySelectorAll('a[href*="/video/"]').length;
             analysis.hasUniversalData = !!(window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__;
             analysis.hasSigiState = !!(window as any).SIGI_STATE;
-            // Check for search results container
             analysis.searchResultItems = document.querySelectorAll('[class*="search"]').length;
+            // Dump UNIVERSAL_DATA structure
+            const ud = (window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__;
+            if (ud) {
+              const ds = ud.__DEFAULT_SCOPE__ || {};
+              analysis.universalDataKeys = Object.keys(ud);
+              analysis.defaultScopeKeys = Object.keys(ds);
+              // Check each scope for data
+              for (const key of Object.keys(ds)) {
+                const scope = ds[key];
+                const scopeKeys = scope ? Object.keys(scope).slice(0, 15) : [];
+                analysis[`scope_${key}_keys`] = scopeKeys;
+                if (scope?.itemList) analysis[`scope_${key}_itemCount`] = scope.itemList.length;
+                if (scope?.data) {
+                  const dataKeys = Object.keys(scope.data).slice(0, 10);
+                  analysis[`scope_${key}_dataKeys`] = dataKeys;
+                  if (scope.data?.itemList) analysis[`scope_${key}_dataItemCount`] = scope.data.itemList.length;
+                }
+              }
+            }
+            // Check for other common TikTok data containers
+            analysis.hasNextData = !!(window as any).__NEXT_DATA__;
+            analysis.allScriptCount = document.querySelectorAll('script').length;
+            // Check e2e attributes
+            const e2eEls = document.querySelectorAll('[data-e2e]');
+            const e2eTypes = new Set<string>();
+            e2eEls.forEach(el => e2eTypes.add(el.getAttribute('data-e2e') || ''));
+            analysis.e2eAttributes = Array.from(e2eTypes).slice(0, 20);
           } else if (plat === 'youtube') {
             analysis.videoRenderers = document.querySelectorAll('ytd-video-renderer').length;
             analysis.richItemRenderers = document.querySelectorAll('ytd-rich-item-renderer').length;
