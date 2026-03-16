@@ -445,20 +445,23 @@ export class DMEngine {
     const campaign = db.prepare('SELECT * FROM dm_campaigns WHERE id = ?').get(campaignId) as any;
     if (!campaign) throw new Error('Campaign not found');
 
-    // Auto-fill linked_keyword_group if empty but platform+country exist
-    if (!campaign.linked_keyword_group && campaign.platform && campaign.target_country) {
-      const autoGroup = `${campaign.platform}:${campaign.target_country}`;
-      db.prepare('UPDATE dm_campaigns SET linked_keyword_group = ? WHERE id = ?').run(autoGroup, campaignId);
-      campaign.linked_keyword_group = autoGroup;
-      console.log(`[DMEngine] Auto-mapped keyword group for ${campaign.name}: ${autoGroup}`);
+    // Auto-fill linked_keyword_group with platform-only (country comes from AI classification)
+    if (!campaign.linked_keyword_group && campaign.platform) {
+      db.prepare('UPDATE dm_campaigns SET linked_keyword_group = ? WHERE id = ?').run(campaign.platform, campaignId);
+      campaign.linked_keyword_group = campaign.platform;
+      console.log(`[DMEngine] Auto-set keyword group for ${campaign.name}: ${campaign.platform}`);
     }
 
     const conditions: string[] = ['dm_status = \'pending\''];
     const params: any[] = [];
 
     if (campaign.platform) { conditions.push('platform = ?'); params.push(campaign.platform); }
+
+    // Country matching: AI classification first, then geo-detection
+    // This is the sole country filter — keyword region is NOT used for country matching.
+    // e.g., influencer found via US keyword #kbeauty but AI-classified as SG → matches SG campaign
     if (campaign.target_country) {
-      // Use AI country if available, fall back to geo-detected country
+      conditions.push('COALESCE(ai_country, detected_country) IS NOT NULL');
       conditions.push('UPPER(COALESCE(ai_country, detected_country)) = UPPER(?)');
       params.push(campaign.target_country);
     }
@@ -470,16 +473,17 @@ export class DMEngine {
     if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
     if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
 
-    // Keyword-target auto-mapping: only include influencers scraped from linked keyword groups
-    // linked_keyword_group = "instagram:TW" → source_pair_ids must contain "instagram:TW:"
+    // Only include influencers that were scraped from keyword targets (have source_pair_ids)
+    // Platform-only filter: country is determined by AI, not keyword region
     if (campaign.linked_keyword_group) {
-      const groups = campaign.linked_keyword_group.split(',').map((g: string) => g.trim()).filter(Boolean);
-      const groupConditions = groups.map(() => `source_pair_ids LIKE ?`);
-      conditions.push(`(${groupConditions.join(' OR ')})`);
-      for (const g of groups) {
-        params.push(`%${g}:%`);
+      const platforms = campaign.linked_keyword_group.split(',').map((g: string) => g.trim()).filter(Boolean);
+      const platformConditions = platforms.map(() => `source_pair_ids LIKE ?`);
+      conditions.push(`(source_pair_ids IS NOT NULL AND (${platformConditions.join(' OR ')}))`);
+      for (const p of platforms) {
+        // Match platform prefix: "instagram" → '%instagram:%'
+        params.push(`%${p}:%`);
       }
-      console.log(`[DMEngine] Keyword-target filter active: ${groups.join(', ')}`);
+      console.log(`[DMEngine] Platform filter: ${platforms.join(', ')} | Country by AI: ${campaign.target_country || 'any'}`);
     }
 
     // Exclude already queued in this campaign

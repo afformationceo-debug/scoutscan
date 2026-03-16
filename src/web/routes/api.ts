@@ -482,11 +482,10 @@ api.post('/campaigns', async (c) => {
     db.prepare(`UPDATE dm_campaigns SET cookie_status = ? WHERE id = ?`).run(cookieStatus, id);
   }
 
-  // Auto-map keyword group: platform:country → linked_keyword_group
-  if (platform && targetCountry) {
-    const linkedGroup = `${platform}:${targetCountry}`;
-    db.prepare(`UPDATE dm_campaigns SET linked_keyword_group = ? WHERE id = ?`).run(linkedGroup, id);
-    console.log(`[API] Campaign ${name}: auto-mapped keyword group → ${linkedGroup}`);
+  // Auto-map keyword group: platform-only (country is determined by AI classification)
+  if (platform) {
+    db.prepare(`UPDATE dm_campaigns SET linked_keyword_group = ? WHERE id = ?`).run(platform, id);
+    console.log(`[API] Campaign ${name}: keyword group → ${platform} (country by AI: ${targetCountry || 'any'})`);
   }
 
   // Auto-generate queue from existing profiles

@@ -163,8 +163,8 @@ function main() {
       if (!senderUsername) { errors.push(`${rawName}: 발송 계정 식별 실패`); continue; }
 
       try {
-        // Auto-map: platform:country → linked_keyword_group
-        const linkedKeywordGroup = country ? `${platform}:${country}` : null;
+        // Auto-map: platform-only (country determined by AI classification, not keyword region)
+        const linkedKeywordGroup = platform;
 
         insertCampaign.run({
           id: crypto.randomUUID(), name: rawName, brand: brand || null,

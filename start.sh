@@ -29,17 +29,17 @@ if [ ! -f /app/data/.seed-migrated ]; then
   node --import tsx/esm src/seed-migrate.ts || echo "[Start] Seed migration failed (non-fatal)"
 fi
 
-# One-time patch: auto-fill linked_keyword_group for existing campaigns (v2)
-if [ ! -f /app/data/.keyword-group-patched ] && [ -f /app/data/scraper.db ]; then
-  echo "[Patch] Auto-filling linked_keyword_group for existing campaigns..."
+# Patch v3: linked_keyword_group = platform only (country by AI, not keyword region)
+if [ ! -f /app/data/.keyword-group-v3 ] && [ -f /app/data/scraper.db ]; then
+  echo "[Patch] Setting linked_keyword_group to platform-only (country via AI)..."
   node -e "
     const Database = require('better-sqlite3');
     const db = new Database('/app/data/scraper.db');
-    const r = db.prepare(\"UPDATE dm_campaigns SET linked_keyword_group = platform || ':' || target_country WHERE linked_keyword_group IS NULL AND target_country IS NOT NULL AND target_country != ''\").run();
-    console.log('[Patch] Updated ' + r.changes + ' campaigns');
+    const r = db.prepare(\"UPDATE dm_campaigns SET linked_keyword_group = platform WHERE platform IS NOT NULL AND platform != ''\").run();
+    console.log('[Patch] Updated ' + r.changes + ' campaigns to platform-only keyword group');
     db.close();
   " || echo "[Patch] Patch failed (non-fatal)"
-  touch /app/data/.keyword-group-patched
+  touch /app/data/.keyword-group-v3
 fi
 
 echo "[Start] Launching server..."
