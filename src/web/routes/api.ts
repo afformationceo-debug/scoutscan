@@ -1022,7 +1022,16 @@ api.post('/debug/scrape-test/:platform', async (c) => {
     const { ProxyRouter } = await import('../../core/proxy.js');
     const { randomUUID } = await import('crypto');
 
-    const proxyRouter = new ProxyRouter();
+    // Load proxies from DB
+    let proxyUrls: string[] = [];
+    try {
+      const rows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+      proxyUrls = rows.map((r: any) => r.url).filter(Boolean);
+    } catch {}
+    diag.proxyCount = proxyUrls.length;
+    diag.steps.push(`Loaded ${proxyUrls.length} proxies from DB`);
+
+    const proxyRouter = new ProxyRouter(proxyUrls);
     const browser = new StealthBrowser(proxyRouter);
 
     diag.steps.push('Launching Playwright browser...');
@@ -1032,7 +1041,10 @@ api.post('/debug/scrape-test/:platform', async (c) => {
     diag.steps.push(`Browser launched in ${diag.browserLaunchMs}ms`);
 
     const sessionId = randomUUID();
-    await browser.createStealthContext(sessionId, { region: 'US' });
+    const proxy = proxyRouter.getProxyForPlatform(platform);
+    diag.proxyUsed = proxy ? proxy.server?.replace(/:[^:]+@/, ':***@') : 'NONE';
+    diag.steps.push(`Proxy for ${platform}: ${diag.proxyUsed}`);
+    await browser.createStealthContext(sessionId, { region: 'US', proxy });
 
     // Set cookies
     if (hasCookies) {
