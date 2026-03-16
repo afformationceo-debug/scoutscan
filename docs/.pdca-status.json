@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-15T10:23:06.629Z",
+  "lastUpdated": "2026-03-16T07:49:34.865Z",
   "activeFeatures": [
     "core",
     "web",
@@ -26,7 +26,8 @@
     "dm-platforms",
     "cookie-health.ts",
     "registry.ts",
-    "ai-classifier.ts"
+    "ai-classifier.ts",
+    "auth.ts"
   ],
   "primaryFeature": "core",
   "features": {
@@ -39,9 +40,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:13:33.708Z",
-        "lastUpdated": "2026-03-15T10:22:20.871Z"
+        "lastUpdated": "2026-03-16T07:49:34.865Z"
       },
-      "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/cookie-manager.ts"
+      "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/proxy.ts"
     },
     "web": {
       "phase": "do",
@@ -52,9 +53,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:13:36.795Z",
-        "lastUpdated": "2026-03-13T07:43:31.334Z"
+        "lastUpdated": "2026-03-16T06:44:17.856Z"
       },
-      "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/server.ts"
+      "lastFile": "/Users/hyunkeunji/Desktop/web/src/utils/logger.ts"
     },
     "instagram": {
       "phase": "do",
@@ -65,7 +66,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:15:15.242Z",
-        "lastUpdated": "2026-03-15T10:22:44.526Z"
+        "lastUpdated": "2026-03-15T12:10:55.341Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/instagram/scraper.ts"
     },
@@ -78,7 +79,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:17:25.108Z",
-        "lastUpdated": "2026-03-15T09:12:07.004Z"
+        "lastUpdated": "2026-03-15T12:11:09.063Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/twitter/index.ts"
     },
@@ -91,7 +92,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:17:33.251Z",
-        "lastUpdated": "2026-03-15T10:22:56.381Z"
+        "lastUpdated": "2026-03-16T07:34:37.448Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/tiktok/index.ts"
     },
@@ -104,7 +105,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:17:40.412Z",
-        "lastUpdated": "2026-03-15T10:23:06.629Z"
+        "lastUpdated": "2026-03-15T12:11:31.958Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/youtube/index.ts"
     },
@@ -117,9 +118,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:47:04.142Z",
-        "lastUpdated": "2026-03-10T18:48:00.139Z"
+        "lastUpdated": "2026-03-16T07:49:25.587Z"
       },
-      "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/anti-detection/index.ts"
+      "lastFile": "/Users/hyunkeunji/Desktop/web/src/core/anti-detection/stealth-browser.ts"
     },
     "xiaohongshu": {
       "phase": "do",
@@ -130,7 +131,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:48:35.443Z",
-        "lastUpdated": "2026-03-12T07:13:12.886Z"
+        "lastUpdated": "2026-03-15T12:11:50.225Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/xiaohongshu/index.ts"
     },
@@ -143,7 +144,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-10T18:49:02.822Z",
-        "lastUpdated": "2026-03-11T16:28:17.954Z"
+        "lastUpdated": "2026-03-15T12:11:43.070Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/platforms/linkedin/index.ts"
     },
@@ -156,7 +157,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T04:25:04.969Z",
-        "lastUpdated": "2026-03-13T11:03:31.255Z"
+        "lastUpdated": "2026-03-15T15:33:42.939Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/services/db.ts"
     },
@@ -169,7 +170,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T04:25:53.187Z",
-        "lastUpdated": "2026-03-13T16:38:38.391Z"
+        "lastUpdated": "2026-03-16T07:10:43.549Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/services/job-manager.ts"
     },
@@ -195,7 +196,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T04:26:20.876Z",
-        "lastUpdated": "2026-03-15T10:20:06.298Z"
+        "lastUpdated": "2026-03-16T06:19:00.093Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/routes/api.ts"
     },
@@ -208,7 +209,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T04:28:52.192Z",
-        "lastUpdated": "2026-03-15T09:09:19.587Z"
+        "lastUpdated": "2026-03-15T16:36:27.388Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/public/app.js"
     },
@@ -247,7 +248,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T13:40:17.316Z",
-        "lastUpdated": "2026-03-13T06:26:01.565Z"
+        "lastUpdated": "2026-03-15T11:32:04.076Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/scheduler.ts"
     },
@@ -260,7 +261,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T13:52:07.901Z",
-        "lastUpdated": "2026-03-13T16:38:50.589Z"
+        "lastUpdated": "2026-03-16T07:46:52.938Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/dm-engine.ts"
     },
@@ -273,7 +274,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T16:28:10.487Z",
-        "lastUpdated": "2026-03-12T17:29:12.904Z"
+        "lastUpdated": "2026-03-16T07:47:51.300Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/engagement-engine.ts"
     },
@@ -312,9 +313,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-11T17:23:17.612Z",
-        "lastUpdated": "2026-03-12T16:55:03.599Z"
+        "lastUpdated": "2026-03-16T07:48:23.749Z"
       },
-      "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/dm-platforms/instagram-dm.ts"
+      "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/dm-platforms/browser-engagement.ts"
     },
     "cookie-health.ts": {
       "phase": "do",
@@ -351,9 +352,22 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-12T10:05:49.455Z",
-        "lastUpdated": "2026-03-13T10:34:14.750Z"
+        "lastUpdated": "2026-03-15T12:08:25.899Z"
       },
       "lastFile": "/Users/hyunkeunji/Desktop/web/src/services/ai-classifier.ts"
+    },
+    "auth.ts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-15T12:12:22.195Z",
+        "lastUpdated": "2026-03-15T15:29:13.369Z"
+      },
+      "lastFile": "/Users/hyunkeunji/Desktop/web/src/web/services/auth.ts"
     }
   },
   "pipeline": {
@@ -364,7 +378,7 @@
   "session": {
     "startedAt": "2026-03-10T18:02:55.590Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-15T10:23:06.629Z"
+    "lastActivity": "2026-03-16T07:49:34.865Z"
   },
   "history": [
     {
@@ -3562,6 +3576,804 @@
     {
       "timestamp": "2026-03-15T10:23:06.629Z",
       "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T10:48:25.216Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T10:56:41.725Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T10:56:48.641Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T10:57:12.934Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T10:57:36.076Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:00:32.859Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:00:38.278Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:00:39.613Z",
+      "feature": "instagram",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:00:50.497Z",
+      "feature": "instagram",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:06:55.283Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:07:11.224Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:07:19.995Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:07:30.618Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:08:44.607Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:19:09.541Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:16.614Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:18.566Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:20.416Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:26.773Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:34.488Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:43.960Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:50.329Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:31:57.769Z",
+      "feature": "scheduler.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:04.076Z",
+      "feature": "scheduler.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:12.578Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:29.806Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:49.556Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:54.805Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:57.098Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:32:58.965Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:33:15.322Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:33:20.185Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:33:28.519Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T11:48:04.155Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:00:16.813Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:02:49.131Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:08:25.899Z",
+      "feature": "ai-classifier.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:08:39.435Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:08:46.627Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:09:03.352Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:09:14.356Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:10:01.776Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:10:27.189Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:10:40.571Z",
+      "feature": "instagram",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:10:55.341Z",
+      "feature": "instagram",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:11:09.063Z",
+      "feature": "twitter",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:11:16.357Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:11:31.958Z",
+      "feature": "youtube",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:11:43.070Z",
+      "feature": "linkedin",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:11:50.225Z",
+      "feature": "xiaohongshu",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:12:20.782Z",
+      "feature": "db.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:12:22.195Z",
+      "feature": "auth.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:12:41.006Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:12:48.992Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:12:54.760Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:13:08.312Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:13:09.517Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:13:35.632Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:22:11.172Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:22:47.993Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:23:09.251Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:23:52.204Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:24:05.380Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:31:19.776Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:31:24.470Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T12:31:36.359Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:26:38.467Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:26:47.429Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:29:08.307Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:29:13.369Z",
+      "feature": "auth.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:29:13.700Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:29:25.763Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:30:34.914Z",
+      "feature": "dm-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:30:40.440Z",
+      "feature": "engagement-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:30:46.976Z",
+      "feature": "db.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:30:57.612Z",
+      "feature": "dm-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:31:10.711Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:31:17.201Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:33:03.817Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:33:33.707Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:33:42.939Z",
+      "feature": "db.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:35:17.498Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:35:23.027Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T15:35:27.889Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:22:42.255Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:33:04.823Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:33:39.152Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:33:48.419Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:34:06.503Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:34:14.142Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:35:04.577Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:35:40.276Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-15T16:36:27.388Z",
+      "feature": "public",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T04:58:38.999Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T04:58:48.179Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T04:58:57.590Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T04:59:04.886Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:16:06.323Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:19:43.564Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:23:31.295Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:23:52.411Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:24:00.850Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:27:05.998Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:43:19.829Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:43:51.764Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:50:37.635Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T05:50:47.877Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T06:18:48.237Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T06:19:00.093Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T06:38:07.008Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T06:38:16.451Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T06:44:17.856Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:10:18.845Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:10:25.394Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:10:34.834Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:10:43.549Z",
+      "feature": "job-manager.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:34:37.448Z",
+      "feature": "tiktok",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:40:51.033Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:41:19.901Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:41:29.351Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:46:31.921Z",
+      "feature": "dm-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:46:44.184Z",
+      "feature": "dm-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:46:52.938Z",
+      "feature": "dm-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:47:05.700Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:47:17.716Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:47:32.243Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:47:51.300Z",
+      "feature": "engagement-engine.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:48:07.946Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:48:13.213Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:48:23.749Z",
+      "feature": "dm-platforms",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:49:18.712Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:49:25.587Z",
+      "feature": "anti-detection",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-16T07:49:34.865Z",
+      "feature": "core",
       "phase": "do",
       "action": "updated"
     }

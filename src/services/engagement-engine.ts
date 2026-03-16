@@ -1,7 +1,8 @@
 import { db } from '../web/services/db.js';
-import type { Platform } from '../core/types.js';
+import type { Platform, ProxyConfig } from '../core/types.js';
 import { BrowserContextPool } from './browser-context-pool.js';
 import { browserLike, browserComment } from './dm-platforms/browser-engagement.js';
+import { ProxyRouter } from '../core/proxy.js';
 
 export class EngagementEngine {
   private pool: BrowserContextPool;
@@ -10,16 +11,29 @@ export class EngagementEngine {
     this.pool = pool;
   }
 
+  /** Load active proxy for engagement */
+  private getProxy(platform: string): ProxyConfig | undefined {
+    try {
+      const rows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+      const urls = rows.map((r: any) => r.url).filter(Boolean);
+      if (urls.length === 0) return undefined;
+      const router = new ProxyRouter(urls);
+      return router.getProxyForPlatform(platform);
+    } catch { return undefined; }
+  }
+
   /** Like a post on any platform via browser automation */
   async likePost(platform: Platform, accountUsername: string, postUrl: string): Promise<void> {
     console.log(`[Engagement] Liking post ${postUrl} via @${accountUsername} on ${platform}`);
-    await browserLike(this.pool, platform, accountUsername, postUrl);
+    const proxy = this.getProxy(platform);
+    await browserLike(this.pool, platform, accountUsername, postUrl, proxy);
   }
 
   /** Comment on a post via browser automation */
   async commentOnPost(platform: Platform, accountUsername: string, postUrl: string, comment: string): Promise<void> {
     console.log(`[Engagement] Commenting on ${postUrl} via @${accountUsername}: "${comment.slice(0, 50)}..."`);
-    await browserComment(this.pool, platform, accountUsername, postUrl, comment);
+    const proxy = this.getProxy(platform);
+    await browserComment(this.pool, platform, accountUsername, postUrl, comment, proxy);
   }
 
   /** Full engagement flow: like recent post + comment */

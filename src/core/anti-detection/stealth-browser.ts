@@ -99,7 +99,7 @@ export class StealthBrowser {
     };
 
     if (options.proxy) {
-      contextOptions.proxy = this.proxyRouter.toPlaywrightProxy(options.proxy, { country: options.proxy.country });
+      contextOptions.proxy = this.proxyRouter.toPlaywrightProxy(options.proxy);
     }
 
     const context = await browser.newContext(contextOptions);

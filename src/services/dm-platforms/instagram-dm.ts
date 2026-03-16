@@ -2,7 +2,7 @@ import { Page } from 'playwright';
 import { BrowserContextPool } from '../browser-context-pool.js';
 import { humanType, humanClick, humanMouseMove, idleActivity } from '../../core/anti-detection/human-behavior.js';
 import { logger } from '../../utils/logger.js';
-import type { DMAccount } from '../../core/types.js';
+import type { DMAccount, ProxyConfig } from '../../core/types.js';
 
 /** Progress callback for real-time UI updates */
 export type DMProgressCallback = (step: string, detail: string) => void;
@@ -16,12 +16,13 @@ export async function sendInstagramDM(
   account: DMAccount,
   recipientUsername: string,
   message: string,
-  onProgress?: DMProgressCallback
+  onProgress?: DMProgressCallback,
+  proxy?: ProxyConfig
 ): Promise<void> {
   const progress = onProgress || (() => {});
 
   progress('browser_init', `브라우저 컨텍스트 준비 중...`);
-  const entry = await pool.acquire('instagram', account.username);
+  const entry = await pool.acquire('instagram', account.username, { proxy });
   let page: Page | null = null;
 
   try {

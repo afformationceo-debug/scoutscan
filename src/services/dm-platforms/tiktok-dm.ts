@@ -2,7 +2,7 @@ import { Page } from 'playwright';
 import { BrowserContextPool } from '../browser-context-pool.js';
 import { humanType, humanClick, idleActivity } from '../../core/anti-detection/human-behavior.js';
 import { logger } from '../../utils/logger.js';
-import type { DMAccount } from '../../core/types.js';
+import type { DMAccount, ProxyConfig } from '../../core/types.js';
 
 /**
  * Send a DM on TikTok via Playwright browser automation.
@@ -12,9 +12,10 @@ export async function sendTikTokDM(
   pool: BrowserContextPool,
   account: DMAccount,
   recipientUsername: string,
-  message: string
+  message: string,
+  proxy?: ProxyConfig
 ): Promise<void> {
-  const entry = await pool.acquire('tiktok', account.username);
+  const entry = await pool.acquire('tiktok', account.username, { proxy });
   let page: Page | null = null;
 
   try {

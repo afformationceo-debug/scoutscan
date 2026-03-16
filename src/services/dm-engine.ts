@@ -5,6 +5,8 @@ import { BrowserContextPool } from './browser-context-pool.js';
 import { sendInstagramDM, type DMProgressCallback } from './dm-platforms/instagram-dm.js';
 import { sendTwitterDM } from './dm-platforms/twitter-dm.js';
 import { sendTikTokDM } from './dm-platforms/tiktok-dm.js';
+import { ProxyRouter } from '../core/proxy.js';
+import type { ProxyConfig } from '../core/types.js';
 import pLimit from 'p-limit';
 
 export class DMEngine {
@@ -14,6 +16,17 @@ export class DMEngine {
 
   constructor(pool: BrowserContextPool) {
     this.pool = pool;
+  }
+
+  /** Load active proxy for DM sending */
+  private getProxy(platform: string): ProxyConfig | undefined {
+    try {
+      const rows = db.prepare('SELECT url FROM proxy_settings WHERE is_active = 1').all() as any[];
+      const urls = rows.map((r: any) => r.url).filter(Boolean);
+      if (urls.length === 0) return undefined;
+      const router = new ProxyRouter(urls);
+      return router.getProxyForPlatform(platform);
+    } catch { return undefined; }
   }
 
   /** Lazily set engagement engine to avoid circular deps */
@@ -359,15 +372,18 @@ export class DMEngine {
         }
       : () => {};
 
+    // Load proxy for DM sending
+    const proxy = this.getProxy(platform);
+
     switch (platform) {
       case 'instagram':
-        await sendInstagramDM(this.pool, account, recipientUsername, message, onProgress);
+        await sendInstagramDM(this.pool, account, recipientUsername, message, onProgress, proxy);
         break;
       case 'twitter':
-        await sendTwitterDM(this.pool, account, recipientUsername, message);
+        await sendTwitterDM(this.pool, account, recipientUsername, message, proxy);
         break;
       case 'tiktok':
-        await sendTikTokDM(this.pool, account, recipientUsername, message);
+        await sendTikTokDM(this.pool, account, recipientUsername, message, proxy);
         break;
       default:
         throw new Error(`DM not supported for platform: ${platform}`);

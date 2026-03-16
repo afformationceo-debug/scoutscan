@@ -100,9 +100,6 @@ export class ProxyRouter {
       const countryMatch = (config.username || '').match(/-country-([a-z]{2})/i);
       if (countryMatch) {
         config.country = countryMatch[1].toUpperCase();
-      } else {
-        // Default to US for Smartproxy to avoid blocked regions (e.g., India blocks TikTok)
-        config.country = 'US';
       }
     }
     // Custom proxy — detect from URL hints
@@ -314,20 +311,10 @@ export class ProxyRouter {
   }
 
   /** Convert to Playwright proxy format */
-  toPlaywrightProxy(proxy: ProxyConfig, options?: { country?: string }) {
-    let username = proxy.username || '';
-
-    // Smartproxy: apply country targeting via username suffix
-    if (proxy.provider === 'smartproxy' && username) {
-      const country = options?.country || proxy.country;
-      if (country && !username.includes('-country-')) {
-        username = `${username}-country-${country.toLowerCase()}`;
-      }
-    }
-
+  toPlaywrightProxy(proxy: ProxyConfig) {
     return {
       server: `${proxy.protocol}://${proxy.host}:${proxy.port}`,
-      username,
+      username: proxy.username,
       password: proxy.password,
     };
   }

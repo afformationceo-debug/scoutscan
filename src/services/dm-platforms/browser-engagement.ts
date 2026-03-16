@@ -2,6 +2,7 @@ import { Page } from 'playwright';
 import { BrowserContextPool } from '../browser-context-pool.js';
 import { humanClick, humanType, humanScroll, idleActivity, simulateReading } from '../../core/anti-detection/human-behavior.js';
 import { logger } from '../../utils/logger.js';
+import type { ProxyConfig } from '../../core/types.js';
 
 /**
  * Like a post via browser automation.
@@ -11,9 +12,10 @@ export async function browserLike(
   pool: BrowserContextPool,
   platform: string,
   accountUsername: string,
-  postUrl: string
+  postUrl: string,
+  proxy?: ProxyConfig
 ): Promise<void> {
-  const entry = await pool.acquire(platform, accountUsername);
+  const entry = await pool.acquire(platform, accountUsername, { proxy });
   let page: Page | null = null;
 
   try {
@@ -87,9 +89,10 @@ export async function browserComment(
   platform: string,
   accountUsername: string,
   postUrl: string,
-  text: string
+  text: string,
+  proxy?: ProxyConfig
 ): Promise<void> {
-  const entry = await pool.acquire(platform, accountUsername);
+  const entry = await pool.acquire(platform, accountUsername, { proxy });
   let page: Page | null = null;
 
   try {
