@@ -87,14 +87,48 @@ export class TikTokScraper implements PlatformScraper {
       const searchUrl = `https://www.tiktok.com/search?q=${encodeURIComponent(cleanTag)}`;
       logger.info(`[TikTok] Search URL: ${searchUrl}`);
 
+      // Inject additional TikTok-specific stealth before navigation
+      await page.addInitScript(() => {
+        // TikTok checks these for headless detection
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        // @ts-ignore
+        delete navigator.__proto__.webdriver;
+        // Ensure Notification permission looks realistic
+        const origQuery = window.Notification?.permission;
+        if (origQuery === 'denied' || !origQuery) {
+          Object.defineProperty(Notification, 'permission', { get: () => 'default' });
+        }
+        // TikTok checks for chrome runtime
+        if (!(window as any).chrome) {
+          (window as any).chrome = { runtime: {}, loadTimes: () => ({}) };
+        }
+        // TikTok checks permissions API
+        const originalQuery = navigator.permissions?.query;
+        if (originalQuery) {
+          navigator.permissions.query = (parameters: any) =>
+            parameters.name === 'notifications'
+              ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
+              : originalQuery.call(navigator.permissions, parameters);
+        }
+      });
+
       // First go to homepage to establish session with cookies
+      logger.info(`[TikTok] Visiting homepage to establish session...`);
       await page.goto('https://www.tiktok.com/', {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       }).catch(() => {});
-      await randomDelay(2000, 4000);
 
-      // Then navigate to search (use domcontentloaded - networkidle often times out on TikTok SPA)
+      // Wait for JS hydration on homepage
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      await randomDelay(3000, 5000);
+
+      // Check homepage rendered properly
+      const homeBodyLen = await page.evaluate(() => document.body?.innerText?.length || 0).catch(() => 0);
+      logger.info(`[TikTok] Homepage body length: ${homeBodyLen} chars`);
+
+      // Then navigate to search
+      logger.info(`[TikTok] Navigating to search: ${searchUrl}`);
       await page.goto(searchUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 45000,
@@ -102,20 +136,44 @@ export class TikTokScraper implements PlatformScraper {
         logger.warn(`[TikTok] Search page navigation issue: ${e.message?.split('\n')[0]}`);
       });
 
-      // Wait for networkidle separately with shorter timeout (API intercepts happen during this)
-      await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {
-        logger.info(`[TikTok] networkidle timeout (expected for TikTok SPA) — continuing with intercepted data`);
+      // Wait for networkidle (API intercepts happen during this)
+      await page.waitForLoadState('networkidle', { timeout: 25000 }).catch(() => {
+        logger.info(`[TikTok] networkidle timeout — continuing with intercepted data`);
       });
 
-      // Wait for content to render (TikTok is SPA, needs JS execution time)
+      // Give TikTok SPA extra time to hydrate and render
       await randomDelay(5000, 8000);
 
-      // Wait for video elements to appear (up to 15s)
-      await page.waitForSelector('[data-e2e="search_top-item"], [class*="DivItemContainer"], a[href*="/video/"]', {
-        timeout: 15000,
-      }).catch(() => {
-        logger.warn(`[TikTok] No video elements found after 15s wait`);
-      });
+      // Trigger content load by scrolling
+      await page.evaluate(() => window.scrollTo(0, 300));
+      await randomDelay(2000, 3000);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await randomDelay(1000, 2000);
+
+      // Wait for video elements with multiple selector attempts
+      const videoSelectors = [
+        '[data-e2e="search_top-item"]',
+        '[data-e2e="search-card-desc"]',
+        '[class*="DivItemContainer"]',
+        '[class*="DivVideoCard"]',
+        'a[href*="/video/"]',
+        'div[class*="tiktok-"] a[href*="/@"]',
+      ];
+      let foundVideos = false;
+      for (const selector of videoSelectors) {
+        const count = await page.$$(selector).then(els => els.length).catch(() => 0);
+        if (count > 0) {
+          logger.info(`[TikTok] Found ${count} elements with selector: ${selector}`);
+          foundVideos = true;
+          break;
+        }
+      }
+      if (!foundVideos) {
+        logger.warn(`[TikTok] No video elements found with any selector`);
+        // Try one more scroll + wait cycle
+        await page.evaluate(() => window.scrollTo(0, 600));
+        await randomDelay(3000, 5000);
+      }
 
       // Check for login/captcha redirect
       const currentUrl = page.url();

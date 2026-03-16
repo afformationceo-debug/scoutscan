@@ -51,7 +51,9 @@ export class XiaohongshuScraper implements PlatformScraper {
     try {
       await this.browser.launch({ browserType: 'chromium', headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getProxyForPlatform('xiaohongshu');
+      // Xiaohongshu is a Chinese platform — most non-CN proxies fail to connect
+      // Try without proxy first (direct access works from most regions)
+      const proxy = undefined; // Skip proxy for xiaohongshu to avoid ERR_TUNNEL_CONNECTION_FAILED
 
       const collectedPosts: Post[] = [];
 
@@ -68,7 +70,6 @@ export class XiaohongshuScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
-        blockMedia: true,
         interceptResponses: (url, body) => {
           if (url.includes('/api/sns/web/v1/search/notes') || url.includes('/api/sns/web/v1/feed')) {
             try {
@@ -130,7 +131,8 @@ export class XiaohongshuScraper implements PlatformScraper {
     try {
       await this.browser.launch({ browserType: 'chromium', headless: true });
       const sessionId = randomUUID();
-      const proxy = this.proxyRouter.getProxyForPlatform('xiaohongshu');
+      // Skip proxy for xiaohongshu — CN sites block most non-CN proxies
+      const proxy = undefined;
 
       let profileData: any = null;
 
