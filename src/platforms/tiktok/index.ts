@@ -89,15 +89,22 @@ export class TikTokScraper implements PlatformScraper {
 
       // First go to homepage to establish session with cookies
       await page.goto('https://www.tiktok.com/', {
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
         timeout: 30000,
       }).catch(() => {});
       await randomDelay(2000, 4000);
 
-      // Then navigate to search
+      // Then navigate to search (use domcontentloaded - networkidle often times out on TikTok SPA)
       await page.goto(searchUrl, {
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
         timeout: 45000,
+      }).catch((e: any) => {
+        logger.warn(`[TikTok] Search page navigation issue: ${e.message?.split('\n')[0]}`);
+      });
+
+      // Wait for networkidle separately with shorter timeout (API intercepts happen during this)
+      await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {
+        logger.info(`[TikTok] networkidle timeout (expected for TikTok SPA) — continuing with intercepted data`);
       });
 
       // Wait for content to render (TikTok is SPA, needs JS execution time)
