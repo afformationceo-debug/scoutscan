@@ -1,5 +1,4 @@
 import winston from 'winston';
-import TransportStream from 'winston-transport';
 
 const { combine, timestamp, printf, colorize } = winston.format;
 
@@ -17,19 +16,19 @@ export function getRecentLogs(filter?: string): string[] {
   return logBuffer.filter(l => l.toLowerCase().includes(filter.toLowerCase()));
 }
 
-class MemoryTransport extends TransportStream {
-  log(info: any, callback: () => void) {
-    const line = `${info.timestamp || new Date().toISOString()} [${info.level}] ${info.message}`;
-    logBuffer.push(line);
-    if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
-    if (callback) callback();
-  }
-}
+// Simple format that captures to buffer
+const bufferFormat = winston.format((info) => {
+  const line = `${info.timestamp || new Date().toISOString()} [${info.level}] ${info.message}`;
+  logBuffer.push(line);
+  if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
+  return info;
+});
 
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    bufferFormat(),
     logFormat
   ),
   transports: [
@@ -41,6 +40,5 @@ export const logger = winston.createLogger({
       maxsize: 10 * 1024 * 1024,
       maxFiles: 3,
     }),
-    new MemoryTransport(),
   ],
 });
