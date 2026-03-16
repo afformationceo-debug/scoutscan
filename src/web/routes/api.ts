@@ -1494,4 +1494,16 @@ api.delete('/proxies/:id', (c) => {
   return c.json({ ok: true });
 });
 
+// ─── Scheduler Control ───
+
+api.post('/scheduler/pause', (c) => {
+  scheduler.stop();
+  return c.json({ message: 'Scheduler stopped' });
+});
+
+api.post('/scheduler/resume', (c) => {
+  scheduler.start();
+  return c.json({ message: 'Scheduler started' });
+});
+
 export { api };
