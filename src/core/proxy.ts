@@ -312,9 +312,18 @@ export class ProxyRouter {
 
   /** Convert to Playwright proxy format */
   toPlaywrightProxy(proxy: ProxyConfig) {
+    let username = proxy.username || '';
+
+    // Smartproxy: apply country targeting via username (underscore separator)
+    // Format: {username}_area-{CC} (e.g., smart-xxx_area-US)
+    if (proxy.provider === 'smartproxy' && username && !username.includes('_area-')) {
+      const country = proxy.country || 'US';
+      username = `${username}_area-${country}`;
+    }
+
     return {
       server: `${proxy.protocol}://${proxy.host}:${proxy.port}`,
-      username: proxy.username || '',
+      username,
       password: proxy.password,
     };
   }

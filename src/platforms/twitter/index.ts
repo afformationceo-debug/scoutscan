@@ -83,6 +83,24 @@ export class TwitterScraper implements PlatformScraper {
         },
       });
 
+      // First visit homepage to stabilize the session (like TikTok approach)
+      logger.info(`[Twitter] Visiting homepage first to stabilize session...`);
+      await page.goto('https://x.com/home', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+      await randomDelay(3000, 5000);
+
+      // Check if we got redirected to login from homepage
+      const homeUrl = page.url();
+      if (homeUrl.includes('/login') || homeUrl.includes('/i/flow/login')) {
+        logger.error(`[Twitter] Redirected to login page — cookies are invalid or missing. Please update Twitter cookies in settings.`);
+        await this.browser.closeContext(sessionId);
+        return;
+      }
+      logger.info(`[Twitter] Homepage loaded: ${homeUrl}`);
+
       // Navigate to Twitter search
       const query = encodeURIComponent(cleanTag);
       const searchUrl = `https://x.com/search?q=${query}&src=typed_query&f=live`;
@@ -92,7 +110,11 @@ export class TwitterScraper implements PlatformScraper {
         timeout: 30000,
       });
 
-      await randomDelay(5000, 7000);
+      // Wait for networkidle to ensure search results API calls complete
+      await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {
+        logger.info(`[Twitter] networkidle timeout — continuing`);
+      });
+      await randomDelay(3000, 5000);
 
       // Check if we got redirected to login
       const currentUrl = page.url();
@@ -105,15 +127,19 @@ export class TwitterScraper implements PlatformScraper {
         return;
       }
 
-      // Wait for tweet articles to appear in DOM (max 10 seconds)
+      // Wait for tweet articles to appear in DOM (max 20 seconds)
       try {
-        await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
+        await page.waitForSelector('article[data-testid="tweet"], [data-testid="cellInnerDiv"]', { timeout: 20000 });
         const tweetCount = await page.$$eval('article[data-testid="tweet"]', (els: Element[]) => els.length).catch(() => 0);
         logger.info(`[Twitter] Tweet articles found in DOM: ${tweetCount}`);
       } catch {
+        // Try scrolling to trigger lazy loading
+        logger.info(`[Twitter] No tweets yet, trying scroll to trigger rendering...`);
+        await page.mouse.wheel(0, 500);
+        await randomDelay(3000, 5000);
         // Log page state for debugging
         const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 300) || '').catch(() => '');
-        logger.warn(`[Twitter] No tweet articles appeared within 10s. Body preview: ${bodyText}`);
+        logger.warn(`[Twitter] No tweet articles appeared within 20s. Body preview: ${bodyText}`);
       }
 
       logger.info(`[Twitter] After initial wait: intercepted=${interceptedCount} API responses, collected=${collectedPosts.length} tweets from API`);
