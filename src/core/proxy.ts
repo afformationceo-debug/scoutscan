@@ -312,9 +312,18 @@ export class ProxyRouter {
 
   /** Convert to Playwright proxy format */
   toPlaywrightProxy(proxy: ProxyConfig) {
+    let username = proxy.username || '';
+
+    // Smartproxy: apply country targeting via username (area-XX format)
+    if (proxy.provider === 'smartproxy' && username && !username.includes('-area-')) {
+      // Default to US to avoid blocked regions (India blocks TikTok, etc.)
+      const country = proxy.country || 'US';
+      username = `user-${username}-area-${country}`;
+    }
+
     return {
       server: `${proxy.protocol}://${proxy.host}:${proxy.port}`,
-      username: proxy.username,
+      username,
       password: proxy.password,
     };
   }
