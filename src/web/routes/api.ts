@@ -1042,7 +1042,13 @@ api.post('/debug/scrape-test/:platform', async (c) => {
 
     const sessionId = randomUUID();
     const proxy = proxyRouter.getProxyForPlatform(platform);
-    diag.proxyUsed = proxy ? proxy.server?.replace(/:[^:]+@/, ':***@') : 'NONE';
+    if (proxy) {
+      diag.proxyUsed = `${proxy.protocol}://${proxy.host}:${proxy.port} (type: ${proxy.type}, provider: ${proxy.provider})`;
+      diag.proxyPlaywright = proxyRouter.toPlaywrightProxy(proxy);
+      diag.proxyPlaywright.password = '***';
+    } else {
+      diag.proxyUsed = 'NONE';
+    }
     diag.steps.push(`Proxy for ${platform}: ${diag.proxyUsed}`);
     await browser.createStealthContext(sessionId, { region: 'US', proxy });
 
