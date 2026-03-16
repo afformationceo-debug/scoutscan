@@ -1355,7 +1355,7 @@ function campaignsPage() {
         targetCountry: this.editCampaign.target_country || null,
         dailyLimit: this.editCampaign.daily_limit,
         messageTemplate: this.editCampaign.message_template,
-        senderUsername: this.editCampaign.sender_username || null,
+        senderUsername: (this.editCampaign.sender_username || '').replace(/^@/, '') || null,
         delayMinSec: this.editCampaign.delay_min_sec,
         delayMaxSec: this.editCampaign.delay_max_sec,
         maxRetries: this.editCampaign.max_retries,
@@ -1364,6 +1364,13 @@ function campaignsPage() {
         maxFollowers: this.editCampaign.max_followers || null,
         targetTiers: targetTiers,
       };
+      // Include cookieJson in PATCH if modified (backend handles dm_accounts sync)
+      if (this.editCampaign._cookieJson) {
+        try {
+          JSON.parse(this.editCampaign._cookieJson);
+          payload.cookieJson = this.editCampaign._cookieJson;
+        } catch { /* ignore invalid JSON */ }
+      }
       const res = await fetch(`/api/campaigns/${this.editCampaign.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1371,21 +1378,15 @@ function campaignsPage() {
       });
       const data = await res.json();
       if (data.error) { alert('오류: ' + data.error); return; }
-      // If cookie JSON was modified, also update cookies
-      if (this.editCampaign._cookieJson && this.editCampaign.sender_username) {
-        try {
-          JSON.parse(this.editCampaign._cookieJson);
-          await fetch(`/api/campaigns/${this.editCampaign.id}/upload-cookies`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              cookies: this.editCampaign._cookieJson,
-              senderUsername: (this.editCampaign.sender_username || '').replace(/^@/, ''),
-            }),
-          });
-        } catch { /* ignore invalid JSON */ }
-      }
       this.showEditModal = false;
+      this.load();
+    },
+
+    async deleteCampaign(campaign) {
+      if (!confirm(`캠페인 "${campaign.name}"을(를) 삭제하시겠습니까?\n관련 큐, 로그, 라운드 데이터도 모두 삭제됩니다.`)) return;
+      const res = await fetch(`/api/campaigns/${campaign.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.error) { alert('오류: ' + data.error); return; }
       this.load();
     },
 

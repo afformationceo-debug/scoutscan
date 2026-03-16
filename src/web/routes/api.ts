@@ -501,13 +501,74 @@ api.get('/campaigns', (c) => {
 api.patch('/campaigns/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
+
+  // Separate cookie-related fields for special handling
+  const { cookieJson, senderUsername, ...rest } = body;
+
   const fields: string[] = [];
   const params: any[] = [];
-  for (const [key, val] of Object.entries(body)) {
+  for (const [key, val] of Object.entries(rest)) {
     const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
     fields.push(`${col} = ?`);
     params.push(typeof val === 'object' ? JSON.stringify(val) : val);
   }
+
+  // Handle senderUsername → also sync dm_accounts
+  if (senderUsername !== undefined) {
+    fields.push('sender_username = ?');
+    params.push(senderUsername);
+  }
+
+  // Handle cookieJson → also sync dm_accounts and validate
+  if (cookieJson !== undefined) {
+    fields.push('cookie_json = ?');
+    params.push(cookieJson);
+
+    if (cookieJson) {
+      try {
+        const parsed = JSON.parse(cookieJson);
+        const cm = new CookieManager();
+        const cookies = Array.isArray(parsed) ? parsed : Object.entries(parsed).map(([name, value]) => ({ name, value }));
+        const campaign = getCampaign(id);
+        const platform = rest.platform || campaign?.platform || 'instagram';
+        const username = senderUsername || campaign?.sender_username;
+
+        if (username) {
+          cm.saveAccountCookies(platform, username, cookies);
+          const validation = cm.validateCookies(platform, username);
+          fields.push('cookie_status = ?');
+          params.push(validation.valid ? 'valid' : 'expired');
+          fields.push('cookie_last_checked_at = ?');
+          params.push(new Date().toISOString());
+          if (validation.expiresAt) {
+            fields.push('cookie_expires_at = ?');
+            params.push(validation.expiresAt);
+          }
+
+          // Sync dm_accounts
+          addDMAccount(platform, username);
+          const acct = db.prepare('SELECT id FROM dm_accounts WHERE platform = ? AND username = ?').get(platform, username) as any;
+          if (acct) {
+            db.prepare('UPDATE dm_accounts SET cookie_json = ?, cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?')
+              .run(cookieJson, validation.valid ? 'valid' : 'expired', new Date().toISOString(), acct.id);
+          }
+        }
+      } catch { /* ignore invalid JSON */ }
+    }
+  } else if (senderUsername) {
+    // senderUsername changed without new cookies → sync existing campaign cookies to new account
+    const campaign = getCampaign(id);
+    if (campaign?.cookie_json && senderUsername !== campaign.sender_username) {
+      const platform = rest.platform || campaign.platform;
+      addDMAccount(platform, senderUsername);
+      const acct = db.prepare('SELECT id FROM dm_accounts WHERE platform = ? AND username = ?').get(platform, senderUsername) as any;
+      if (acct) {
+        db.prepare('UPDATE dm_accounts SET cookie_json = ?, cookie_status = ?, cookie_last_checked_at = ? WHERE id = ?')
+          .run(campaign.cookie_json, campaign.cookie_status || 'unknown', new Date().toISOString(), acct.id);
+      }
+    }
+  }
+
   if (fields.length > 0) {
     fields.push('updated_at = ?');
     params.push(new Date().toISOString());
@@ -515,6 +576,22 @@ api.patch('/campaigns/:id', async (c) => {
     db.prepare(`UPDATE dm_campaigns SET ${fields.join(', ')} WHERE id = ?`).run(...params);
   }
   return c.json({ message: 'Updated' });
+});
+
+api.delete('/campaigns/:id', (c) => {
+  const id = c.req.param('id');
+  const campaign = getCampaign(id);
+  if (!campaign) return c.json({ error: 'Campaign not found' }, 404);
+  // Don't delete active campaigns
+  if (campaign.status === 'active') {
+    return c.json({ error: 'Cannot delete an active campaign. Pause it first.' }, 400);
+  }
+  // Delete queue items, engagement logs, rounds, then campaign
+  db.prepare('DELETE FROM dm_action_queue WHERE campaign_id = ?').run(id);
+  db.prepare('DELETE FROM dm_engagement_log WHERE campaign_id = ?').run(id);
+  db.prepare('DELETE FROM dm_rounds WHERE campaign_id = ?').run(id);
+  db.prepare('DELETE FROM dm_campaigns WHERE id = ?').run(id);
+  return c.json({ message: 'Campaign deleted' });
 });
 
 api.post('/campaigns/:id/queue', (c) => {

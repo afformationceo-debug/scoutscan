@@ -751,6 +751,7 @@
               <button x-show="c.status === 'draft' || c.status === 'paused'" @click="generateQueue(c.id)" class="badge bg-accent/15 text-accent cursor-pointer hover:opacity-80 text-[10px]">큐 생성</button>
               <button x-show="c.status !== 'active' && c.total_queued > 0" @click="startCampaign(c.id)" class="badge badge-success cursor-pointer hover:opacity-80 text-[10px]">시작</button>
               <button x-show="c.status === 'active'" @click="pauseCampaign(c.id)" class="badge badge-warning cursor-pointer hover:opacity-80 text-[10px]">일시정지</button>
+              <button x-show="c.status !== 'active'" @click="deleteCampaign(c)" class="badge bg-error/15 text-error cursor-pointer hover:opacity-80 text-[10px]">삭제</button>
             </div>
           </div>
 
@@ -1057,9 +1058,12 @@
             <p class="text-[10px] text-kaia-muted/50 mt-1">EditThisCookie에서 추출한 JSON을 붙여넣으세요. 비워두면 기존 쿠키가 유지됩니다.</p>
           </div>
         </div>
-        <div class="flex justify-end gap-2 mt-4">
-          <button @click="showEditModal = false" class="px-4 py-2 text-sm text-kaia-text hover:text-white">취소</button>
-          <button @click="saveCampaignEdit()" class="btn-accent px-4 py-2 rounded-lg text-sm">저장</button>
+        <div class="flex justify-between items-center mt-4">
+          <button @click="deleteCampaign(editCampaign); showEditModal = false;" x-show="editCampaign?.status !== 'active'" class="px-4 py-2 text-sm text-error hover:text-white hover:bg-error/20 rounded-lg transition-colors">캠페인 삭제</button>
+          <div class="flex gap-2">
+            <button @click="showEditModal = false" class="px-4 py-2 text-sm text-kaia-text hover:text-white">취소</button>
+            <button @click="saveCampaignEdit()" class="btn-accent px-4 py-2 rounded-lg text-sm">저장</button>
+          </div>
         </div>
       </div>
     </div>

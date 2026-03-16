@@ -462,6 +462,18 @@ export class DMEngine {
     if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
     if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
 
+    // Keyword-target auto-mapping: only include influencers scraped from linked keyword groups
+    // linked_keyword_group = "instagram:TW" → source_pair_ids must contain "instagram:TW:"
+    if (campaign.linked_keyword_group) {
+      const groups = campaign.linked_keyword_group.split(',').map((g: string) => g.trim()).filter(Boolean);
+      const groupConditions = groups.map(() => `source_pair_ids LIKE ?`);
+      conditions.push(`(${groupConditions.join(' OR ')})`);
+      for (const g of groups) {
+        params.push(`%${g}:%`);
+      }
+      console.log(`[DMEngine] Keyword-target filter active: ${groups.join(', ')}`);
+    }
+
     // Exclude already queued in this campaign
     conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE campaign_id = ?)`);
     params.push(campaignId);

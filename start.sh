@@ -23,5 +23,11 @@ fi
 # Symlink cookies dir so the app finds them at /app/cookies
 ln -sfn /app/data/cookies /app/cookies
 
+# Auto-migrate CSV seed data (campaigns + keywords) into DB
+if [ ! -f /app/data/.seed-migrated ]; then
+  echo "[Start] Running seed migration..."
+  node --import tsx/esm src/seed-migrate.ts || echo "[Start] Seed migration failed (non-fatal)"
+fi
+
 echo "[Start] Launching server..."
 exec node --max-http-header-size=65536 --import tsx/esm src/web/server.ts

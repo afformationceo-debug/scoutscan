@@ -322,6 +322,8 @@ const alterMigrations = [
   // dm_action_queue: reply detection tracking
   `ALTER TABLE dm_action_queue ADD COLUMN reply_detected INTEGER DEFAULT 0`,
   `ALTER TABLE dm_action_queue ADD COLUMN reply_detected_at TEXT`,
+  // dm_campaigns: keyword target auto-mapping (platform:region group key)
+  `ALTER TABLE dm_campaigns ADD COLUMN linked_keyword_group TEXT`,
 ];
 
 for (const sql of alterMigrations) {
