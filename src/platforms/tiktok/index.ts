@@ -119,9 +119,16 @@ export class TikTokScraper implements PlatformScraper {
         logger.error(`[TikTok] Redirected to login/captcha — cookies may be invalid. URL: ${currentUrl}`);
       }
 
-      // Debug: log page content snippet to understand what TikTok returned
-      const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || 'NO BODY').catch(() => 'EVAL_FAILED');
-      logger.info(`[TikTok] Page body preview: ${bodyText.substring(0, 300)}`);
+      // Debug: log page content and DOM state
+      const domState = await page.evaluate(() => {
+        const videoLinks = document.querySelectorAll('a[href*="/video/"]').length;
+        const e2eItems = document.querySelectorAll('[data-e2e="search_top-item"]').length;
+        const bodyLen = document.body?.innerText?.length || 0;
+        const bodyPreview = document.body?.innerText?.substring(0, 200) || 'NO BODY';
+        return { videoLinks, e2eItems, bodyLen, bodyPreview };
+      }).catch(() => ({ videoLinks: 0, e2eItems: 0, bodyLen: 0, bodyPreview: 'EVAL_FAILED' }));
+      logger.info(`[TikTok] DOM state: ${domState.videoLinks} video links, ${domState.e2eItems} search items, body ${domState.bodyLen} chars`);
+      logger.info(`[TikTok] Body preview: ${domState.bodyPreview.substring(0, 150)}`);
 
       // Try to extract from page embedded data
       const embeddedPosts = await this.extractEmbeddedData(page, cleanTag);
@@ -130,7 +137,7 @@ export class TikTokScraper implements PlatformScraper {
         logger.info(`[TikTok] Added ${embeddedPosts.length} posts from embedded data extraction`);
       }
 
-      logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embeddedRaw.length})`);
+      logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embeddedPosts.length})`);
 
       // Debug: check what embedded data keys exist
       const embeddedKeys = await page.evaluate(() => {
