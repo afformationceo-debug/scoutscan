@@ -33,7 +33,10 @@ api.post('/jobs/hashtag', async (c) => {
   }
 
   const tag = hashtag.replace(/^#/, '');
-  const jobId = jobManager.startHashtagJob(platform as Platform, tag, maxResults, enrichProfiles);
+  // Generate pairId for source tracking: "instagram:manual:hashtag"
+  // This ensures source_pair_ids is set even for manual API jobs
+  const pairId = `${platform}:manual:${tag}`;
+  const jobId = jobManager.startHashtagJob(platform as Platform, tag, maxResults, enrichProfiles, pairId);
   return c.json({ jobId, message: 'Job started' }, 201);
 });
 

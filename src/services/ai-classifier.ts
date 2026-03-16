@@ -21,6 +21,8 @@ interface ProfileForAI {
   category: string | null;
   is_business: number;
   followers_count: number;
+  external_url: string | null;
+  contact_email: string | null;
   captions: string[];    // Recent post captions
 }
 
@@ -106,7 +108,7 @@ export class AIClassifier {
    */
   private loadProfiles(whereCondition: string): ProfileForAI[] {
     const rows = db.prepare(`
-      SELECT influencer_key, platform, username, full_name, bio, category, is_business, followers_count
+      SELECT influencer_key, platform, username, full_name, bio, category, is_business, followers_count, external_url, contact_email
       FROM influencer_master
       WHERE ${whereCondition}
       ORDER BY followers_count DESC
@@ -141,6 +143,8 @@ export class AIClassifier {
 Username: @${p.username}
 Name: ${p.full_name || '(none)'}
 Bio: ${(p.bio || '(none)').slice(0, 300)}
+Bio Link: ${p.external_url || '(none)'}
+Email: ${p.contact_email || '(none)'}
 Category: ${p.category || '(none)'}
 Followers: ${p.followers_count.toLocaleString()}
 Recent Captions:
@@ -149,16 +153,29 @@ ${captionText}`;
 
     const systemPrompt = `You are an expert social media analyst. For each Instagram/social media profile, determine:
 1. Is this a real INFLUENCER (content creator, blogger, model, etc.) or a BUSINESS (clinic, agency, brand, shop, media company, hospital, etc.)?
-2. What country is this person/entity MOST LIKELY based in? Analyze the language, content, mentions, locations in bio and captions.
+2. What country is this person ACTUALLY FROM or BASED IN?
 
-Rules:
-- Individual influencers who use business accounts are still INFLUENCERS (is_influencer: true)
-- Clinics, hospitals, dermatology offices, beauty salons, brand official accounts, agencies, media companies = BUSINESS (is_influencer: false)
-- For country detection, look at: language used in bio/captions, location mentions, hashtags with country/city names, Japanese/Korean/Chinese/English text patterns
-- If mostly Japanese text → JP, Korean text → KR, Chinese simplified → CN, Chinese traditional → TW, Thai → TH, etc.
-- If unclear, use "UNKNOWN" for country
-- Confidence should be 0.0 to 1.0 based on how certain you are
-- IMPORTANT: The "reason" field MUST be written in Korean (한국어). Explain why you classified this profile as influencer or business, and how you determined the country.
+CRITICAL — Country Detection Rules:
+- Determine the person's REAL nationality/residence, NOT the topic they post about.
+- Someone posting about Korean beauty/travel but writing in Traditional Chinese with locations like 台中, 台北, 高雄 → they are from TAIWAN (TW), not Korea.
+- Someone posting about Korea in Japanese → they are from JAPAN (JP), not Korea.
+- Bio links to .tw domains, LINE IDs, Taiwan phone numbers → TW
+- Bio links to .jp domains, Japanese LINE → JP
+- Bio mentions cities: 台中/台北/高雄/新竹 → TW, 東京/大阪/名古屋 → JP, Seoul/서울/강남 → KR, Singapore → SG, KL/Kuala Lumpur → MY, 香港 → HK
+- Traditional Chinese (繁體) text → likely TW or HK. Check for Taiwan-specific terms (如：台灣、台中、高雄、捷運) vs HK terms (港、銅鑼灣、MTR)
+- Simplified Chinese → likely CN or SG/MY
+- English bio with Asian appearance + Singapore/Malaysia mentions → SG or MY
+- Korean text + Korean city names → KR
+- Japanese text → JP
+- The hashtag they were found through (e.g. #韓國醫美) does NOT determine their country — it only means they're interested in that topic.
+
+Influencer vs Business Rules:
+- Individual content creators, bloggers, models, lifestyle accounts = INFLUENCER (is_influencer: true)
+- Clinics, hospitals, dermatology offices, beauty salons, brand official accounts, agencies, media companies, 代理 (agents), 醫院, 皮膚科 = BUSINESS (is_influencer: false)
+- Individual influencers who use business accounts are still INFLUENCERS
+
+- Confidence 0.0-1.0. Use "UNKNOWN" if truly unclear.
+- IMPORTANT: "reason" MUST be in Korean (한국어).
 
 Return ONLY a JSON array with exactly one object per profile, in order:
 [
