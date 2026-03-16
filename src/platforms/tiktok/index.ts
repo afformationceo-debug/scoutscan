@@ -65,7 +65,13 @@ export class TikTokScraper implements PlatformScraper {
 
       const page = await this.browser.createPage(sessionId, {
         interceptResponses: (url, body) => {
-          if (url.includes('/api/search') || url.includes('/api/challenge') || url.includes('/api/post') || url.includes('/api/recommend') || url.includes('search/item')) {
+          // Broader URL matching for TikTok API responses
+          const isSearchAPI = url.includes('/api/search') || url.includes('/api/challenge') ||
+            url.includes('/api/post') || url.includes('/api/recommend') ||
+            url.includes('search/item') || url.includes('search/general') ||
+            url.includes('search/video') || url.includes('/tiktok/') ||
+            (url.includes('tiktok.com') && url.includes('item_list'));
+          if (isSearchAPI) {
             interceptedCount++;
             const before = collectedPosts.length;
             this.extractVideos(body, collectedPosts);
@@ -117,14 +123,11 @@ export class TikTokScraper implements PlatformScraper {
       const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || 'NO BODY').catch(() => 'EVAL_FAILED');
       logger.info(`[TikTok] Page body preview: ${bodyText.substring(0, 300)}`);
 
-      // Try to extract from page embedded data (raw items → parse to Post format)
-      const embeddedRaw = await this.extractEmbeddedData(page, cleanTag);
-      for (const raw of embeddedRaw) {
-        try {
-          collectedPosts.push(this.parseVideo(raw));
-        } catch {
-          // Skip items that can't be parsed
-        }
+      // Try to extract from page embedded data
+      const embeddedPosts = await this.extractEmbeddedData(page, cleanTag);
+      if (embeddedPosts.length > 0) {
+        collectedPosts.push(...embeddedPosts);
+        logger.info(`[TikTok] Added ${embeddedPosts.length} posts from embedded data extraction`);
       }
 
       logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embeddedRaw.length})`);
