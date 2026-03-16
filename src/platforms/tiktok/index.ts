@@ -44,11 +44,13 @@ export class TikTokScraper implements PlatformScraper {
     let interceptedCount = 0;
 
     logger.info(`[TikTok] Searching: ${cleanTag}`, { maxResults });
+    logger.info(`[TikTok] ProxyRouter has ${(this.proxyRouter as any).proxies?.length || 0} proxies`);
 
     try {
       await this.browser.launch({ headless: true });
       const sessionId = randomUUID();
       const proxy = this.proxyRouter.getProxyForPlatform('tiktok');
+      logger.info(`[TikTok] Using proxy: ${proxy ? proxy.server?.replace(/:[^:]+@/, ':***@') : 'NONE'}`);
 
       const collectedPosts: Post[] = [];
 
@@ -94,6 +96,10 @@ export class TikTokScraper implements PlatformScraper {
         logger.error(`[TikTok] Redirected to login/captcha — cookies may be invalid. URL: ${currentUrl}`);
       }
 
+      // Debug: log page content snippet to understand what TikTok returned
+      const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || 'NO BODY').catch(() => 'EVAL_FAILED');
+      logger.info(`[TikTok] Page body preview: ${bodyText.substring(0, 300)}`);
+
       // Try to extract from page embedded data (raw items → parse to Post format)
       const embeddedRaw = await this.extractEmbeddedData(page, cleanTag);
       for (const raw of embeddedRaw) {
@@ -105,6 +111,16 @@ export class TikTokScraper implements PlatformScraper {
       }
 
       logger.info(`[TikTok] Intercepted ${interceptedCount} API responses, collected ${collectedPosts.length} videos (embedded: ${embeddedRaw.length})`);
+
+      // Debug: check what embedded data keys exist
+      const embeddedKeys = await page.evaluate(() => {
+        const keys: string[] = [];
+        if ((window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__) keys.push('UNIVERSAL_DATA');
+        if ((window as any).SIGI_STATE) keys.push('SIGI_STATE');
+        if ((window as any).__NEXT_DATA__) keys.push('NEXT_DATA');
+        return keys;
+      }).catch(() => ['EVAL_FAILED']);
+      logger.info(`[TikTok] Embedded data keys found: ${embeddedKeys.join(', ') || 'NONE'}`);
 
       // Yield initial
       while (collectedPosts.length > 0 && yielded < maxResults) {
