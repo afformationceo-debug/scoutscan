@@ -70,15 +70,15 @@ export class TikTokScraper implements PlatformScraper {
             url.includes('/api/post') || url.includes('/api/recommend') ||
             url.includes('search/item') || url.includes('search/general') ||
             url.includes('search/video') || url.includes('/tiktok/') ||
-            (url.includes('tiktok.com') && url.includes('item_list'));
+            (url.includes('tiktok.com') && url.includes('item_list')) ||
+            (url.includes('tiktok.com') && url.includes('/api/')) ||
+            url.includes('search_item') || url.includes('full/search');
           if (isSearchAPI) {
             interceptedCount++;
             const before = collectedPosts.length;
             this.extractVideos(body, collectedPosts);
             const extracted = collectedPosts.length - before;
-            if (extracted > 0) {
-              logger.info(`[TikTok] Intercepted ${extracted} videos from: ${url.split('?')[0].slice(-60)}`);
-            }
+            logger.info(`[TikTok] API intercept #${interceptedCount}: ${url.split('?')[0].slice(-80)} — extracted: ${extracted}, body: ${body.length}bytes`);
           }
         },
       });
@@ -291,18 +291,69 @@ export class TikTokScraper implements PlatformScraper {
   private extractVideos(body: string, posts: Post[]): void {
     try {
       const data = JSON.parse(body);
-      const items = data?.itemList || data?.data?.itemList || data?.items || [];
+      const beforeCount = posts.length;
+
+      // TikTok API uses both camelCase and snake_case
+      const items = data?.itemList || data?.item_list
+        || data?.data?.itemList || data?.data?.item_list
+        || data?.items || data?.data?.items || [];
 
       for (const item of items) {
         posts.push(this.parseVideo(item));
       }
 
-      // Also check challenge info structure
+      // Check challenge info structure
       const challengeItems = data?.challengeInfo?.challengeItem?.itemList || [];
       for (const item of challengeItems) {
         posts.push(this.parseVideo(item));
       }
+
+      // Check search_item_list (newer TikTok search API)
+      const searchItems = data?.data?.search_item_list || data?.search_item_list || [];
+      for (const item of searchItems) {
+        // search_item_list items have nested video info
+        const videoItem = item?.item || item;
+        if (videoItem?.id || videoItem?.desc) {
+          posts.push(this.parseVideo(videoItem));
+        }
+      }
+
+      // Generic deep search for any item with video ID
+      if (posts.length === beforeCount && body.length > 1000) {
+        this.deepExtractVideos(data, posts, 0);
+      }
+
+      const extracted = posts.length - beforeCount;
+      if (extracted > 0) {
+        logger.info(`[TikTok] extractVideos: found ${extracted} videos`);
+      } else if (body.length > 500) {
+        // Debug: log structure of large unrecognized responses
+        const keys = Object.keys(data || {});
+        const dataKeys = data?.data ? Object.keys(data.data) : [];
+        logger.debug(`[TikTok] extractVideos: 0 from ${body.length}B. Keys: ${keys.join(',')}, data: ${dataKeys.join(',')}`);
+      }
     } catch {}
+  }
+
+  /** Deep traversal to find video items in nested TikTok API responses */
+  private deepExtractVideos(obj: any, posts: Post[], depth: number): void {
+    if (depth > 8 || !obj || typeof obj !== 'object') return;
+
+    // Check if this looks like a video item
+    if (obj.id && (obj.desc !== undefined || obj.author) && (obj.stats || obj.createTime)) {
+      try { posts.push(this.parseVideo(obj)); } catch {}
+      return;
+    }
+
+    if (Array.isArray(obj)) {
+      for (const item of obj) this.deepExtractVideos(item, posts, depth + 1);
+    } else {
+      for (const val of Object.values(obj)) {
+        if (val && typeof val === 'object') {
+          this.deepExtractVideos(val, posts, depth + 1);
+        }
+      }
+    }
   }
 
   /** Extract data from TikTok's embedded page state */
@@ -377,8 +428,32 @@ export class TikTokScraper implements PlatformScraper {
           });
         }
 
+        // Method 6: Deep scan UNIVERSAL_DATA for any item with video structure
+        if (items.length === 0) {
+          const ud2 = (window as any).__UNIVERSAL_DATA_FOR_REHYDRATION__;
+          if (ud2) {
+            const deepScan = (obj: any, depth: number): any[] => {
+              if (depth > 6 || !obj || typeof obj !== 'object') return [];
+              const found: any[] = [];
+              if (obj.id && (obj.desc !== undefined || obj.author)) {
+                found.push(obj);
+                return found;
+              }
+              if (Array.isArray(obj)) {
+                for (const item of obj) found.push(...deepScan(item, depth + 1));
+              } else {
+                for (const val of Object.values(obj)) {
+                  if (val && typeof val === 'object') found.push(...deepScan(val as any, depth + 1));
+                }
+              }
+              return found;
+            };
+            items.push(...deepScan(ud2, 0));
+          }
+        }
+
         return items;
-      });
+      }).catch(() => []);
 
       logger.info(`[TikTok] extractEmbeddedData found ${rawItems.length} raw items`);
 
