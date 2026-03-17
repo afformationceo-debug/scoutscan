@@ -214,70 +214,53 @@ export async function sendInstagramDM(
     const msgSelector = msgSelectors.join(', ');
     await page.waitForSelector(msgSelector, { timeout: 20000 });
 
-    // Type message via clipboard paste (NOT char-by-char typing)
-    // CRITICAL: humanType() types '\n' as Enter which SENDS the message in Instagram DM.
-    // Clipboard paste preserves newlines as line breaks within a single message.
+    // === CRITICAL: Message input with verification ===
+    // Rule: The EXACT message from message parameter must be sent. No residual text, no wrong template.
     progress('msg_type', `메시지 입력 중: "${message.slice(0, 30)}${message.length > 30 ? '...' : ''}"`);
+    const isMac = process.platform === 'darwin';
     const msgEl = await page.$(msgSelector);
+
+    // Step A: Clear any existing content in the input (prevents residual text from previous sessions)
     if (msgEl) {
       await msgEl.click();
-      await page.waitForTimeout(300 + Math.random() * 200);
-    }
-    // Insert message via DataTransfer paste event (works in headless Chromium)
-    // This injects the full text at once, preserving newlines as line breaks.
-    const isMac = process.platform === 'darwin';
-    let pasted = false;
-    try {
-      pasted = await page.evaluate((text) => {
-        const el = document.activeElement;
-        if (!el) return false;
-        // Method 1: DataTransfer paste event (works for contenteditable + textarea)
-        const dt = new DataTransfer();
-        dt.setData('text/plain', text);
-        const pasteEvent = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
-        el.dispatchEvent(pasteEvent);
-        // Check if it was handled
-        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
-          return el.value.length > 0;
-        }
-        return (el.textContent || '').length > 0;
-      }, message);
-    } catch {
-      pasted = false;
-    }
-    await page.waitForTimeout(300 + Math.random() * 300);
-
-    // Verify paste worked
-    if (msgEl && !pasted) {
-      const currentLen = await msgEl.evaluate((el: any) => {
-        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value.length;
-        return (el.textContent || el.innerText || '').length;
-      }).catch(() => 0);
-      pasted = currentLen >= message.length * 0.3;
-    }
-
-    // Fallback: Shift+Enter line-by-line typing (guaranteed to work)
-    if (!pasted) {
-      logger.info('[Instagram DM] Using Shift+Enter line-by-line input');
+      await page.waitForTimeout(300);
       await page.keyboard.press(isMac ? 'Meta+a' : 'Control+a');
       await page.keyboard.press('Backspace');
-      await page.waitForTimeout(200);
-      const lines = message.split('\n');
-      for (let li = 0; li < lines.length; li++) {
-        if (lines[li].length > 0) {
-          await page.keyboard.type(lines[li], { delay: 20 + Math.random() * 30 });
-        }
-        if (li < lines.length - 1) {
-          await page.keyboard.down('Shift');
-          await page.keyboard.press('Enter');
-          await page.keyboard.up('Shift');
-          await page.waitForTimeout(30 + Math.random() * 70);
-        }
+      await page.waitForTimeout(300);
+    }
+
+    // Step B: Input message via Shift+Enter method (most reliable, guaranteed to work)
+    // DataTransfer paste is unreliable in Instagram's React — skip it entirely.
+    const lines = message.split('\n');
+    for (let li = 0; li < lines.length; li++) {
+      if (lines[li].length > 0) {
+        await page.keyboard.type(lines[li], { delay: 15 + Math.random() * 25 });
+      }
+      if (li < lines.length - 1) {
+        await page.keyboard.down('Shift');
+        await page.keyboard.press('Enter');
+        await page.keyboard.up('Shift');
+        await page.waitForTimeout(20 + Math.random() * 50);
       }
     }
-    await page.waitForTimeout(500 + Math.random() * 1000);
+    await page.waitForTimeout(500 + Math.random() * 500);
 
-    // Send message
+    // Step C: VERIFY the input contains the correct message (at least first 30 chars match)
+    if (msgEl) {
+      const inputContent = await msgEl.evaluate((el: any) => {
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') return el.value;
+        return el.textContent || el.innerText || '';
+      }).catch(() => '');
+      const expectedStart = message.replace(/\n/g, '').slice(0, 30);
+      const actualStart = inputContent.replace(/\n/g, '').slice(0, 30);
+      if (actualStart.length > 0 && !actualStart.includes(expectedStart.slice(0, 15))) {
+        logger.error(`[Instagram DM] WRONG MESSAGE in input! Expected: "${expectedStart}" Got: "${actualStart}"`);
+        throw new Error('send_failed: Wrong message detected in input — aborting to prevent wrong template delivery');
+      }
+      logger.info(`[Instagram DM] Message verified: "${actualStart.slice(0, 20)}..." (${inputContent.length} chars)`);
+    }
+
+    // Step D: Send message
     progress('msg_send', `메시지 전송 중 (Enter)...`);
     await page.keyboard.press('Enter');
 

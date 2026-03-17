@@ -32,6 +32,15 @@ class JobManager extends EventEmitter {
     } catch { return []; }
   }
 
+  /** Get minimum follower count for scraping filter (platform-specific, default 2000) */
+  private getMinFollowersScrape(platform: string): number {
+    try {
+      const row = db.prepare('SELECT min_followers_scrape FROM platform_dm_defaults WHERE platform = ?').get(platform) as any;
+      if (row?.min_followers_scrape) return row.min_followers_scrape;
+    } catch { /* column may not exist yet */ }
+    return 2000; // hardcoded fallback
+  }
+
   /** Run GeoClassifier on a profile and persist result */
   private geoClassify(profile: InfluencerProfile): void {
     try {
@@ -216,24 +225,39 @@ class JobManager extends EventEmitter {
         const MAX_CONSECUTIVE_FAILURES = 5;
         let failedUsernames: string[] = [];
 
+        // Load min follower threshold from platform settings
+        const minFollowers = this.getMinFollowersScrape(platform);
+        let filteredCount = 0;
+
         const enrichTasks = newUsernames.map(username =>
           limit(async () => {
             try {
               const profile = await engine.getProfile(platform, username);
+
+              // Filter: skip profiles below minimum follower threshold
+              if (profile.followersCount < minFollowers) {
+                filteredCount++;
+                console.log(`[enrichment] Skipped @${username}: ${profile.followersCount} followers < ${minFollowers} minimum`);
+                this.sendSSE(jobId, 'profile_filtered', {
+                  username, followers: profile.followersCount, minFollowers, filteredCount,
+                });
+                return; // Skip DB save entirely
+              }
+
               insertProfile(jobId, profile);
               upsertInfluencer(profile, pairId);
               this.geoClassify(profile);
               profilesCount++;
               consecutiveFailures = 0;
               this.sendSSE(jobId, 'profile', profile);
-              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length });
+              this.sendSSE(jobId, 'progress', { phase: 'profiles', count: profilesCount, total: newUsernames.length, filtered: filteredCount });
               // Broadcast every profile to global feed
               sseManager.broadcast('global', 'profile_enriched', {
                 jobId, platform, keyword: hashtag, pairId,
                 username: profile.username,
                 fullName: profile.fullName,
                 followers: profile.followersCount,
-                count: profilesCount, total: newUsernames.length,
+                count: profilesCount, total: newUsernames.length, filtered: filteredCount,
               });
             } catch (err) {
               consecutiveFailures++;
@@ -271,6 +295,12 @@ class JobManager extends EventEmitter {
               try {
                 await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
                 const profile = await engine.getProfile(platform, username);
+                // Same follower filter on retry
+                if (profile.followersCount < minFollowers) {
+                  filteredCount++;
+                  console.log(`[enrichment] Retry skipped @${username}: ${profile.followersCount} < ${minFollowers}`);
+                  return;
+                }
                 insertProfile(jobId, profile);
                 upsertInfluencer(profile, pairId);
                 this.geoClassify(profile);
@@ -283,6 +313,12 @@ class JobManager extends EventEmitter {
             })
           );
           await Promise.allSettled(retryTasks);
+        }
+
+        // Log filtering stats
+        if (filteredCount > 0) {
+          console.log(`[enrichment] Filter stats: ${profilesCount} saved, ${filteredCount} filtered (< ${minFollowers} followers), ${failedUsernames.length} failed`);
+          this.sendSSE(jobId, 'filter_stats', { saved: profilesCount, filtered: filteredCount, minFollowers, failed: failedUsernames.length });
         }
       }
 
@@ -427,10 +463,18 @@ class JobManager extends EventEmitter {
       const MAX_CONSECUTIVE_FAILURES = 5;
       let failedUsernames: string[] = [];
 
+      const minFollowers = this.getMinFollowersScrape(platform);
+      let filteredCount = 0;
+
       const enrichTasks = usernames.map(username =>
         limit(async () => {
           try {
             const profile = await engine.getProfile(platform, username);
+            if (profile.followersCount < minFollowers) {
+              filteredCount++;
+              console.log(`[re-enrich] Skipped @${username}: ${profile.followersCount} < ${minFollowers}`);
+              return;
+            }
             insertProfile(jobId, profile);
             upsertInfluencer(profile);
             this.geoClassify(profile);

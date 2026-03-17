@@ -56,10 +56,29 @@ export class DMEngine {
         console.log(`[DMEngine] Reset ${stuckReset.changes} stuck processing items to pending`);
       }
 
-      // Get all active accounts for this campaign's platform
-      const accounts = db.prepare(
-        `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' ORDER BY daily_sent ASC`
-      ).all(campaign.platform) as any[];
+      // Get accounts for this campaign — MUST use campaign's designated sender only
+      let accounts: any[];
+      if (campaign.sender_username) {
+        // Campaign has a designated sender → use ONLY that account
+        accounts = db.prepare(
+          `SELECT * FROM dm_accounts WHERE platform = ? AND username = ? AND status = 'active'`
+        ).all(campaign.platform, campaign.sender_username) as any[];
+        if (accounts.length === 0) {
+          console.error(`[DMEngine] Campaign "${campaign.name}" designated sender @${campaign.sender_username} not found or not active`);
+          db.prepare('UPDATE dm_campaigns SET status = ?, updated_at = ? WHERE id = ?')
+            .run('paused', new Date().toISOString(), campaignId);
+          sseManager.broadcast('campaign:' + campaignId, 'error', {
+            message: `지정 발송계정 @${campaign.sender_username}이 비활성 상태입니다.`,
+          });
+          return;
+        }
+        console.log(`[DMEngine] Campaign "${campaign.name}" → designated sender @${campaign.sender_username}`);
+      } else {
+        // No designated sender → use all active accounts for the platform
+        accounts = db.prepare(
+          `SELECT * FROM dm_accounts WHERE platform = ? AND status = 'active' ORDER BY daily_sent ASC`
+        ).all(campaign.platform) as any[];
+      }
 
       if (accounts.length === 0) {
         console.warn('[DMEngine] No active accounts available');
@@ -399,6 +418,16 @@ export class DMEngine {
 
   /** Route DM to the correct platform module */
   private async sendDM(platform: string, account: any, recipientUsername: string, message: string, campaignId?: string): Promise<void> {
+    // CRITICAL: Verify account-campaign matching before sending
+    if (campaignId) {
+      const campaign = db.prepare('SELECT name, sender_username FROM dm_campaigns WHERE id = ?').get(campaignId) as any;
+      if (campaign?.sender_username && campaign.sender_username !== account.username) {
+        const err = `BLOCKED: Account @${account.username} is not authorized for campaign "${campaign.name}" (designated: @${campaign.sender_username})`;
+        console.error(`[DMEngine] ${err}`);
+        throw new Error(err);
+      }
+    }
+
     // Create progress callback that broadcasts each step via SSE
     const onProgress: DMProgressCallback = campaignId
       ? (step, detail) => {
@@ -414,14 +443,14 @@ export class DMEngine {
 
     // Load proxy for DM sending
     const proxy = this.getProxy(platform);
-    console.log(`[DMEngine] sendDM @${account.username} → @${recipientUsername} | proxy: ${proxy ? proxy.host + ':' + proxy.port : 'NONE (direct IP)'}`);
+    console.log(`[DMEngine] sendDM @${account.username} → @${recipientUsername} | campaign: ${campaignId?.slice(0, 8)} | proxy: ${proxy ? proxy.host + ':' + proxy.port : 'NONE (direct IP)'}`);
 
     switch (platform) {
       case 'instagram':
         await sendInstagramDM(this.pool, account, recipientUsername, message, onProgress, proxy);
         break;
       case 'twitter':
-        await sendTwitterDM(this.pool, account, recipientUsername, message, proxy);
+        await sendTwitterDM(this.pool, account, recipientUsername, message, proxy, account.dm_pin);
         break;
       case 'tiktok':
         await sendTikTokDM(this.pool, account, recipientUsername, message, proxy);
@@ -566,6 +595,9 @@ export class DMEngine {
     }
 
     const now = new Date().toISOString();
+    // Log campaign-template binding for audit
+    console.log(`[DMEngine] Queue generation: campaign="${campaign.name}" (${campaignId.slice(0, 8)}) sender=@${campaign.sender_username || 'any'} template="${campaign.message_template.slice(0, 30)}..."`);
+
     const insertStmt = db.prepare(`
       INSERT INTO dm_action_queue (influencer_key, campaign_id, platform, message_rendered, created_at)
       VALUES (?, ?, ?, ?, ?)

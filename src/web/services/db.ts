@@ -344,6 +344,8 @@ const alterMigrations = [
   `ALTER TABLE dm_action_queue ADD COLUMN commented_post_url TEXT`,
   // dm_accounts: store actual cookie JSON in DB (ephemeral filesystem safe)
   `ALTER TABLE dm_accounts ADD COLUMN cookie_json TEXT`,
+  // dm_accounts: Twitter DM encrypted messages PIN (default 0000)
+  `ALTER TABLE dm_accounts ADD COLUMN dm_pin TEXT DEFAULT '0000'`,
   // dm_action_queue: reply detection tracking
   `ALTER TABLE dm_action_queue ADD COLUMN reply_detected INTEGER DEFAULT 0`,
   `ALTER TABLE dm_action_queue ADD COLUMN reply_detected_at TEXT`,
@@ -351,6 +353,8 @@ const alterMigrations = [
   `ALTER TABLE dm_campaigns ADD COLUMN linked_keyword_group TEXT`,
   // dm_action_queue: proxy IP tracking
   `ALTER TABLE dm_action_queue ADD COLUMN proxy_ip TEXT`,
+  // platform_dm_defaults: scraping follower filter
+  `ALTER TABLE platform_dm_defaults ADD COLUMN min_followers_scrape INTEGER DEFAULT 2000`,
 ];
 
 for (const sql of alterMigrations) {
