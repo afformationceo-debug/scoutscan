@@ -69,8 +69,11 @@ export class TwitterScraper implements PlatformScraper {
         logger.warn(`[Twitter] No cookies found — Twitter requires login for search. Results may be empty.`);
       }
 
-      // Do NOT block media/fonts for Twitter — it can prevent tweet rendering on some setups
+      // Block media/images to save proxy bandwidth (API interception + DOM extraction don't need them)
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true,
+        blockImages: true,
+        blockFonts: true,
         interceptResponses: (url, body) => {
           // Intercept Twitter API responses (GraphQL, REST API, adaptive search)
           if (url.includes('/graphql/') || url.includes('/i/api/') || url.includes('SearchTimeline') || url.includes('adaptive.json')) {
@@ -261,6 +264,9 @@ export class TwitterScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true,
+        blockImages: true,
+        blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('UserByScreenName') || url.includes('UserBy')) {
             try {

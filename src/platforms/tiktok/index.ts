@@ -64,6 +64,7 @@ export class TikTokScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           // Broader URL matching for TikTok API responses
           const isSearchAPI = url.includes('/api/search') || url.includes('/api/challenge') ||
@@ -281,6 +282,7 @@ export class TikTokScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/api/user/detail') || url.includes('uniqueId')) {
             try {

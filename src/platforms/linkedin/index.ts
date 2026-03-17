@@ -123,6 +123,7 @@ export class LinkedInScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/voyager/api/identity/profiles/') || url.includes('/identity/dash/profiles')) {
             try {

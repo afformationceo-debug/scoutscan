@@ -70,6 +70,7 @@ export class XiaohongshuScraper implements PlatformScraper {
       }
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/api/sns/web/v1/search/notes') || url.includes('/api/sns/web/v1/feed')) {
             try {
@@ -139,6 +140,7 @@ export class XiaohongshuScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'KR', proxy });
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/api/sns/web/v1/user/otherinfo') || url.includes('/api/sns/web/v1/user_posted')) {
             try {

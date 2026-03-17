@@ -54,6 +54,7 @@ export class YouTubeScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/youtubei/v1/search') || url.includes('/results')) {
             interceptedCount++;
@@ -177,6 +178,7 @@ export class YouTubeScraper implements PlatformScraper {
       await this.browser.createStealthContext(sessionId, { region: 'US', proxy });
 
       const page = await this.browser.createPage(sessionId, {
+        blockMedia: true, blockImages: true, blockFonts: true,
         interceptResponses: (url, body) => {
           if (url.includes('/youtubei/v1/browse') || url.includes('/channel/') || url.includes('/@')) {
             try {

@@ -129,19 +129,33 @@ export class StealthBrowser {
 
     const page = await entry.context.newPage();
 
-    // Resource blocking for performance
+    // Resource blocking for bandwidth savings
     const blockedTypes = new Set<string>();
     if (options.blockMedia) blockedTypes.add('media');
     if (options.blockFonts) blockedTypes.add('font');
     if (options.blockImages) blockedTypes.add('image');
 
     if (blockedTypes.size > 0) {
+      // Also block large static assets (videos, gifs, large images via URL pattern)
+      const blockedUrlPatterns = [
+        '.mp4', '.webm', '.m3u8', '.ts', '.gif', '.svg',
+        'scontent-', 'fbcdn.net/v/', 'video.', 'cdninstagram.com/v/',
+        '.woff2', '.woff', '.ttf', '.otf',
+      ];
+
       await page.route('**/*', (route) => {
-        if (blockedTypes.has(route.request().resourceType())) {
+        const type = route.request().resourceType();
+        if (blockedTypes.has(type)) {
           route.abort();
-        } else {
-          route.continue();
+          return;
         }
+        // URL-based blocking for CDN media that might slip through as 'other' type
+        const url = route.request().url().toLowerCase();
+        if (blockedUrlPatterns.some(p => url.includes(p))) {
+          route.abort();
+          return;
+        }
+        route.continue();
       });
     }
 
