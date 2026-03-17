@@ -124,12 +124,14 @@
               <div class="space-y-1">
                 <div class="text-[10px] text-kaia-muted uppercase font-semibold">수집</div>
                 <div><span class="text-kaia-muted">포스트:</span> <span class="font-mono text-white" x-text="formatNumber(job.resultCount)"></span></div>
+                <div><span class="text-kaia-muted">고유 유저:</span> <span class="font-mono text-white" x-text="job.uniqueUsers || '-'"></span></div>
                 <div><span class="text-kaia-muted">유효 프로필:</span> <span class="font-mono text-accent" x-text="job.profilesSaved || 0"></span></div>
               </div>
               <div class="space-y-1">
                 <div class="text-[10px] text-kaia-muted uppercase font-semibold">필터링</div>
-                <div><span class="text-kaia-muted">팔로워 미달:</span> <span class="font-mono text-warning" x-text="job.profilesFiltered || 0"></span></div>
+                <div><span class="text-kaia-muted">신규 시도:</span> <span class="font-mono text-info" x-text="job.newUsers || '-'"></span></div>
                 <div><span class="text-kaia-muted">중복 스킵:</span> <span class="font-mono" x-text="job.profilesSkipped || 0"></span></div>
+                <div><span class="text-kaia-muted">팔로워 미달:</span> <span class="font-mono text-warning" x-text="job.profilesFiltered || 0"></span></div>
                 <div><span class="text-kaia-muted">enrichment 실패:</span> <span class="font-mono text-error" x-text="job.profilesFailed || 0"></span></div>
               </div>
               <div class="space-y-1">

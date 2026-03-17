@@ -383,13 +383,15 @@ class JobManager extends EventEmitter {
       }
 
       // Save with enrichment stats so history shows actual useful numbers
-      const skipped = allUsernames ? (allUsernames.length - newUsernames.length) : 0;
+      const skipped = allUsernames.length - newUsernames.length;
       updateJobStatus(jobId, 'completed', {
         resultCount: count,
         profilesSaved: profilesCount,
         profilesFiltered: filteredCount || 0,
         profilesSkipped: skipped,
-        profilesFailed: failedUsernames ? failedUsernames.length : 0,
+        profilesFailed: failedUsernames.length,
+        uniqueUsers: allUsernames.length,
+        newUsers: newUsernames.length,
         error: cookieWarning || undefined,
       });
       this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount, filteredCount: filteredCount || 0, skippedCount: skipped, cookieWarning });

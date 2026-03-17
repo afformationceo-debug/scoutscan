@@ -370,6 +370,8 @@ const alterMigrations = [
   `ALTER TABLE jobs ADD COLUMN profiles_filtered INTEGER DEFAULT 0`,
   `ALTER TABLE jobs ADD COLUMN profiles_skipped INTEGER DEFAULT 0`,
   `ALTER TABLE jobs ADD COLUMN profiles_failed INTEGER DEFAULT 0`,
+  `ALTER TABLE jobs ADD COLUMN unique_users INTEGER DEFAULT 0`,
+  `ALTER TABLE jobs ADD COLUMN new_users INTEGER DEFAULT 0`,
 ];
 
 for (const sql of alterMigrations) {
@@ -385,7 +387,8 @@ const insertJobStmt = db.prepare(`
 
 const updateJobStatusStmt = db.prepare(`
   UPDATE jobs SET status = ?, started_at = COALESCE(started_at, ?), completed_at = ?, error = ?, result_count = ?,
-  profiles_saved = ?, profiles_filtered = ?, profiles_skipped = ?, profiles_failed = ?
+  profiles_saved = ?, profiles_filtered = ?, profiles_skipped = ?, profiles_failed = ?,
+  unique_users = ?, new_users = ?
   WHERE id = ?
 `);
 
@@ -400,7 +403,7 @@ export function createJob(job: Omit<Job, 'resultCount' | 'startedAt' | 'complete
 export function updateJobStatus(
   id: string,
   status: JobStatus,
-  opts: { error?: string; resultCount?: number; profilesSaved?: number; profilesFiltered?: number; profilesSkipped?: number; profilesFailed?: number } = {}
+  opts: { error?: string; resultCount?: number; profilesSaved?: number; profilesFiltered?: number; profilesSkipped?: number; profilesFailed?: number; uniqueUsers?: number; newUsers?: number } = {}
 ): void {
   const now = new Date().toISOString();
   const startedAt = status === 'running' ? now : null;
@@ -413,6 +416,8 @@ export function updateJobStatus(
     opts.profilesFiltered ?? (job as any)?.profilesFiltered ?? 0,
     opts.profilesSkipped ?? (job as any)?.profilesSkipped ?? 0,
     opts.profilesFailed ?? (job as any)?.profilesFailed ?? 0,
+    opts.uniqueUsers ?? (job as any)?.uniqueUsers ?? 0,
+    opts.newUsers ?? (job as any)?.newUsers ?? 0,
     id
   );
 }
@@ -461,6 +466,8 @@ function rowToJob(row: any): any {
     profilesFiltered: row.profiles_filtered || 0,
     profilesSkipped: row.profiles_skipped || 0,
     profilesFailed: row.profiles_failed || 0,
+    uniqueUsers: row.unique_users || 0,
+    newUsers: row.new_users || 0,
   };
 }
 
