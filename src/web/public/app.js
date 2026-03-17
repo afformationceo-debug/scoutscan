@@ -1837,6 +1837,43 @@ function formatDateShort(dateStr) {
   return `${m}/${day} ${h}:${min}`;
 }
 
+// ─── DM History Page Component ───
+
+function dmHistoryPage() {
+  return {
+    items: [],
+    total: 0,
+    limit: 50,
+    offset: 0,
+    loading: false,
+    stats: {},
+    campaigns: [],
+    filterPlatform: '',
+    filterStatus: '',
+    filterCampaign: '',
+    filterSearch: '',
+
+    async load() {
+      this.loading = true;
+      const params = new URLSearchParams();
+      params.set('limit', this.limit);
+      params.set('offset', this.offset);
+      if (this.filterPlatform) params.set('platform', this.filterPlatform);
+      if (this.filterStatus) params.set('status', this.filterStatus);
+      if (this.filterCampaign) params.set('campaign', this.filterCampaign);
+      if (this.filterSearch) params.set('search', this.filterSearch);
+
+      const res = await fetch(`/api/dm-history?${params}`);
+      const data = await res.json();
+      this.items = (data.items || []).map(i => { i._expanded = false; return i; });
+      this.total = data.total || 0;
+      this.stats = data.stats || {};
+      this.campaigns = data.campaigns || [];
+      this.loading = false;
+    },
+  };
+}
+
 // ─── Comment Templates Page Component ───
 
 function commentTemplatesPage() {

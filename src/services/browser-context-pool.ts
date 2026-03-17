@@ -13,6 +13,8 @@ interface PoolEntry {
   inUse: boolean;
   lastUsedAt: number;
   pageCount: number;
+  cookiesLoaded: boolean;
+  cookieCount: number;
 }
 
 interface AcquireOptions {
@@ -86,10 +88,14 @@ export class BrowserContextPool {
 
     // Load per-account cookies
     const cookies = this.cookieManager.loadAccountCookies(platform, username);
+    let cookiesLoaded = false;
     if (cookies.length > 0) {
       const pwCookies = this.cookieManager.toPlaywrightCookies(cookies);
       await this.stealthBrowser.setCookies(sessionId, pwCookies);
+      cookiesLoaded = true;
       logger.debug(`Pool: loaded ${cookies.length} cookies for ${k}`);
+    } else {
+      logger.warn(`Pool: NO cookies found for ${k} — context is unauthenticated`);
     }
 
     const entry: PoolEntry = {
@@ -101,6 +107,8 @@ export class BrowserContextPool {
       inUse: true,
       lastUsedAt: Date.now(),
       pageCount: 0,
+      cookiesLoaded,
+      cookieCount: cookies.length,
     };
 
     this.pool.set(k, entry);
@@ -153,6 +161,12 @@ export class BrowserContextPool {
     entry.inUse = false;
     entry.pageCount = 0;
     entry.lastUsedAt = Date.now();
+    // Update cookie count on release (cookies may have been refreshed)
+    try {
+      const freshCookies = await this.stealthBrowser.getCookies(entry.sessionId);
+      entry.cookieCount = freshCookies.length;
+      entry.cookiesLoaded = freshCookies.length > 0;
+    } catch { /* context may be closed */ }
     logger.debug(`Pool: released ${k}`);
   }
 

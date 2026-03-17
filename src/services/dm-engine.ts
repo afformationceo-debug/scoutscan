@@ -68,10 +68,25 @@ export class DMEngine {
         return;
       }
 
-      // Launch parallel account processing (each account sequential, accounts in parallel)
+      // Launch account processing with staggered start delays
+      // Each account starts 5~10s after the previous to avoid simultaneous hits
+      const dmDefaults = this.getPlatformDefaults(campaign.platform);
       const accountLimit = pLimit(accounts.length);
-      const accountTasks = accounts.map(account =>
-        accountLimit(() => this.processAccountLoop(campaignId, campaign, account))
+      const accountTasks = accounts.map((account, index) =>
+        accountLimit(async () => {
+          if (index > 0) {
+            const switchDelay = (dmDefaults.accountSwitchDelaySec * 1000) + Math.random() * 5000;
+            const switchDelaySec = Math.round(switchDelay / 1000);
+            console.log(`[DMEngine] Account @${account.username} start delayed ${switchDelaySec}s (stagger #${index})`);
+            sseManager.broadcast('campaign:' + campaignId, 'status', {
+              phase: 'account_switch',
+              message: `계정 @${account.username} 전환 대기 ${switchDelaySec}초...`,
+              delaySec: switchDelaySec,
+            });
+            await new Promise(r => setTimeout(r, switchDelay));
+          }
+          return this.processAccountLoop(campaignId, campaign, account);
+        })
       );
 
       await Promise.allSettled(accountTasks);
@@ -92,7 +107,10 @@ export class DMEngine {
         ).all(campaign.platform) as any[];
         if (retryAccounts.length > 0) {
           const retryLimit = pLimit(retryAccounts.length);
-          await Promise.allSettled(retryAccounts.map(a => retryLimit(() => this.processAccountLoop(campaignId, campaign, a))));
+          await Promise.allSettled(retryAccounts.map((a, i) => retryLimit(async () => {
+            if (i > 0) await new Promise(r => setTimeout(r, dmDefaults.accountSwitchDelaySec * 1000 + Math.random() * 5000));
+            return this.processAccountLoop(campaignId, campaign, a);
+          })));
         }
       }
 
@@ -244,13 +262,15 @@ export class DMEngine {
         }
 
         // Step 2: Send DM — all platforms use browser-based DM modules
+        const proxyUsed = this.getProxy(campaign.platform);
         try {
           await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered, campaignId);
 
-          // Success
+          // Success — record with proxy info
           const now = new Date().toISOString();
-          db.prepare(`UPDATE dm_action_queue SET execute_status = 'success', executed_at = ? WHERE id = ?`)
-            .run(now, item.id);
+          const proxyIp = proxyUsed ? `${proxyUsed.host}:${proxyUsed.port}` : 'direct';
+          db.prepare(`UPDATE dm_action_queue SET execute_status = 'success', executed_at = ?, proxy_ip = ? WHERE id = ?`)
+            .run(now, proxyIp, item.id);
           db.prepare(`UPDATE influencer_master SET dm_status = 'sent', dm_last_sent_at = ?, dm_campaign_id = ?, last_updated_at = ? WHERE influencer_key = ?`)
             .run(now, campaignId, now, item.influencer_key);
           db.prepare(`UPDATE dm_accounts SET daily_sent = daily_sent + 1, last_sent_at = ? WHERE id = ?`)
@@ -276,8 +296,9 @@ export class DMEngine {
           });
         } catch (err) {
           const errMsg = (err as Error).message;
-          db.prepare(`UPDATE dm_action_queue SET execute_status = 'failed', error_message = ?, retry_count = retry_count + 1 WHERE id = ?`)
-            .run(errMsg, item.id);
+          const failProxyIp = proxyUsed ? `${proxyUsed.host}:${proxyUsed.port}` : 'direct';
+          db.prepare(`UPDATE dm_action_queue SET execute_status = 'failed', error_message = ?, retry_count = retry_count + 1, proxy_ip = ? WHERE id = ?`)
+            .run(errMsg, failProxyIp, item.id);
           db.prepare(`UPDATE dm_campaigns SET total_failed = total_failed + 1, updated_at = ? WHERE id = ?`)
             .run(new Date().toISOString(), campaignId);
 
@@ -313,13 +334,29 @@ export class DMEngine {
           if (errMsg.includes('blocked') || errMsg.includes('spam') || errMsg.includes('challenge')) {
             db.prepare(`UPDATE dm_accounts SET status = 'blocked' WHERE id = ?`).run(account.id);
             console.warn(`[DMEngine] @${account.username} appears blocked, stopping`);
+            sseManager.broadcast('campaign:' + campaignId, 'account_blocked', {
+              account: account.username,
+              reason: errMsg.slice(0, 200),
+            });
             break;
+          }
+
+          // Send failed detection (message not actually delivered)
+          if (errMsg.includes('send_failed') || errMsg.includes('not delivered')) {
+            console.warn(`[DMEngine] @${account.username} send failed for @${item.recipient_username}: message not delivered`);
+            sseManager.broadcast('campaign:' + campaignId, 'send_failed', {
+              account: account.username,
+              recipient: item.recipient_username,
+              reason: errMsg.slice(0, 200),
+            });
+            // Don't break - try next recipient, might be recipient-specific issue
           }
         }
 
-        // Anti-bot delay
-        const minDelay = (campaign.delay_min_sec || 45) * 1000;
-        const maxDelay = (campaign.delay_max_sec || 120) * 1000;
+        // Anti-bot delay: campaign override → platform global default → hardcoded fallback
+        const dmDefaults = this.getPlatformDefaults(campaign.platform);
+        const minDelay = (campaign.delay_min_sec || dmDefaults.delayMinSec) * 1000;
+        const maxDelay = (campaign.delay_max_sec || dmDefaults.delayMaxSec) * 1000;
         const delay = minDelay + Math.random() * (maxDelay - minDelay);
         const delaySec = Math.round(delay / 1000);
         sseManager.broadcast('campaign:' + campaignId, 'status', {
@@ -331,15 +368,18 @@ export class DMEngine {
         });
         await new Promise(r => setTimeout(r, delay));
 
-        // Cooldown after every 20 sends
-        if (sessionSentCount > 0 && sessionSentCount % 20 === 0) {
-          const cooldown = 15 * 60 * 1000 + Math.random() * 15 * 60 * 1000;
-          const cooldownMin = Math.round(cooldown / 60000);
-          console.log(`[DMEngine] @${account.username} cooldown ${cooldownMin}min after ${sessionSentCount} sends`);
+        // Cooldown: platform global default → hardcoded fallback
+        const cooldownAfter = dmDefaults.cooldownAfter;
+        if (sessionSentCount > 0 && sessionSentCount % cooldownAfter === 0) {
+          const cooldownMin = dmDefaults.cooldownMinSec * 1000;
+          const cooldownMax = dmDefaults.cooldownMaxSec * 1000;
+          const cooldown = cooldownMin + Math.random() * (cooldownMax - cooldownMin);
+          const cooldownMinutes = Math.round(cooldown / 60000);
+          console.log(`[DMEngine] @${account.username} cooldown ${cooldownMinutes}min after ${sessionSentCount} sends`);
           sseManager.broadcast('campaign:' + campaignId, 'status', {
             phase: 'cooldown',
-            message: `${sessionSentCount}건 발송 후 ${cooldownMin}분 쿨다운...`,
-            cooldownMin,
+            message: `${sessionSentCount}건 발송 후 ${cooldownMinutes}분 쿨다운...`,
+            cooldownMin: cooldownMinutes,
           });
           await new Promise(r => setTimeout(r, cooldown));
         }
@@ -374,6 +414,7 @@ export class DMEngine {
 
     // Load proxy for DM sending
     const proxy = this.getProxy(platform);
+    console.log(`[DMEngine] sendDM @${account.username} → @${recipientUsername} | proxy: ${proxy ? proxy.host + ':' + proxy.port : 'NONE (direct IP)'}`);
 
     switch (platform) {
       case 'instagram':
@@ -399,10 +440,16 @@ export class DMEngine {
     ];
     const params: any[] = [campaignId];
 
-    // Per-account targeting filters
+    // Per-account targeting filters (EN → expand to English-speaking countries)
     if (account.target_country) {
-      conditions.push('UPPER(COALESCE(im.ai_country, im.detected_country)) = UPPER(?)');
-      params.push(account.target_country);
+      const countryAliases: Record<string, string[]> = {
+        'EN': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE', 'SG', 'PH', 'IN'],
+        'ZH': ['TW', 'HK', 'CN', 'SG'],
+      };
+      const accCountryUpper = account.target_country.toUpperCase();
+      const accCountries = countryAliases[accCountryUpper] || [accCountryUpper];
+      conditions.push(`UPPER(COALESCE(im.ai_country, im.detected_country)) IN (${accCountries.map(() => '?').join(',')})`);
+      params.push(...accCountries);
     }
     if (account.target_tiers) {
       try {
@@ -458,12 +505,17 @@ export class DMEngine {
     if (campaign.platform) { conditions.push('platform = ?'); params.push(campaign.platform); }
 
     // Country matching: AI classification first, then geo-detection
-    // This is the sole country filter — keyword region is NOT used for country matching.
-    // e.g., influencer found via US keyword #kbeauty but AI-classified as SG → matches SG campaign
+    // 'EN' is a language alias → expand to English-speaking country codes
     if (campaign.target_country) {
+      const countryAliases: Record<string, string[]> = {
+        'EN': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE', 'SG', 'PH', 'IN'],
+        'ZH': ['TW', 'HK', 'CN', 'SG'],
+      };
+      const targetUpper = campaign.target_country.toUpperCase();
+      const countries = countryAliases[targetUpper] || [targetUpper];
       conditions.push('COALESCE(ai_country, detected_country) IS NOT NULL');
-      conditions.push('UPPER(COALESCE(ai_country, detected_country)) = UPPER(?)');
-      params.push(campaign.target_country);
+      conditions.push(`UPPER(COALESCE(ai_country, detected_country)) IN (${countries.map(() => '?').join(',')})`);
+      params.push(...countries);
     }
     if (campaign.target_tiers) {
       const tiers = JSON.parse(campaign.target_tiers);
@@ -662,6 +714,34 @@ export class DMEngine {
       `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND reply_detected = 1`
     ).get(campaignId) as any;
     return row?.cnt || 0;
+  }
+
+  /** Get platform-level DM defaults (delay, cooldown, etc.) */
+  private getPlatformDefaults(platform: string): {
+    delayMinSec: number; delayMaxSec: number;
+    cooldownAfter: number; cooldownMinSec: number; cooldownMaxSec: number;
+    accountSwitchDelaySec: number; dailyLimitDefault: number;
+  } {
+    try {
+      const row = db.prepare('SELECT * FROM platform_dm_defaults WHERE platform = ?').get(platform) as any;
+      if (row) {
+        return {
+          delayMinSec: row.delay_min_sec,
+          delayMaxSec: row.delay_max_sec,
+          cooldownAfter: row.cooldown_after,
+          cooldownMinSec: row.cooldown_min_sec,
+          cooldownMaxSec: row.cooldown_max_sec,
+          accountSwitchDelaySec: row.account_switch_delay_sec,
+          dailyLimitDefault: row.daily_limit_default,
+        };
+      }
+    } catch { /* table may not exist */ }
+    // Hardcoded fallback
+    return {
+      delayMinSec: 60, delayMaxSec: 180,
+      cooldownAfter: 20, cooldownMinSec: 900, cooldownMaxSec: 1800,
+      accountSwitchDelaySec: 5, dailyLimitDefault: 40,
+    };
   }
 
   private formatNumber(num: number): string {

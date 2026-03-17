@@ -154,7 +154,7 @@ class JobManager extends EventEmitter {
 
     const proxyUrls = this.getProxyUrls();
     logger.info(`[JobManager] Starting hashtag job: ${platform}/#${hashtag} (max: ${maxResults}, proxies: ${proxyUrls.length})`);
-    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls, sharedBrowser: registry.scrapingBrowser });
     let count = 0;
     let latestPostTimestamp = '';
     const collectedPosts: Post[] = [];
@@ -394,7 +394,7 @@ class JobManager extends EventEmitter {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
-    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls(), sharedBrowser: registry.scrapingBrowser });
 
     try {
       const profile = await engine.getProfile(platform, username);
@@ -416,7 +416,7 @@ class JobManager extends EventEmitter {
     updateJobStatus(jobId, 'running');
     this.sendSSE(jobId, 'status', { status: 'running' });
 
-    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls() });
+    const engine = new ScrapingEngine({ platforms: [platform], proxyUrls: this.getProxyUrls(), sharedBrowser: registry.scrapingBrowser });
     let profilesCount = 0;
 
     try {

@@ -13,6 +13,7 @@ export type ExtendedPlatform = Platform;
 interface EngineConfig {
   proxyUrls?: string[];
   platforms?: ExtendedPlatform[];
+  sharedBrowser?: import('./anti-detection/stealth-browser.js').StealthBrowser;
 }
 
 interface MultiPlatformResult {
@@ -37,10 +38,12 @@ interface MultiPlatformResult {
 export class ScrapingEngine extends EventEmitter {
   private scrapers = new Map<string, PlatformScraper>();
   private proxyUrls: string[];
+  private sharedBrowser?: import('./anti-detection/stealth-browser.js').StealthBrowser;
 
   constructor(config: EngineConfig = {}) {
     super();
     this.proxyUrls = config.proxyUrls || [];
+    this.sharedBrowser = config.sharedBrowser;
 
     const platforms = config.platforms || ['instagram'];
     for (const platform of platforms) {
@@ -52,7 +55,7 @@ export class ScrapingEngine extends EventEmitter {
   private registerPlatform(platform: ExtendedPlatform): void {
     switch (platform) {
       case 'instagram':
-        this.scrapers.set('instagram', new InstagramScraper(this.proxyUrls));
+        this.scrapers.set('instagram', new InstagramScraper(this.proxyUrls, this.sharedBrowser));
         break;
       case 'twitter':
         this.scrapers.set('twitter', new TwitterScraper(this.proxyUrls));

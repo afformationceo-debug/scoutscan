@@ -55,6 +55,63 @@ api.post('/jobs/profile', async (c) => {
   return c.json({ jobId, message: 'Job started' }, 201);
 });
 
+// ─── DM History (for history dashboard) ───
+
+api.get('/dm-history', (c) => {
+  const limit = parseInt(c.req.query('limit') || '50');
+  const offset = parseInt(c.req.query('offset') || '0');
+  const status = c.req.query('status') || '';
+  const platform = c.req.query('platform') || '';
+  const campaign = c.req.query('campaign') || '';
+  const search = c.req.query('search') || '';
+
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (status) { conditions.push('q.execute_status = ?'); params.push(status); }
+  if (platform) { conditions.push('q.platform = ?'); params.push(platform); }
+  if (campaign) { conditions.push('q.campaign_id = ?'); params.push(campaign); }
+  if (search) {
+    conditions.push('(m.username LIKE ? OR m.full_name LIKE ? OR c.name LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = db.prepare(`
+    SELECT q.id, q.influencer_key, q.campaign_id, q.platform, q.execute_status,
+           q.account_username, q.error_message, q.proxy_ip, q.retry_count,
+           q.executed_at, q.created_at, q.engagement_status,
+           q.liked_post_url, q.comment_text,
+           m.username as recipient, m.full_name as recipient_name,
+           m.followers_count, m.profile_pic_url, m.detected_country, m.ai_country,
+           c.name as campaign_name, c.brand as campaign_brand
+    FROM dm_action_queue q
+    LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
+    LEFT JOIN dm_campaigns c ON q.campaign_id = c.id
+    ${where}
+    ORDER BY q.id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset) as any[];
+
+  const totalRow = db.prepare(`
+    SELECT COUNT(*) as cnt FROM dm_action_queue q
+    LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
+    LEFT JOIN dm_campaigns c ON q.campaign_id = c.id
+    ${where}
+  `).get(...params) as any;
+
+  const statsRows = db.prepare(`
+    SELECT execute_status, COUNT(*) as cnt FROM dm_action_queue GROUP BY execute_status
+  `).all() as any[];
+  const stats = Object.fromEntries(statsRows.map((s: any) => [s.execute_status, s.cnt]));
+
+  // Campaign list for filter dropdown
+  const campaigns = db.prepare('SELECT id, name, platform FROM dm_campaigns ORDER BY created_at DESC').all();
+
+  return c.json({ items: rows, total: totalRow.cnt, stats, campaigns, limit, offset });
+});
+
 api.get('/jobs', (c) => {
   const limit = parseInt(c.req.query('limit') || '50');
   const offset = parseInt(c.req.query('offset') || '0');

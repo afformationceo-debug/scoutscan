@@ -42,25 +42,31 @@ try {
   // Table may not exist yet on first boot
 }
 const proxyRouter = new ProxyRouter(proxyUrls);
-const stealthBrowser = new StealthBrowser(proxyRouter);
 const cookieManager = new CookieManager();
 
-// 2. Create BrowserContextPool (40 concurrent contexts)
-const pool = new BrowserContextPool(stealthBrowser, cookieManager, 40);
+// 2. Create SEPARATE browser processes for DM and Scraping (crash isolation)
+//    DM Chromium crash → scraping unaffected
+//    Scraping Chromium crash → DM unaffected
+const dmBrowser = new StealthBrowser(proxyRouter);
+const scrapingBrowser = new StealthBrowser(new ProxyRouter(proxyUrls));
 
-// 3. Create engines with pool injection
+// 3. Create BrowserContextPool for DM (40 concurrent contexts)
+const pool = new BrowserContextPool(dmBrowser, cookieManager, 40);
+
+// 4. Create engines with pool injection
 const dmEngine = new DMEngine(pool);
 const engagementEngine = new EngagementEngine(pool);
 dmEngine.setEngagementEngine(engagementEngine);
 
-// 4. Create and start CookieHealthService
+// 5. Create and start CookieHealthService
 const cookieHealthService = new CookieHealthService(cookieManager);
 
-// 5. Register all services in the shared registry
+// 6. Register all services in the shared registry
 registry.dmEngine = dmEngine;
 registry.engagementEngine = engagementEngine;
 registry.pool = pool;
 registry.cookieHealthService = cookieHealthService;
+registry.scrapingBrowser = scrapingBrowser;
 
 // Seed initial user (creates user + migrates existing data)
 seedInitialUser();
@@ -182,7 +188,8 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
     /history   - Job History
     /settings  - Settings
 
-  Browser Pool: max 40 concurrent contexts
+  Browser Isolation: DM Chromium + Scraping Chromium (separate processes)
+  DM Pool: max 40 concurrent contexts
   Cookie Health: checking every 5 minutes
   `);
 
@@ -213,11 +220,12 @@ async function shutdown(signal: string) {
   // Stop cookie health checks
   cookieHealthService.stop();
 
-  // Drain all browser contexts (saves cookies)
+  // Drain DM browser contexts (saves cookies)
   await pool.drainAll();
 
-  // Close stealth browser
-  await stealthBrowser.closeAll();
+  // Close both browser processes
+  await dmBrowser.closeAll();
+  await scrapingBrowser.closeAll();
 
   console.log('Shutdown complete.');
   process.exit(0);

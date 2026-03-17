@@ -42,12 +42,19 @@ export class InstagramScraper implements PlatformScraper {
   private apiSuccessCount = 0;
   private apiAttemptCount = 0;
   private useApiFirst = true;
+  private ownsOwnBrowser: boolean;
 
   private cookieManager: CookieManager;
 
-  constructor(proxyUrls?: string[]) {
+  constructor(proxyUrls?: string[], sharedBrowser?: StealthBrowser) {
     this.proxyRouter = new ProxyRouter(proxyUrls);
-    this.browser = new StealthBrowser(this.proxyRouter);
+    if (sharedBrowser) {
+      this.browser = sharedBrowser;
+      this.ownsOwnBrowser = false;
+    } else {
+      this.browser = new StealthBrowser(this.proxyRouter);
+      this.ownsOwnBrowser = true;
+    }
     this.rateLimiter = new RateLimiter('instagram');
     this.sessionManager = new SessionManager();
     this.cookieManager = new CookieManager();
@@ -944,7 +951,12 @@ export class InstagramScraper implements PlatformScraper {
   }
 
   async close(): Promise<void> {
-    await this.browser.closeAll();
+    // Only close the browser process if we created it ourselves.
+    // Shared browsers (injected via constructor) must NOT be closed here,
+    // because other scrapers/jobs may still be using them.
+    if (this.ownsOwnBrowser) {
+      await this.browser.closeAll();
+    }
     this.sessionManager.cleanup();
     logger.info('[Instagram] Scraper closed');
   }

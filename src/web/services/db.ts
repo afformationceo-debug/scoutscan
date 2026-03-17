@@ -271,7 +271,32 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  -- Table 11: platform_dm_defaults (글로벌 발송주기 기본값)
+  CREATE TABLE IF NOT EXISTS platform_dm_defaults (
+    platform TEXT PRIMARY KEY,
+    delay_min_sec INTEGER NOT NULL,
+    delay_max_sec INTEGER NOT NULL,
+    cooldown_after INTEGER NOT NULL DEFAULT 20,
+    cooldown_min_sec INTEGER NOT NULL DEFAULT 900,
+    cooldown_max_sec INTEGER NOT NULL DEFAULT 1800,
+    account_switch_delay_sec INTEGER NOT NULL DEFAULT 5,
+    daily_limit_default INTEGER NOT NULL DEFAULT 40,
+    updated_at TEXT NOT NULL
+  );
 `);
+
+// Seed platform_dm_defaults with recommended values
+try {
+  const existing = db.prepare('SELECT COUNT(*) as cnt FROM platform_dm_defaults').get() as any;
+  if (existing.cnt === 0) {
+    const now = new Date().toISOString();
+    const seedStmt = db.prepare('INSERT INTO platform_dm_defaults (platform, delay_min_sec, delay_max_sec, cooldown_after, cooldown_min_sec, cooldown_max_sec, account_switch_delay_sec, daily_limit_default, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    seedStmt.run('instagram', 60, 180, 20, 900, 1800, 5, 40, now);
+    seedStmt.run('twitter',   30,  90, 20, 600, 900,  5, 40, now);
+    seedStmt.run('tiktok',    45, 120, 20, 900, 1800, 5, 30, now);
+  }
+} catch { /* table may already have data */ }
 
 // ─── ALTER TABLE migrations (idempotent) ───
 
@@ -324,6 +349,8 @@ const alterMigrations = [
   `ALTER TABLE dm_action_queue ADD COLUMN reply_detected_at TEXT`,
   // dm_campaigns: keyword target auto-mapping (platform:region group key)
   `ALTER TABLE dm_campaigns ADD COLUMN linked_keyword_group TEXT`,
+  // dm_action_queue: proxy IP tracking
+  `ALTER TABLE dm_action_queue ADD COLUMN proxy_ip TEXT`,
 ];
 
 for (const sql of alterMigrations) {
