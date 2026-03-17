@@ -49,12 +49,25 @@ function app() {
 function globalNotifications() {
   return {
     notifications: [],
+    logHistory: [],    // Persistent log history (not auto-dismissed)
+    showLogPanel: false,
+    unreadCount: 0,
     eventSource: null,
     maxVisible: 5,
     _idCounter: 0,
 
     init() {
       this.connect();
+    },
+
+    toggleLogPanel() {
+      this.showLogPanel = !this.showLogPanel;
+      if (this.showLogPanel) this.unreadCount = 0;
+    },
+
+    clearHistory() {
+      this.logHistory = [];
+      this.unreadCount = 0;
     },
 
     connect() {
@@ -129,6 +142,34 @@ function globalNotifications() {
         });
       });
 
+      // DM sent/failed events
+      this.eventSource.addEventListener('dm_sent', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'dm_sent',
+          message: `DM 발송 성공: @${data.recipient} (${data.campaign || data.platform})`,
+          detail: `계정: @${data.account}`,
+        });
+      });
+
+      this.eventSource.addEventListener('dm_failed', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'dm_failed',
+          message: `DM 발송 실패: @${data.recipient} (${data.campaign || data.platform})`,
+          detail: `계정: @${data.account}`,
+        });
+      });
+
+      this.eventSource.addEventListener('dm_processing', (e) => {
+        const data = JSON.parse(e.data);
+        this.addNotification({
+          type: 'dm_processing',
+          message: `DM 처리중: @${data.recipient} (${data.campaign})`,
+          detail: `계정: @${data.account}`,
+        });
+      });
+
       this.eventSource.addEventListener('error', () => {
         // SSE will auto-reconnect
       });
@@ -136,14 +177,22 @@ function globalNotifications() {
 
     addNotification({ type, message, detail }) {
       const id = ++this._idCounter;
+      const now = new Date();
+      const kst = now.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
       const notification = {
         id,
         type,
         message,
         detail: detail || '',
-        timestamp: new Date().toISOString(),
+        timestamp: now.toISOString(),
+        timeKST: kst,
         visible: true,
       };
+
+      // Save to persistent log history (max 200)
+      this.logHistory.unshift({ ...notification });
+      if (this.logHistory.length > 200) this.logHistory.pop();
+      if (!this.showLogPanel) this.unreadCount++;
 
       // Add to front (newest first)
       this.notifications.unshift(notification);

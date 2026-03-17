@@ -133,16 +133,74 @@
       </div>
     </nav>
 
-    <!-- Global Notification Bar -->
-    <div x-data="globalNotifications()" class="fixed top-14 right-6 z-40 flex flex-col gap-2 w-[420px] pointer-events-none" style="max-height: calc(100vh - 80px);">
+    <!-- Notification Bell + Log Panel -->
+    <div x-data="globalNotifications()" x-init="init()">
+
+    <!-- Bell Icon (fixed top-right) -->
+    <div class="fixed top-3 right-48 z-50">
+      <button @click="toggleLogPanel()" class="relative p-1.5 rounded-lg hover:bg-dark-hover transition-colors">
+        <svg class="w-5 h-5 text-kaia-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        <span x-show="unreadCount > 0" class="absolute -top-1 -right-1 bg-error text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center" x-text="unreadCount > 9 ? '9+' : unreadCount"></span>
+      </button>
+    </div>
+
+    <!-- Log Panel (slide-in from right) -->
+    <div x-show="showLogPanel" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
+         @click.outside="showLogPanel = false"
+         class="fixed top-12 right-0 z-50 w-[420px] h-[calc(100vh-48px)] bg-dark-card border-l border-dark-border shadow-2xl flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-dark-border">
+        <h3 class="text-sm font-heading font-bold text-white">알림 센터</h3>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-kaia-muted" x-text="logHistory.length + '건'"></span>
+          <button @click="clearHistory()" class="text-[10px] text-error hover:text-error/80">전체 삭제</button>
+          <button @click="showLogPanel = false" class="text-kaia-muted hover:text-white p-0.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <!-- Log List -->
+      <div class="flex-1 overflow-y-auto">
+        <div x-show="logHistory.length === 0" class="text-center py-12 text-kaia-muted text-sm">알림이 없습니다</div>
+        <template x-for="log in logHistory" :key="log.id">
+          <div class="px-4 py-2.5 border-b border-dark-border/30 hover:bg-dark-hover/50 transition-colors">
+            <div class="flex items-start gap-2">
+              <!-- Type indicator -->
+              <span class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" :class="{
+                'bg-info': log.type === 'scraping_started' || log.type === 'dm_processing',
+                'bg-success': log.type === 'scraping_completed' || log.type === 'dm_sent',
+                'bg-accent': log.type === 'auto_assign',
+                'bg-warning': log.type === 'cookie_warning',
+                'bg-error': log.type === 'cookie_expired' || log.type === 'dm_failed',
+              }"></span>
+              <div class="min-w-0 flex-1">
+                <p class="text-[12px] leading-tight" :class="{
+                  'text-info': log.type === 'scraping_started' || log.type === 'dm_processing',
+                  'text-success': log.type === 'scraping_completed' || log.type === 'dm_sent',
+                  'text-accent': log.type === 'auto_assign',
+                  'text-warning': log.type === 'cookie_warning',
+                  'text-error': log.type === 'cookie_expired' || log.type === 'dm_failed',
+                }" x-text="log.message"></p>
+                <p x-show="log.detail" class="text-[10px] text-kaia-muted mt-0.5" x-text="log.detail"></p>
+              </div>
+              <span class="text-[9px] text-kaia-muted whitespace-nowrap flex-shrink-0" x-text="log.timeKST"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Toast Notifications (existing) -->
+    <div class="fixed top-14 right-6 z-40 flex flex-col gap-2 w-[420px] pointer-events-none" style="max-height: calc(100vh - 80px);">
       <template x-for="n in notifications.filter(n => n.visible)" :key="n.id">
         <div class="pointer-events-auto rounded-lg border px-4 py-3 shadow-lg backdrop-blur-md transition-all duration-300"
              :class="{
-               'bg-[#0D1B2A]/95 border-info/40': n.type === 'scraping_started',
-               'bg-[#0A1A0F]/95 border-success/40': n.type === 'scraping_completed',
+               'bg-[#0D1B2A]/95 border-info/40': n.type === 'scraping_started' || n.type === 'dm_processing',
+               'bg-[#0A1A0F]/95 border-success/40': n.type === 'scraping_completed' || n.type === 'dm_sent',
                'bg-[#141400]/95 border-accent/40': n.type === 'auto_assign',
                'bg-[#1A1400]/95 border-warning/40': n.type === 'cookie_warning',
-               'bg-[#1A0A0A]/95 border-error/40': n.type === 'cookie_expired',
+               'bg-[#1A0A0A]/95 border-error/40': n.type === 'cookie_expired' || n.type === 'dm_failed',
              }"
              x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="opacity-0 translate-x-8"
@@ -190,6 +248,8 @@
         </div>
       </template>
     </div>
+
+    </div><!-- /globalNotifications -->
 
     <!-- Main Content -->
     <main class="mx-auto max-w-container py-6 px-6">
