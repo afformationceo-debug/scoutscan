@@ -2437,6 +2437,79 @@ function cookieHealthBanner() {
 
 function liveDashboard() {
   return {
+    // Cookie replace modal
+    cookieReplaceTarget: null,
+    cookieReplaceJson: '',
+    cookieReplaceError: '',
+    cookieReplaceSuccess: '',
+    cookieReplaceLoading: false,
+
+    openCookieReplace(item) {
+      this.cookieReplaceTarget = item;
+      this.cookieReplaceJson = '';
+      this.cookieReplaceError = '';
+      this.cookieReplaceSuccess = '';
+      this.cookieReplaceLoading = false;
+    },
+
+    async submitCookieReplace() {
+      if (!this.cookieReplaceJson.trim()) {
+        this.cookieReplaceError = '쿠키 JSON을 입력해주세요.';
+        return;
+      }
+      this.cookieReplaceError = '';
+      this.cookieReplaceSuccess = '';
+      this.cookieReplaceLoading = true;
+
+      try {
+        let parsed;
+        try { parsed = JSON.parse(this.cookieReplaceJson); } catch {
+          this.cookieReplaceError = 'JSON 형식이 올바르지 않습니다.';
+          this.cookieReplaceLoading = false;
+          return;
+        }
+
+        const target = this.cookieReplaceTarget;
+        let res;
+
+        if (target.isScraping) {
+          // Scraping cookie (platform-level)
+          res = await fetch(`/api/platforms/${target.platform}/cookies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookies: parsed }),
+          });
+        } else {
+          // DM account cookie — find account ID
+          const acctRes = await fetch(`/api/dm-accounts`);
+          const acctData = await acctRes.json();
+          const account = (acctData.accounts || []).find(a => a.username === target.username && a.platform === target.platform);
+          if (!account) {
+            this.cookieReplaceError = `계정 @${target.username}을 찾을 수 없습니다.`;
+            this.cookieReplaceLoading = false;
+            return;
+          }
+          res = await fetch(`/api/dm-accounts/${account.id}/upload-cookies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookies: parsed }),
+          });
+        }
+
+        const data = await res.json();
+        if (res.ok) {
+          this.cookieReplaceSuccess = `✅ 쿠키 교체 완료 (${data.cookieCount || data.count || '?'}개)`;
+          // Refresh dashboard data after 1s
+          setTimeout(() => { this.loadData(); this.cookieReplaceTarget = null; }, 1500);
+        } else {
+          this.cookieReplaceError = data.error || '쿠키 저장 실패';
+        }
+      } catch (err) {
+        this.cookieReplaceError = '오류: ' + err.message;
+      }
+      this.cookieReplaceLoading = false;
+    },
+
     stats: {
       totalInfluencers: 0,
       aiClassified: 0,
