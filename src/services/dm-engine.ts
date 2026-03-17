@@ -196,6 +196,14 @@ export class DMEngine {
       let sessionSentCount = 0;
 
       while (this.activeCampaigns.get(campaignId)) {
+        // CRITICAL: Check DB status every iteration (pause/stop may have been triggered)
+        const dbStatus = (db.prepare('SELECT status FROM dm_campaigns WHERE id = ?').get(campaignId) as any)?.status;
+        if (dbStatus !== 'active') {
+          console.log(`[DMEngine] @${account.username}: campaign status changed to "${dbStatus}" — stopping`);
+          this.activeCampaigns.set(campaignId, false);
+          break;
+        }
+
         // Get next matching target for this account
         const item = this.getMatchingTarget(campaignId, campaign, account);
         if (!item) {
@@ -414,7 +422,11 @@ export class DMEngine {
           sentCount,
           failedCount,
         });
-        await new Promise(r => setTimeout(r, delay));
+        // Interruptible sleep: check pause every 2 seconds during delay
+        for (let waited = 0; waited < delay; waited += 2000) {
+          if (!this.activeCampaigns.get(campaignId)) break;
+          await new Promise(r => setTimeout(r, Math.min(2000, delay - waited)));
+        }
 
         // Cooldown: platform global default → hardcoded fallback
         const cooldownAfter = dmDefaults.cooldownAfter;
@@ -429,7 +441,11 @@ export class DMEngine {
             message: `${sessionSentCount}건 발송 후 ${cooldownMinutes}분 쿨다운...`,
             cooldownMin: cooldownMinutes,
           });
-          await new Promise(r => setTimeout(r, cooldown));
+          // Interruptible cooldown: check pause every 5 seconds
+          for (let waited = 0; waited < cooldown; waited += 5000) {
+            if (!this.activeCampaigns.get(campaignId)) break;
+            await new Promise(r => setTimeout(r, Math.min(5000, cooldown - waited)));
+          }
         }
       }
     } finally {

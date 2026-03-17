@@ -168,10 +168,10 @@ app.route('/', pages);
 const recovered = recoverStuckJobs();
 if (recovered > 0) console.log(`Recovered ${recovered} stuck job(s) from previous session.`);
 
-// Recover stuck DM campaigns: pause first, then auto-resume after server ready
-const recoveredCampaignIds = dmEngine.getActiveCampaignIds();
+// Recover stuck DM campaigns: pause all active campaigns (do NOT auto-resume)
+// Campaigns must be manually restarted via UI to prevent unintended sends after deploy
 const recoveredCampaigns = dmEngine.recoverStuckCampaigns();
-if (recoveredCampaigns > 0) console.log(`Recovered ${recoveredCampaigns} stuck DM campaign(s) from previous session.`);
+if (recoveredCampaigns > 0) console.log(`Paused ${recoveredCampaigns} stuck DM campaign(s) from previous session. Manual restart required.`);
 
 // Start server
 const port = parseInt(process.env.PORT || '3000');
@@ -199,17 +199,7 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
   // Start cookie health monitoring
   cookieHealthService.start(300_000); // 5 minutes
 
-  // Auto-resume recovered campaigns after 5s delay
-  if (recoveredCampaignIds.length > 0) {
-    setTimeout(() => {
-      for (const cId of recoveredCampaignIds) {
-        console.log(`[AutoResume] Resuming campaign ${cId}`);
-        dmEngine.processCampaign(cId).catch(err => {
-          console.error(`[AutoResume] Campaign ${cId} error:`, err);
-        });
-      }
-    }, 5000);
-  }
+  // No auto-resume: campaigns must be started manually via UI
 });
 
 // ─── Graceful Shutdown ───
