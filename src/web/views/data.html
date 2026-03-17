@@ -504,8 +504,26 @@
                   <span class="w-1.5 h-1.5 rounded-full" :class="getPlatformCookieStatus(t.platform) ? 'bg-success' : 'bg-error'" :title="getPlatformCookieStatus(t.platform) ? '쿠키 정상' : '쿠키 없음 — 설정에서 등록'"></span>
                 </div>
               </td>
-              <td class="px-3 py-2 text-white font-medium" x-text="t.region"></td>
-              <td class="px-3 py-2 text-white" x-text="t.keyword"></td>
+              <!-- Editable: 국가 -->
+              <td class="px-3 py-2 text-white font-medium cursor-pointer group" @dblclick="startEdit(t, 'region')">
+                <template x-if="!isEditing(t, 'region')">
+                  <span class="group-hover:text-accent transition-colors" x-text="t.region" :title="'더블클릭하여 수정'"></span>
+                </template>
+                <template x-if="isEditing(t, 'region')">
+                  <input type="text" x-model="_editing.value" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="w-14 rounded border px-1 py-0.5 text-xs" x-ref="editRegion" x-init="$nextTick(() => $refs.editRegion?.focus())">
+                </template>
+              </td>
+              <!-- Editable: 키워드 -->
+              <td class="px-3 py-2 text-white cursor-pointer group" @dblclick="startEdit(t, 'keyword')">
+                <template x-if="!isEditing(t, 'keyword')">
+                  <span class="group-hover:text-accent transition-colors" x-text="t.keyword" :title="'더블클릭하여 수정'"></span>
+                </template>
+                <template x-if="isEditing(t, 'keyword')">
+                  <input type="text" x-model="_editing.value" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="w-32 rounded border px-1 py-0.5 text-xs" x-ref="editKeyword" x-init="$nextTick(() => $refs.editKeyword?.focus())">
+                </template>
+              </td>
               <!-- Editable: 주기 -->
               <td class="px-3 py-2 text-center num cursor-pointer group" @dblclick="startEdit(t, 'scrapingCycleHours')">
                 <template x-if="!isEditing(t, 'scrapingCycleHours')">
@@ -536,10 +554,19 @@
                          class="rounded border px-1 py-0.5 text-xs" x-ref="editInput3" x-init="$nextTick(() => $refs.editInput3?.focus())">
                 </template>
               </td>
-              <td class="px-3 py-2 text-right num text-white">
-                <span x-text="formatNumber(t._liveExtracted || t.totalExtracted)"></span>
-                <span x-show="getJobProgress(t.pairId)?.counts?.posts > 0 && getJobProgress(t.pairId)?.status === 'running'"
-                      class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + (getJobProgress(t.pairId)?.counts?.posts || 0)"></span>
+              <!-- Editable: 추출수 -->
+              <td class="px-3 py-2 text-right num text-white cursor-pointer group" @dblclick="startEdit(t, 'totalExtracted')">
+                <template x-if="!isEditing(t, 'totalExtracted')">
+                  <span>
+                    <span class="group-hover:text-accent transition-colors" x-text="formatNumber(t._liveExtracted || t.totalExtracted)" :title="'더블클릭하여 수정'"></span>
+                    <span x-show="getJobProgress(t.pairId)?.counts?.posts > 0 && getJobProgress(t.pairId)?.status === 'running'"
+                          class="text-accent text-[10px] ml-0.5 animate-pulse" x-text="'+' + (getJobProgress(t.pairId)?.counts?.posts || 0)"></span>
+                  </span>
+                </template>
+                <template x-if="isEditing(t, 'totalExtracted')">
+                  <input type="number" x-model="_editing.value" min="0" @keydown.enter="saveEdit()" @keydown.escape="cancelEdit()" @blur="saveEdit()"
+                         class="w-16 text-right rounded border px-1 py-0.5 text-xs" x-ref="editExtracted" x-init="$nextTick(() => $refs.editExtracted?.focus())">
+                </template>
               </td>
               <!-- INLINE PROGRESS / LAST RESULT (persistent) -->
               <td class="px-3 py-2" colspan="1">

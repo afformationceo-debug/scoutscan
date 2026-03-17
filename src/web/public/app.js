@@ -826,13 +826,21 @@ function keywordsPage() {
     _editing: null,  // { id, field, value }
 
     startEdit(target, field) {
+      const fieldValues = {
+        keyword: target.keyword,
+        region: target.region,
+        platform: target.platform,
+        scrapingCycleHours: target.scrapingCycleHours,
+        maxResultsPerRun: target.maxResultsPerRun,
+        scrapeUntil: target.scrapeUntil ? target.scrapeUntil.split('T')[0] : '',
+        groupKey: target.groupKey || '',
+        totalExtracted: target.totalExtracted || 0,
+      };
       this._editing = {
         id: target.id,
         pairId: target.pairId,
         field,
-        value: field === 'scrapeUntil' ? (target.scrapeUntil ? target.scrapeUntil.split('T')[0] : '') :
-               field === 'scrapingCycleHours' ? target.scrapingCycleHours :
-               field === 'maxResultsPerRun' ? target.maxResultsPerRun : '',
+        value: fieldValues[field] ?? '',
       };
     },
 
@@ -844,9 +852,19 @@ function keywordsPage() {
       if (!this._editing) return;
       const { id, field, value } = this._editing;
       const payload = {};
-      if (field === 'scrapingCycleHours') payload.scrapingCycleHours = parseInt(value) || 72;
-      else if (field === 'maxResultsPerRun') payload.maxResultsPerRun = parseInt(value) || 200;
-      else if (field === 'scrapeUntil') payload.scrapeUntil = value ? new Date(value + 'T23:59:59Z').toISOString() : '';
+
+      // Integer fields
+      if (['scrapingCycleHours', 'maxResultsPerRun', 'totalExtracted'].includes(field)) {
+        payload[field] = parseInt(value) || 0;
+      }
+      // Date field
+      else if (field === 'scrapeUntil') {
+        payload.scrapeUntil = value ? new Date(value + 'T23:59:59Z').toISOString() : '';
+      }
+      // String fields
+      else {
+        payload[field] = value;
+      }
 
       await fetch(`/api/keywords/${id}`, {
         method: 'PATCH',

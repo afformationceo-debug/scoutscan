@@ -292,6 +292,11 @@ export function updateKeywordTarget(id: number, updates: Partial<KeywordTarget>)
   const fields: string[] = [];
   const params: any[] = [];
 
+  if (updates.keyword !== undefined) { fields.push('keyword = ?'); params.push(updates.keyword); }
+  if ((updates as any).region !== undefined) { fields.push('region = ?'); params.push((updates as any).region); }
+  if ((updates as any).platform !== undefined) { fields.push('platform = ?'); params.push((updates as any).platform); }
+  if ((updates as any).pairId !== undefined) { fields.push('pair_id = ?'); params.push((updates as any).pairId); }
+  if (updates.groupKey !== undefined) { fields.push('group_key = ?'); params.push(updates.groupKey || null); }
   if (updates.scrapingCycleHours !== undefined) { fields.push('scraping_cycle_hours = ?'); params.push(updates.scrapingCycleHours); }
   if (updates.maxResultsPerRun !== undefined) { fields.push('max_results_per_run = ?'); params.push(updates.maxResultsPerRun); }
   if (updates.isActive !== undefined) { fields.push('is_active = ?'); params.push(updates.isActive ? 1 : 0); }
