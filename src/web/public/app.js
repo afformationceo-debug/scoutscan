@@ -57,17 +57,31 @@ function globalNotifications() {
     _idCounter: 0,
 
     init() {
+      // Restore log history from localStorage
+      try {
+        const saved = localStorage.getItem('_notifHistory');
+        if (saved) this.logHistory = JSON.parse(saved);
+        this.unreadCount = parseInt(localStorage.getItem('_notifUnread') || '0');
+      } catch {}
       this.connect();
+    },
+
+    _persist() {
+      try {
+        localStorage.setItem('_notifHistory', JSON.stringify(this.logHistory.slice(0, 200)));
+        localStorage.setItem('_notifUnread', String(this.unreadCount));
+      } catch {}
     },
 
     toggleLogPanel() {
       this.showLogPanel = !this.showLogPanel;
-      if (this.showLogPanel) this.unreadCount = 0;
+      if (this.showLogPanel) { this.unreadCount = 0; this._persist(); }
     },
 
     clearHistory() {
       this.logHistory = [];
       this.unreadCount = 0;
+      this._persist();
     },
 
     connect() {
@@ -189,10 +203,11 @@ function globalNotifications() {
         visible: true,
       };
 
-      // Save to persistent log history (max 200)
+      // Save to persistent log history (max 200) + localStorage
       this.logHistory.unshift({ ...notification });
       if (this.logHistory.length > 200) this.logHistory.pop();
       if (!this.showLogPanel) this.unreadCount++;
+      this._persist();
 
       // Add to front (newest first)
       this.notifications.unshift(notification);
