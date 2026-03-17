@@ -567,12 +567,9 @@ export class DMEngine {
       console.log(`[DMEngine] Platform filter: ${platforms.join(', ')} | Country by AI: ${campaign.target_country || 'any'}`);
     }
 
-    // Exclude already queued in this campaign
+    // Exclude already queued in THIS campaign only (other campaigns can send to same influencer)
     conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE campaign_id = ?)`);
     params.push(campaignId);
-
-    // Exclude influencers who already received a successful DM in ANY campaign
-    conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE execute_status = 'success')`);
 
 
     const where = `WHERE ${conditions.join(' AND ')}`;
