@@ -1742,6 +1742,7 @@ function historyPage() {
     },
 
     async rerun(job) {
+      if (!confirm(`"${job.query}" (${job.platform}) 을 재실행하시겠습니까?`)) return;
       let res;
       if (job.type === 'hashtag') {
         res = await fetch('/api/jobs/hashtag', {
@@ -1765,8 +1766,8 @@ function historyPage() {
       }
       const data = await res.json();
       if (data.jobId) {
-        const url = job.type === 'hashtag' ? `/search?jobId=${data.jobId}` : `/profiles?jobId=${data.jobId}`;
-        window.location.href = url;
+        // Stay on history page and reload to show the new running job
+        this.load();
       }
     },
 
