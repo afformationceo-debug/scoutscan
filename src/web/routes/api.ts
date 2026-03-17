@@ -253,9 +253,30 @@ api.get('/platforms', (c) => {
     const dmEntry = dmMap.get(p.platform);
     const hasCookies = p.hasCookies || (dbEntry && dbEntry.cookieCount > 0) || (dmEntry && dmEntry.valid_cnt > 0);
     const cookieCount = p.cookieCount || dbEntry?.cookieCount || 0;
+
+    // Check if scraping cookies are actually expired (not just present)
+    let hasExpired = false;
+    if (hasCookies) {
+      const cookies = cookieManager.loadCookies(p.platform);
+      const critical = cookieManager.getCriticalCookieNames(p.platform);
+      const now = Math.floor(Date.now() / 1000);
+      for (const c of cookies) {
+        if (critical.includes(c.name) && c.expires && c.expires < now) {
+          hasExpired = true;
+          break;
+        }
+      }
+      // Also check if critical cookies are missing
+      const cookieNames = new Set(cookies.map(c => c.name));
+      if (critical.some(name => !cookieNames.has(name))) {
+        hasExpired = true;
+      }
+    }
+
     return {
       ...p,
       hasCookies: !!hasCookies,
+      hasExpired,
       cookieCount,
       dmAccounts: dmEntry?.cnt || 0,
       dmValidAccounts: dmEntry?.valid_cnt || 0,

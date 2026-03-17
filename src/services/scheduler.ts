@@ -295,12 +295,25 @@ export class SchedulerService {
       }
     }
 
-    // Broadcast all warnings on global channel
+    // Broadcast all warnings on global channel — include campaign names for UI
     for (const warning of warnings) {
+      // Look up which campaigns use this account
+      let campaignNames: string[] = [];
+      if (warning.username !== 'scraping') {
+        try {
+          const camps = db.prepare(
+            'SELECT name FROM dm_campaigns WHERE sender_username = ? AND platform = ?'
+          ).all(warning.username, warning.platform) as any[];
+          campaignNames = camps.map((c: any) => c.name);
+        } catch {}
+      }
+
       sseManager.broadcast('global', warning.type, {
         username: warning.username,
         platform: warning.platform,
         detail: warning.detail,
+        campaignNames, // ['포엔의원_TW_인스타', ...] or [] for scraping
+        isScraping: warning.username === 'scraping',
       });
     }
 

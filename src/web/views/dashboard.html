@@ -59,7 +59,7 @@
       <svg class="w-4 h-4 text-error flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
       <span class="text-error text-sm font-semibold">쿠키 만료 경고</span>
       <template x-for="a in expiredCookies" :key="a.platform + ':' + a.username">
-        <span class="badge badge-error text-[10px]" x-text="a.platform + ':@' + a.username"></span>
+        <span class="badge badge-error text-[10px]" x-text="a.label || (a.platform + ':@' + a.username)"></span>
       </template>
       <a href="/settings" class="ml-auto text-[11px] text-error hover:underline">설정에서 확인</a>
     </div>
@@ -175,11 +175,15 @@
   <!-- Platform Cookie Status (compact) -->
   <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
     <template x-for="p in platforms" :key="p.platform">
-      <div class="bg-dark-card border rounded-lg p-3 text-center card-glow" :class="p.hasCookies ? 'border-success/20' : 'border-error/20'">
+      <div class="bg-dark-card border rounded-lg p-3 text-center card-glow"
+           :class="(p.hasCookies && !p.hasExpired) ? 'border-success/20' : 'border-error/20'">
         <div class="text-[11px] text-kaia-muted capitalize" x-text="p.platform"></div>
         <div class="flex items-center justify-center gap-1 mt-1">
-          <span class="w-1.5 h-1.5 rounded-full" :class="p.hasCookies ? 'bg-success' : 'bg-error'"></span>
-          <span class="text-[10px]" :class="p.hasCookies ? 'text-success' : 'text-error'" x-text="p.hasCookies ? p.cookieCount + '개' : '없음'"></span>
+          <span class="w-1.5 h-1.5 rounded-full"
+                :class="!p.hasCookies ? 'bg-error' : p.hasExpired ? 'bg-error' : 'bg-success'"></span>
+          <span class="text-[10px]"
+                :class="!p.hasCookies ? 'text-error' : p.hasExpired ? 'text-error' : 'text-success'"
+                x-text="!p.hasCookies ? '없음' : p.hasExpired ? '만료됨' : p.cookieCount + '개'"></span>
         </div>
       </div>
     </template>

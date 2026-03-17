@@ -107,18 +107,24 @@ function globalNotifications() {
 
       this.eventSource.addEventListener('cookie_warning', (e) => {
         const data = JSON.parse(e.data);
+        const label = data.isScraping
+          ? `[스크래핑] ${data.platform} 쿠키 만료 임박`
+          : `[DM] ${(data.campaignNames || []).join(', ') || '@' + data.username} (${data.platform}) 쿠키 만료 임박`;
         this.addNotification({
           type: 'cookie_warning',
-          message: `쿠키 만료 경고: @${data.username} (${data.platform})`,
+          message: label,
           detail: data.detail || '',
         });
       });
 
       this.eventSource.addEventListener('cookie_expired', (e) => {
         const data = JSON.parse(e.data);
+        const label = data.isScraping
+          ? `[스크래핑] ${data.platform} 쿠키 만료됨 — 스크래핑 불가`
+          : `[DM] ${(data.campaignNames || []).join(', ') || '@' + data.username} (${data.platform}) 쿠키 만료됨`;
         this.addNotification({
           type: 'cookie_expired',
-          message: `쿠키 만료됨: @${data.username} (${data.platform})`,
+          message: label,
           detail: data.detail || '',
         });
       });
@@ -2321,8 +2327,24 @@ function liveDashboard() {
         // Platforms
         this.platforms = platformsData.platforms || [];
 
-        // Cookie health
-        this.expiredCookies = (cookieData.accounts || []).filter(a => a.cookie_status === 'expired');
+        // Cookie health — add campaign name labels
+        this.expiredCookies = (cookieData.accounts || [])
+          .filter(a => a.cookie_status === 'expired' || a.cookie_status === 'expiring_soon')
+          .map(a => {
+            // Find campaign names for this account
+            const camps = (this.campaigns || []).filter(c => c.sender_username === a.username && c.platform === a.platform);
+            const label = camps.length > 0
+              ? camps.map(c => c.name).join(', ')
+              : `@${a.username} (${a.platform})`;
+            return { ...a, label };
+          });
+
+        // Also check scraping cookies (platform-level)
+        for (const p of this.platforms) {
+          if (!p.hasCookies) {
+            this.expiredCookies.push({ platform: p.platform, username: 'scraping', cookie_status: 'expired', label: `[스크래핑] ${p.platform} 쿠키 없음` });
+          }
+        }
       } catch (err) {
         console.warn('[liveDashboard] loadData error:', err);
       }
@@ -2363,13 +2385,19 @@ function liveDashboard() {
 
       this._sse.addEventListener('cookie_warning', (e) => {
         const d = JSON.parse(e.data);
-        this.activities.unshift({ type: 'cookie_warning', message: `쿠키 경고: @${d.username} (${d.platform})`, ts: ts() });
+        const label = d.isScraping
+          ? `[스크래핑] ${d.platform} 쿠키 만료 임박`
+          : `[DM] ${(d.campaignNames || []).join(', ') || '@' + d.username} (${d.platform}) 쿠키 만료 임박`;
+        this.activities.unshift({ type: 'cookie_warning', message: label, ts: ts() });
         if (this.activities.length > 50) this.activities.pop();
       });
 
       this._sse.addEventListener('cookie_expired', (e) => {
         const d = JSON.parse(e.data);
-        this.activities.unshift({ type: 'cookie_expired', message: `쿠키 만료: @${d.username} (${d.platform})`, ts: ts() });
+        const label = d.isScraping
+          ? `[스크래핑] ${d.platform} 쿠키 만료됨`
+          : `[DM] ${(d.campaignNames || []).join(', ') || '@' + d.username} (${d.platform}) 쿠키 만료됨`;
+        this.activities.unshift({ type: 'cookie_expired', message: label, ts: ts() });
         if (this.activities.length > 50) this.activities.pop();
         this.loadData();
       });
