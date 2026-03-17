@@ -6,8 +6,36 @@ interface SSEClient {
   controller: ReadableStreamDefaultController;
 }
 
+// Events that should be persisted to DB as notifications
+const PERSIST_EVENTS = new Set([
+  'scraping_started', 'scraping_completed',
+  'dm_sent', 'dm_failed', 'dm_processing',
+  'campaign_completed',
+  'cookie_warning', 'cookie_expired',
+  'auto_assign',
+  'account_blocked', 'send_failed',
+]);
+
 class SSEManager {
   private clients: SSEClient[] = [];
+  private _db: any = null;
+  private _insertStmt: any = null;
+
+  /** Lazy DB access to avoid circular deps */
+  private getDb() {
+    if (!this._db) {
+      try {
+        // Dynamic import at runtime
+        const Database = require('better-sqlite3');
+        const { join } = require('path');
+        this._db = new Database(join(process.cwd(), 'data', 'scraper.db'));
+        this._insertStmt = this._db.prepare(
+          'INSERT INTO notifications (type, message, detail, created_at) VALUES (?, ?, ?, ?)'
+        );
+      } catch { /* DB not ready yet */ }
+    }
+    return this._insertStmt;
+  }
 
   /** Add a client to a channel */
   addClient(channel: string, controller: ReadableStreamDefaultController): string {
@@ -33,6 +61,36 @@ class SSEManager {
       } catch {
         this.removeClient(client.id);
       }
+    }
+
+    // Persist important events to DB
+    if (channel === 'global' && PERSIST_EVENTS.has(event)) {
+      try {
+        const stmt = this.getDb();
+        if (stmt) {
+          const message = data.message || this.buildMessage(event, data);
+          const detail = data.detail || data.error || '';
+          stmt.run(event, message, detail, new Date().toISOString());
+        }
+      } catch { /* don't break SSE if DB fails */ }
+    }
+  }
+
+  /** Build human-readable message from event data */
+  private buildMessage(event: string, data: any): string {
+    switch (event) {
+      case 'scraping_started': return `스크래핑 시작: ${data.keyword || ''} (${data.platform || ''})`;
+      case 'scraping_completed': return `스크래핑 완료: ${data.postsCount || 0}P, ${data.profilesCount || 0}명`;
+      case 'dm_sent': return `DM 발송 성공: @${data.recipient} (${data.campaign || data.platform})`;
+      case 'dm_failed': return `DM 발송 실패: @${data.recipient} (${data.campaign || data.platform})`;
+      case 'dm_processing': return `DM 처리중: @${data.recipient}`;
+      case 'campaign_completed': return `캠페인 완료: ${data.campaignName} (발송 ${data.sent}, 실패 ${data.failed})`;
+      case 'cookie_warning': return data.isScraping ? `[스크래핑] ${data.platform} 쿠키 만료 임박` : `[DM] ${(data.campaignNames || []).join(', ') || '@' + data.username} 쿠키 만료 임박`;
+      case 'cookie_expired': return data.isScraping ? `[스크래핑] ${data.platform} 쿠키 만료됨` : `[DM] ${(data.campaignNames || []).join(', ') || '@' + data.username} 쿠키 만료됨`;
+      case 'auto_assign': return `캠페인 자동 배정: ${data.assigned || 0}명`;
+      case 'account_blocked': return `계정 차단: @${data.account}`;
+      case 'send_failed': return `발송 실패: @${data.recipient}`;
+      default: return event;
     }
   }
 

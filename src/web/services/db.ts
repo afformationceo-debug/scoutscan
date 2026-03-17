@@ -272,7 +272,17 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 
-  -- Table 11: platform_dm_defaults (글로벌 발송주기 기본값)
+  -- Table 11: notifications (백엔드 영구 알림 로그)
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    detail TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_notif_created ON notifications(created_at);
+
+  -- Table 12: platform_dm_defaults (글로벌 발송주기 기본값)
   CREATE TABLE IF NOT EXISTS platform_dm_defaults (
     platform TEXT PRIMARY KEY,
     delay_min_sec INTEGER NOT NULL,

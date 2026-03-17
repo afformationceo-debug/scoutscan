@@ -55,6 +55,21 @@ api.post('/jobs/profile', async (c) => {
   return c.json({ jobId, message: 'Job started' }, 201);
 });
 
+// ─── Notifications (persistent backend log) ───
+
+api.get('/notifications', (c) => {
+  const limit = parseInt(c.req.query('limit') || '100');
+  const offset = parseInt(c.req.query('offset') || '0');
+  const rows = db.prepare('SELECT * FROM notifications ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset) as any[];
+  const total = (db.prepare('SELECT COUNT(*) as cnt FROM notifications').get() as any).cnt;
+  return c.json({ notifications: rows, total });
+});
+
+api.delete('/notifications', (c) => {
+  db.prepare('DELETE FROM notifications').run();
+  return c.json({ message: 'All notifications cleared' });
+});
+
 // ─── DM History (for history dashboard) ───
 
 api.get('/dm-history', (c) => {

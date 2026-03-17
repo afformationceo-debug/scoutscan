@@ -57,31 +57,41 @@ function globalNotifications() {
     _idCounter: 0,
 
     init() {
-      // Restore log history from localStorage
-      try {
-        const saved = localStorage.getItem('_notifHistory');
-        if (saved) this.logHistory = JSON.parse(saved);
-        this.unreadCount = parseInt(localStorage.getItem('_notifUnread') || '0');
-      } catch {}
+      // Load notification history from backend DB
+      this.loadHistory();
+      this.unreadCount = parseInt(localStorage.getItem('_notifUnread') || '0');
       this.connect();
     },
 
-    _persist() {
+    async loadHistory() {
       try {
-        localStorage.setItem('_notifHistory', JSON.stringify(this.logHistory.slice(0, 200)));
-        localStorage.setItem('_notifUnread', String(this.unreadCount));
+        const res = await fetch('/api/notifications?limit=200');
+        const data = await res.json();
+        this.logHistory = (data.notifications || []).map(n => ({
+          id: n.id,
+          type: n.type,
+          message: n.message,
+          detail: n.detail || '',
+          timestamp: n.created_at,
+          timeKST: new Date(n.created_at).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+        }));
       } catch {}
     },
 
     toggleLogPanel() {
       this.showLogPanel = !this.showLogPanel;
-      if (this.showLogPanel) { this.unreadCount = 0; this._persist(); }
+      if (this.showLogPanel) {
+        this.unreadCount = 0;
+        localStorage.setItem('_notifUnread', '0');
+        this.loadHistory(); // Refresh from DB
+      }
     },
 
-    clearHistory() {
+    async clearHistory() {
+      await fetch('/api/notifications', { method: 'DELETE' });
       this.logHistory = [];
       this.unreadCount = 0;
-      this._persist();
+      localStorage.setItem('_notifUnread', '0');
     },
 
     connect() {
@@ -203,11 +213,13 @@ function globalNotifications() {
         visible: true,
       };
 
-      // Save to persistent log history (max 200) + localStorage
+      // Add to in-memory list (DB save happens server-side via SSE broadcast)
       this.logHistory.unshift({ ...notification });
       if (this.logHistory.length > 200) this.logHistory.pop();
-      if (!this.showLogPanel) this.unreadCount++;
-      this._persist();
+      if (!this.showLogPanel) {
+        this.unreadCount++;
+        localStorage.setItem('_notifUnread', String(this.unreadCount));
+      }
 
       // Add to front (newest first)
       this.notifications.unshift(notification);
