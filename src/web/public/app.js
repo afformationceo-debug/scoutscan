@@ -798,6 +798,62 @@ function keywordsPage() {
       this.load();
     },
 
+    // ─── Batch selection ───
+    selectedKeywords: [],
+
+    toggleSelectKeyword(id) {
+      const idx = this.selectedKeywords.indexOf(id);
+      if (idx >= 0) this.selectedKeywords.splice(idx, 1);
+      else this.selectedKeywords.push(id);
+    },
+
+    toggleSelectAllKeywords() {
+      if (this.selectedKeywords.length === this.targets.length) {
+        this.selectedKeywords = [];
+      } else {
+        this.selectedKeywords = this.targets.map(t => t.id);
+      }
+    },
+
+    get allKeywordsSelected() {
+      return this.targets.length > 0 && this.selectedKeywords.length === this.targets.length;
+    },
+
+    async batchRunKeywords() {
+      if (this.selectedKeywords.length === 0) return;
+      const selected = this.targets.filter(t => this.selectedKeywords.includes(t.id));
+      const pairIds = selected.map(t => t.pairId);
+      if (!confirm(`${pairIds.length}개 키워드를 일괄 스크래핑하시겠습니까?`)) return;
+      const res = await fetch('/api/keywords/batch-run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairIds }),
+      });
+      const data = await res.json();
+      // Start job monitors for started ones
+      for (const r of (data.results || [])) {
+        if (r.status === 'started' && r.jobId) {
+          this.startJobMonitor(r.pairId, r.jobId);
+        }
+      }
+      alert(`${data.started}개 스크래핑 시작`);
+      this.selectedKeywords = [];
+      this.load();
+    },
+
+    async batchToggleKeywords(active) {
+      if (this.selectedKeywords.length === 0) return;
+      const label = active ? '활성화' : '비활성화';
+      if (!confirm(`${this.selectedKeywords.length}개 키워드를 일괄 ${label}하시겠습니까?`)) return;
+      await fetch('/api/keywords/batch-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: this.selectedKeywords, isActive: active }),
+      });
+      this.selectedKeywords = [];
+      this.load();
+    },
+
     async toggleActive(target) {
       await fetch(`/api/keywords/${target.id}`, {
         method: 'PATCH',

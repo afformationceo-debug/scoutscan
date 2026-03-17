@@ -473,6 +473,14 @@
       </div>
     </div>
 
+    <!-- Batch controls -->
+    <div x-show="selectedKeywords.length > 0" class="bg-dark-card border border-accent/20 rounded-lg px-4 py-2.5 mb-3 flex items-center gap-3">
+      <span class="text-[12px] text-accent font-mono font-semibold" x-text="selectedKeywords.length + '개 선택'"></span>
+      <button @click="batchRunKeywords()" class="px-3 py-1 text-[11px] font-semibold bg-success/20 text-success border border-success/30 rounded-lg hover:bg-success/30">일괄 스크래핑</button>
+      <button @click="batchToggleKeywords(true)" class="px-3 py-1 text-[11px] font-semibold bg-info/20 text-info border border-info/30 rounded-lg hover:bg-info/30">일괄 활성화</button>
+      <button @click="batchToggleKeywords(false)" class="px-3 py-1 text-[11px] font-semibold bg-warning/20 text-warning border border-warning/30 rounded-lg hover:bg-warning/30">일괄 비활성화</button>
+    </div>
+
     <!-- Keywords Table -->
     <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden">
       <div x-show="loading" class="text-center py-12 text-kaia-muted">로딩 중...</div>
@@ -480,6 +488,9 @@
       <table x-show="!loading && targets.length > 0" class="min-w-full data-table">
         <thead>
           <tr class="border-b border-dark-border">
+            <th class="px-2 py-2.5 text-center w-8">
+              <input type="checkbox" :checked="allKeywordsSelected" @change="toggleSelectAllKeywords()" class="rounded border-dark-border w-3 h-3">
+            </th>
             <th class="px-3 py-2.5 text-left">페어 ID</th>
             <th class="px-3 py-2.5 text-left">플랫폼</th>
             <th class="px-3 py-2.5 text-left">국가</th>
@@ -496,7 +507,10 @@
         </thead>
         <tbody>
           <template x-for="t in targets" :key="t.id">
-            <tr class="border-b border-dark-border/30">
+            <tr class="border-b border-dark-border/30" :class="selectedKeywords.includes(t.id) ? 'bg-accent/5' : ''">
+              <td class="px-2 py-2 text-center">
+                <input type="checkbox" :checked="selectedKeywords.includes(t.id)" @change="toggleSelectKeyword(t.id)" class="rounded border-dark-border w-3 h-3">
+              </td>
               <td class="px-3 py-2 text-accent font-medium whitespace-nowrap" x-text="t.pairId"></td>
               <td class="px-3 py-2">
                 <div class="flex items-center gap-1.5">

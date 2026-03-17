@@ -527,6 +527,36 @@ api.post('/keywords/group/:groupKey/run', (c) => {
   return c.json({ groupKey, jobs });
 });
 
+// Batch run multiple keyword targets
+api.post('/keywords/batch-run', async (c) => {
+  const body = await c.req.json();
+  const pairIds: string[] = body.pairIds || [];
+  if (pairIds.length === 0) return c.json({ error: 'No pairIds provided' }, 400);
+
+  const results: Array<{ pairId: string; status: string; jobId?: string }> = [];
+  for (const pairId of pairIds) {
+    try {
+      const jobId = scheduler.runNow(pairId);
+      db.prepare(`UPDATE keyword_targets SET last_job_id = ?, last_job_status = 'running' WHERE pair_id = ?`).run(jobId, pairId);
+      results.push({ pairId, status: 'started', jobId });
+    } catch (err) {
+      results.push({ pairId, status: 'error: ' + (err as Error).message.slice(0, 50) });
+    }
+  }
+  return c.json({ started: results.filter(r => r.status === 'started').length, results });
+});
+
+// Batch toggle active/inactive
+api.post('/keywords/batch-toggle', async (c) => {
+  const body = await c.req.json();
+  const ids: number[] = body.ids || [];
+  const isActive: boolean = body.isActive;
+  for (const id of ids) {
+    updateKeywordTarget(id, { isActive });
+  }
+  return c.json({ updated: ids.length, isActive });
+});
+
 // ─── DM Campaigns ───
 
 api.post('/campaigns', async (c) => {
