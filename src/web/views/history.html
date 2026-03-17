@@ -212,35 +212,38 @@
 
       <!-- Column Headers -->
       <div x-show="!loading && items.length > 0"
-           class="grid grid-cols-[28px_50px_1fr_1fr_72px_80px_100px_80px] gap-0 items-center border-b border-dark-border px-2"
+           class="grid grid-cols-[28px_48px_minmax(100px,1fr)_minmax(100px,1fr)_60px_80px_120px_110px] gap-1 items-center border-b border-dark-border px-2"
            style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#919DB5;">
         <div class="py-2.5"></div>
-        <div class="py-2.5 px-1">플랫폼</div>
-        <div class="py-2.5 px-2">수신자</div>
-        <div class="py-2.5 px-2">캠페인</div>
+        <div class="py-2.5">플랫폼</div>
+        <div class="py-2.5 px-1">수신자</div>
+        <div class="py-2.5 px-1">캠페인</div>
         <div class="py-2.5 text-center">상태</div>
-        <div class="py-2.5 px-1">발송계정</div>
-        <div class="py-2.5 px-1">프록시 IP</div>
-        <div class="py-2.5 px-1">발송일시</div>
+        <div class="py-2.5">발송계정</div>
+        <div class="py-2.5">프록시 IP</div>
+        <div class="py-2.5 cursor-pointer select-none" @click="toggleSort()">
+          발송일시
+          <span x-show="sortOrder === 'desc'" class="text-accent">▼</span>
+          <span x-show="sortOrder === 'asc'" class="text-accent">▲</span>
+        </div>
       </div>
 
       <!-- DM Rows -->
       <template x-for="item in items" :key="item.id">
         <div>
           <div @click="item._expanded = !item._expanded"
-               class="grid grid-cols-[28px_50px_1fr_1fr_72px_80px_100px_80px] gap-0 items-center px-2 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
+               class="grid grid-cols-[28px_48px_minmax(100px,1fr)_minmax(100px,1fr)_60px_80px_120px_110px] gap-1 items-center px-2 border-b border-[#2E2E2E]/30 cursor-pointer hover:bg-[#222730] transition-colors"
                style="font-size:13px;">
             <div class="py-2 text-center">
               <svg :class="item._expanded ? 'rotate-90' : ''" class="w-3 h-3 text-[#919DB5] transition-transform inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </div>
-            <div class="py-2 px-1">
+            <div class="py-2">
               <span class="badge text-[10px]" :class="'badge-' + (item.platform === 'instagram' ? 'ig' : item.platform === 'twitter' ? 'tw' : 'tt')" x-text="item.platform.slice(0,2).toUpperCase()"></span>
             </div>
-            <div class="py-2 px-2 truncate">
-              <span class="text-white font-medium" x-text="'@' + (item.recipient || '?')"></span>
-              <span x-show="item.recipient_name" class="text-kaia-muted text-[11px] ml-1" x-text="item.recipient_name"></span>
+            <div class="py-2 px-1 truncate">
+              <span class="text-white font-medium text-[12px]" x-text="'@' + (item.recipient || '?')"></span>
             </div>
-            <div class="py-2 px-2 truncate text-kaia-text text-[12px]" x-text="item.campaign_name || '-'"></div>
+            <div class="py-2 px-1 truncate text-kaia-text text-[11px]" x-text="item.campaign_name || '-'"></div>
             <div class="py-2 text-center">
               <span class="inline-flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full" :class="{
@@ -250,7 +253,7 @@
                   'bg-info animate-pulse': item.execute_status === 'processing',
                   'bg-kaia-muted': item.execute_status === 'skipped'
                 }"></span>
-                <span class="text-[11px]" :class="{
+                <span class="text-[10px]" :class="{
                   'text-success': item.execute_status === 'success',
                   'text-error': item.execute_status === 'failed',
                   'text-warning': item.execute_status === 'pending',
@@ -259,9 +262,9 @@
                 }" x-text="item.execute_status === 'success' ? '성공' : item.execute_status === 'failed' ? '실패' : item.execute_status === 'pending' ? '대기' : item.execute_status === 'processing' ? '처리중' : '스킵'"></span>
               </span>
             </div>
-            <div class="py-2 px-1 text-[11px] text-kaia-text truncate" x-text="item.account_username ? '@' + item.account_username.slice(-6) : '-'"></div>
-            <div class="py-2 px-1 text-[11px] font-mono" :class="item.proxy_ip === 'direct' ? 'text-error' : 'text-success'" x-text="item.proxy_ip || '-'"></div>
-            <div class="py-2 px-1 text-[11px] text-[#919DB5] whitespace-nowrap" x-text="item.executed_at ? formatDateShort(item.executed_at) : formatDateShort(item.created_at)"></div>
+            <div class="py-2 text-[10px] text-kaia-text truncate" x-text="item.account_username ? '@' + item.account_username.slice(-6) : '-'"></div>
+            <div class="py-2 text-[10px] font-mono truncate" :class="item.proxy_ip === 'direct' ? 'text-error' : 'text-success'" x-text="item.proxy_ip || '-'"></div>
+            <div class="py-2 text-[11px] text-[#919DB5] whitespace-nowrap" x-text="item.executed_at ? formatDateShort(item.executed_at) : formatDateShort(item.created_at)"></div>
           </div>
 
           <!-- Expanded Detail -->

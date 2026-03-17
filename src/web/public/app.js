@@ -1876,12 +1876,20 @@ function dmHistoryPage() {
     filterStatus: '',
     filterCampaign: '',
     filterSearch: '',
+    sortOrder: 'desc',
+
+    toggleSort() {
+      this.sortOrder = this.sortOrder === 'desc' ? 'asc' : 'desc';
+      this.offset = 0;
+      this.load();
+    },
 
     async load() {
       this.loading = true;
       const params = new URLSearchParams();
       params.set('limit', this.limit);
       params.set('offset', this.offset);
+      params.set('sort', this.sortOrder);
       if (this.filterPlatform) params.set('platform', this.filterPlatform);
       if (this.filterStatus) params.set('status', this.filterStatus);
       if (this.filterCampaign) params.set('campaign', this.filterCampaign);

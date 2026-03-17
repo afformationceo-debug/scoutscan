@@ -64,6 +64,7 @@ api.get('/dm-history', (c) => {
   const platform = c.req.query('platform') || '';
   const campaign = c.req.query('campaign') || '';
   const search = c.req.query('search') || '';
+  const sort = c.req.query('sort') === 'asc' ? 'ASC' : 'DESC';
 
   const conditions: string[] = [];
   const params: any[] = [];
@@ -90,7 +91,7 @@ api.get('/dm-history', (c) => {
     LEFT JOIN influencer_master m ON q.influencer_key = m.influencer_key
     LEFT JOIN dm_campaigns c ON q.campaign_id = c.id
     ${where}
-    ORDER BY q.id DESC
+    ORDER BY COALESCE(q.executed_at, q.created_at) ${sort}
     LIMIT ? OFFSET ?
   `).all(...params, limit, offset) as any[];
 
