@@ -646,10 +646,23 @@
   <!-- Campaigns Tab -->
   <div x-show="activeTab === 'campaigns'" x-data="campaignsPage()" x-init="load()">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-xl font-heading font-bold text-white">DM 캠페인</h2>
-      <button @click="showCreateForm = !showCreateForm" class="btn-accent px-4 py-2 rounded-lg text-sm">
-        <span x-text="showCreateForm ? '취소' : '새 캠페인'"></span>
-      </button>
+      <div class="flex items-center gap-3">
+        <h2 class="text-xl font-heading font-bold text-white">DM 캠페인</h2>
+        <!-- Batch controls -->
+        <div class="flex items-center gap-2" x-show="selectedCampaigns.length > 0">
+          <span class="text-[11px] text-accent font-mono" x-text="selectedCampaigns.length + '개 선택'"></span>
+          <button @click="batchStart()" class="px-3 py-1 text-[11px] font-semibold bg-success/20 text-success border border-success/30 rounded-lg hover:bg-success/30">일괄 RUN</button>
+          <button @click="batchPause()" class="px-3 py-1 text-[11px] font-semibold bg-warning/20 text-warning border border-warning/30 rounded-lg hover:bg-warning/30">일괄 중지</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="toggleSelectAll()" class="px-3 py-1.5 text-[11px] border border-dark-border rounded-lg text-kaia-text hover:text-white">
+          <span x-text="allSelected ? '전체 해제' : '전체 선택'"></span>
+        </button>
+        <button @click="showCreateForm = !showCreateForm" class="btn-accent px-4 py-2 rounded-lg text-sm">
+          <span x-text="showCreateForm ? '취소' : '새 캠페인'"></span>
+        </button>
+      </div>
     </div>
 
     <!-- Create Campaign Form -->
@@ -747,6 +760,7 @@
         <div class="bg-dark-card border border-dark-border rounded-lg overflow-hidden card-glow">
           <!-- Compact Header (always visible) -->
           <div @click="toggleCampaign(c)" class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-dark-hover transition-colors">
+            <input type="checkbox" :checked="selectedCampaigns.includes(c.id)" @click.stop="toggleSelectCampaign(c.id)" class="rounded border-dark-border w-3.5 h-3.5 flex-shrink-0">
             <span class="text-kaia-muted text-[11px]" x-text="c._collapsed ? '▶' : '▼'"></span>
             <span class="badge text-[9px]" :class="'badge-' + (c.platform === 'instagram' ? 'ig' : c.platform === 'twitter' ? 'tw' : 'tt')" x-text="c.platform"></span>
             <span class="font-medium text-sm flex-1 truncate text-white" x-text="c.name"></span>

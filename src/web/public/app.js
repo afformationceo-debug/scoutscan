@@ -1333,6 +1333,53 @@ function campaignsPage() {
       this.load();
     },
 
+    // ─── Batch selection ───
+    selectedCampaigns: [],
+
+    toggleSelectCampaign(id) {
+      const idx = this.selectedCampaigns.indexOf(id);
+      if (idx >= 0) this.selectedCampaigns.splice(idx, 1);
+      else this.selectedCampaigns.push(id);
+    },
+
+    toggleSelectAll() {
+      if (this.selectedCampaigns.length === this.filteredCampaigns.length) {
+        this.selectedCampaigns = [];
+      } else {
+        this.selectedCampaigns = this.filteredCampaigns.map(c => c.id);
+      }
+    },
+
+    get allSelected() {
+      return this.filteredCampaigns.length > 0 && this.selectedCampaigns.length === this.filteredCampaigns.length;
+    },
+
+    async batchStart() {
+      if (this.selectedCampaigns.length === 0) return;
+      if (!confirm(`${this.selectedCampaigns.length}개 캠페인을 일괄 실행하시겠습니까?`)) return;
+      const res = await fetch('/api/campaigns/batch-start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: this.selectedCampaigns }),
+      });
+      const data = await res.json();
+      alert(`${data.started}개 캠페인 실행 시작`);
+      this.selectedCampaigns = [];
+      this.load();
+    },
+
+    async batchPause() {
+      if (this.selectedCampaigns.length === 0) return;
+      if (!confirm(`${this.selectedCampaigns.length}개 캠페인을 일괄 중지하시겠습니까?`)) return;
+      await fetch('/api/campaigns/batch-pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: this.selectedCampaigns }),
+      });
+      this.selectedCampaigns = [];
+      this.load();
+    },
+
     async startCampaign(campaignId) {
       await fetch(`/api/campaigns/${campaignId}/start`, { method: 'POST' });
       this.load();

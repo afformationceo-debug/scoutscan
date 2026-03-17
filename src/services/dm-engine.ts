@@ -203,12 +203,26 @@ export class DMEngine {
           break;
         }
 
-        // Check daily limit
+        // Check campaign daily limit (how many sent TODAY for this campaign)
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const campaignTodaySent = (db.prepare(
+          `SELECT COUNT(*) as cnt FROM dm_action_queue WHERE campaign_id = ? AND execute_status = 'success' AND executed_at >= ?`
+        ).get(campaignId, today + 'T00:00:00Z') as any).cnt;
+        if (campaignTodaySent >= campaign.daily_limit) {
+          console.log(`[DMEngine] Campaign "${campaign.name}": daily limit reached (${campaignTodaySent}/${campaign.daily_limit})`);
+          sseManager.broadcast('campaign:' + campaignId, 'status', {
+            phase: 'daily_limit',
+            message: `일일 한도 도달 (${campaignTodaySent}/${campaign.daily_limit})`,
+          });
+          break;
+        }
+
+        // Check account daily limit
         const accountState = db.prepare(
           `SELECT daily_sent, daily_limit FROM dm_accounts WHERE id = ?`
         ).get(account.id) as any;
         if (accountState.daily_sent >= accountState.daily_limit) {
-          console.log(`[DMEngine] @${account.username}: daily limit reached (${accountState.daily_sent}/${accountState.daily_limit})`);
+          console.log(`[DMEngine] @${account.username}: account daily limit reached (${accountState.daily_sent}/${accountState.daily_limit})`);
           break;
         }
 

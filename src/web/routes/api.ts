@@ -706,6 +706,38 @@ api.post('/campaigns/:id/pause', (c) => {
   return c.json({ message: 'Campaign paused' });
 });
 
+// Batch start multiple campaigns
+api.post('/campaigns/batch-start', async (c) => {
+  const body = await c.req.json();
+  const ids: string[] = body.ids || [];
+  if (ids.length === 0) return c.json({ error: 'No campaign IDs provided' }, 400);
+
+  const results: Array<{ id: string; name: string; status: string }> = [];
+  for (const id of ids) {
+    const campaign = db.prepare('SELECT name FROM dm_campaigns WHERE id = ?').get(id) as any;
+    if (!campaign) { results.push({ id, name: '?', status: 'not_found' }); continue; }
+    try {
+      getDmEngine().processCampaign(id).catch(err => {
+        console.error(`[DM] Batch campaign ${id} error:`, err);
+      });
+      results.push({ id, name: campaign.name, status: 'started' });
+    } catch (err) {
+      results.push({ id, name: campaign.name, status: 'error: ' + (err as Error).message.slice(0, 50) });
+    }
+  }
+  return c.json({ started: results.filter(r => r.status === 'started').length, results });
+});
+
+// Batch pause multiple campaigns
+api.post('/campaigns/batch-pause', async (c) => {
+  const body = await c.req.json();
+  const ids: string[] = body.ids || [];
+  for (const id of ids) {
+    try { getDmEngine().pauseCampaign(id); } catch {}
+  }
+  return c.json({ paused: ids.length });
+});
+
 // ─── DM Accounts ───
 
 api.post('/dm-accounts', async (c) => {
