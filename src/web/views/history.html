@@ -109,7 +109,10 @@
                 <span class="text-[11px]" :class="{ 'text-success': job.status === 'completed', 'text-error': job.status === 'failed', 'text-info': job.status === 'running', 'text-warning': job.status === 'pending' }" x-text="job.status === 'completed' ? '완료' : job.status === 'failed' ? '실패' : job.status === 'running' ? '진행중' : '대기'"></span>
               </span>
             </div>
-            <div class="py-2 px-1 text-right"><span class="font-mono text-[12px] text-white" x-text="formatNumber(job.resultCount)"></span></div>
+            <div class="py-2 px-1 text-right">
+              <span class="font-mono text-[12px] text-accent" x-text="job.profilesSaved > 0 ? formatNumber(job.profilesSaved) : formatNumber(job.resultCount)"></span>
+              <span x-show="job.profilesFiltered > 0" class="text-[9px] text-kaia-muted" x-text="'(-' + job.profilesFiltered + ')'"></span>
+            </div>
             <div class="py-2 px-1 text-[11px] text-[#919DB5]" x-text="formatDateShort(job.createdAt)"></div>
             <div class="py-2 px-1 flex items-center justify-center gap-1" @click.stop>
               <button @click="rerun(job)" class="badge bg-dark-hover text-kaia-text text-[10px] cursor-pointer hover:text-white">재실행</button>
@@ -117,10 +120,28 @@
             </div>
           </div>
           <div x-show="job._expanded" x-transition class="bg-[#0F1015] border-b border-[#2E2E2E]/40 px-5 py-4 text-[12px] text-kaia-text">
-            <div class="grid grid-cols-3 gap-4">
-              <div><span class="text-kaia-muted">ID:</span> <span class="font-mono" x-text="job.id.substring(0,12)+'...'"></span></div>
-              <div><span class="text-kaia-muted">오류:</span> <span class="text-warning" x-text="job.error || '-'"></span></div>
-              <div><span class="text-kaia-muted">소요:</span> <span class="text-accent font-mono" x-text="job.completedAt ? calcDuration(job.createdAt, job.completedAt) : '-'"></span></div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="space-y-1">
+                <div class="text-[10px] text-kaia-muted uppercase font-semibold">수집</div>
+                <div><span class="text-kaia-muted">포스트:</span> <span class="font-mono text-white" x-text="formatNumber(job.resultCount)"></span></div>
+                <div><span class="text-kaia-muted">유효 프로필:</span> <span class="font-mono text-accent" x-text="job.profilesSaved || 0"></span></div>
+              </div>
+              <div class="space-y-1">
+                <div class="text-[10px] text-kaia-muted uppercase font-semibold">필터링</div>
+                <div><span class="text-kaia-muted">팔로워 미달:</span> <span class="font-mono text-warning" x-text="job.profilesFiltered || 0"></span></div>
+                <div><span class="text-kaia-muted">중복 스킵:</span> <span class="font-mono" x-text="job.profilesSkipped || 0"></span></div>
+                <div><span class="text-kaia-muted">enrichment 실패:</span> <span class="font-mono text-error" x-text="job.profilesFailed || 0"></span></div>
+              </div>
+              <div class="space-y-1">
+                <div class="text-[10px] text-kaia-muted uppercase font-semibold">시간</div>
+                <div><span class="text-kaia-muted">소요:</span> <span class="font-mono text-accent" x-text="job.completedAt ? calcDuration(job.createdAt, job.completedAt) : '-'"></span></div>
+                <div><span class="text-kaia-muted">ID:</span> <span class="font-mono text-[10px]" x-text="job.id.substring(0,12)+'...'"></span></div>
+              </div>
+              <div class="space-y-1">
+                <div class="text-[10px] text-kaia-muted uppercase font-semibold">비고</div>
+                <div x-show="job.error"><span class="text-warning text-[11px]" x-text="job.error"></span></div>
+                <div x-show="!job.error"><span class="text-kaia-muted">-</span></div>
+              </div>
             </div>
           </div>
         </div>

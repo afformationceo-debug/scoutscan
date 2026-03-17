@@ -167,6 +167,10 @@ class JobManager extends EventEmitter {
     let count = 0;
     let latestPostTimestamp = '';
     const collectedPosts: Post[] = [];
+    let allUsernames: string[] = [];
+    let newUsernames: string[] = [];
+    let filteredCount = 0;
+    let failedUsernames: string[] = [];
 
     try {
       const scraper = (engine as any).scrapers.get(platform);
@@ -202,12 +206,12 @@ class JobManager extends EventEmitter {
       let profilesCount = 0;
       if (enrichProfiles && collectedPosts.length > 0) {
         const existingProfiles = getExistingProfileUsernames(platform);
-        const allUsernames = [...new Set(
+        allUsernames = [...new Set(
           collectedPosts
             .map(p => p.owner?.username)
             .filter((u): u is string => Boolean(u))
         )];
-        const newUsernames = allUsernames.filter(u => !existingProfiles.has(u));
+        newUsernames = allUsernames.filter(u => !existingProfiles.has(u));
         const skipped = allUsernames.length - newUsernames.length;
 
         if (skipped > 0) {
@@ -223,11 +227,11 @@ class JobManager extends EventEmitter {
         const limit = pLimit(3);
         let consecutiveFailures = 0;
         const MAX_CONSECUTIVE_FAILURES = 5;
-        let failedUsernames: string[] = [];
+        failedUsernames = [];
 
         // Load min follower threshold from platform settings
         const minFollowers = this.getMinFollowersScrape(platform);
-        let filteredCount = 0;
+        filteredCount = 0;
 
         const enrichTasks = newUsernames.map(username =>
           limit(async () => {
@@ -378,12 +382,17 @@ class JobManager extends EventEmitter {
         }
       }
 
-      // Save cookie warning as error field so it's visible in history UI
+      // Save with enrichment stats so history shows actual useful numbers
+      const skipped = allUsernames ? (allUsernames.length - newUsernames.length) : 0;
       updateJobStatus(jobId, 'completed', {
         resultCount: count,
+        profilesSaved: profilesCount,
+        profilesFiltered: filteredCount || 0,
+        profilesSkipped: skipped,
+        profilesFailed: failedUsernames ? failedUsernames.length : 0,
         error: cookieWarning || undefined,
       });
-      this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount, cookieWarning });
+      this.sendSSE(jobId, 'complete', { postsCount: count, profilesCount, filteredCount: filteredCount || 0, skippedCount: skipped, cookieWarning });
 
       // Broadcast global scraping_completed notification
       sseManager.broadcast('global', 'scraping_completed', { jobId, postsCount: count, profilesCount, pairId, cookieWarning });

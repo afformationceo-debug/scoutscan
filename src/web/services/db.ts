@@ -355,6 +355,11 @@ const alterMigrations = [
   `ALTER TABLE dm_action_queue ADD COLUMN proxy_ip TEXT`,
   // platform_dm_defaults: scraping follower filter
   `ALTER TABLE platform_dm_defaults ADD COLUMN min_followers_scrape INTEGER DEFAULT 2000`,
+  // jobs: enrichment stats (유효 프로필 수, 필터링, 중복 스킵)
+  `ALTER TABLE jobs ADD COLUMN profiles_saved INTEGER DEFAULT 0`,
+  `ALTER TABLE jobs ADD COLUMN profiles_filtered INTEGER DEFAULT 0`,
+  `ALTER TABLE jobs ADD COLUMN profiles_skipped INTEGER DEFAULT 0`,
+  `ALTER TABLE jobs ADD COLUMN profiles_failed INTEGER DEFAULT 0`,
 ];
 
 for (const sql of alterMigrations) {
@@ -369,7 +374,8 @@ const insertJobStmt = db.prepare(`
 `);
 
 const updateJobStatusStmt = db.prepare(`
-  UPDATE jobs SET status = ?, started_at = COALESCE(started_at, ?), completed_at = ?, error = ?, result_count = ?
+  UPDATE jobs SET status = ?, started_at = COALESCE(started_at, ?), completed_at = ?, error = ?, result_count = ?,
+  profiles_saved = ?, profiles_filtered = ?, profiles_skipped = ?, profiles_failed = ?
   WHERE id = ?
 `);
 
@@ -384,13 +390,21 @@ export function createJob(job: Omit<Job, 'resultCount' | 'startedAt' | 'complete
 export function updateJobStatus(
   id: string,
   status: JobStatus,
-  opts: { error?: string; resultCount?: number } = {}
+  opts: { error?: string; resultCount?: number; profilesSaved?: number; profilesFiltered?: number; profilesSkipped?: number; profilesFailed?: number } = {}
 ): void {
   const now = new Date().toISOString();
   const startedAt = status === 'running' ? now : null;
   const completedAt = status === 'completed' || status === 'failed' ? now : null;
   const job = getJob(id);
-  updateJobStatusStmt.run(status, startedAt, completedAt, opts.error || null, opts.resultCount ?? job?.resultCount ?? 0, id);
+  updateJobStatusStmt.run(
+    status, startedAt, completedAt, opts.error || null,
+    opts.resultCount ?? job?.resultCount ?? 0,
+    opts.profilesSaved ?? (job as any)?.profilesSaved ?? 0,
+    opts.profilesFiltered ?? (job as any)?.profilesFiltered ?? 0,
+    opts.profilesSkipped ?? (job as any)?.profilesSkipped ?? 0,
+    opts.profilesFailed ?? (job as any)?.profilesFailed ?? 0,
+    id
+  );
 }
 
 export function getJob(id: string): Job | undefined {
@@ -420,7 +434,7 @@ export function recoverStuckJobs(): number {
   return (result.changes || 0) + (failedResult.changes || 0);
 }
 
-function rowToJob(row: any): Job {
+function rowToJob(row: any): any {
   return {
     id: row.id,
     type: row.type as JobType,
@@ -433,6 +447,10 @@ function rowToJob(row: any): Job {
     createdAt: row.created_at,
     startedAt: row.started_at || undefined,
     completedAt: row.completed_at || undefined,
+    profilesSaved: row.profiles_saved || 0,
+    profilesFiltered: row.profiles_filtered || 0,
+    profilesSkipped: row.profiles_skipped || 0,
+    profilesFailed: row.profiles_failed || 0,
   };
 }
 
