@@ -128,8 +128,6 @@
             <div class="w-px h-4 bg-dark-border mx-1"></div>
             <span class="text-[11px] text-kaia-muted">{{userEmail}}</span>
             <a href="/logout" class="text-[11px] text-kaia-muted hover:text-error transition-colors">로그아웃</a>
-            <div class="w-px h-4 bg-dark-border mx-1"></div>
-            <div id="nav-bell-placeholder"></div>
           </div>
         </div>
       </div>
@@ -138,13 +136,13 @@
     <!-- Notification Bell + Log Panel -->
     <div x-data="globalNotifications()" x-init="init()">
 
-    <!-- Bell Icon (teleported into nav bar) -->
-    <template x-teleport="#nav-bell-placeholder">
-      <button @click="toggleLogPanel()" class="relative p-1 rounded-lg hover:bg-dark-hover transition-colors">
+    <!-- Bell Icon (fixed in nav area) -->
+    <div class="fixed top-2.5 right-6 z-50">
+      <button @click="toggleLogPanel()" class="relative p-1.5 rounded-lg bg-dark-card border border-dark-border hover:bg-dark-hover transition-colors shadow-lg">
         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         <span x-show="unreadCount > 0" class="absolute -top-1 -right-1 bg-error text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center" x-text="unreadCount > 9 ? '9+' : unreadCount"></span>
       </button>
-    </template>
+    </div>
 
     <!-- Log Panel (slide-in from right) -->
     <div x-show="showLogPanel" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
@@ -177,7 +175,7 @@
                 'bg-error': log.type === 'cookie_expired' || log.type === 'dm_failed',
               }"></span>
               <div class="min-w-0 flex-1">
-                <p class="text-[12px] leading-tight" :class="{
+                <p class="text-[12px] leading-tight text-white" :class="{
                   'text-info': log.type === 'scraping_started' || log.type === 'dm_processing',
                   'text-success': log.type === 'scraping_completed' || log.type === 'dm_sent',
                   'text-accent': log.type === 'auto_assign',
