@@ -262,6 +262,12 @@ export class InstagramScraper implements PlatformScraper {
         const errMsg = (error as Error).message;
         logger.error(`[Instagram] Browser attempt ${attempt + 1} failed: ${errMsg}`);
 
+        // Proxy tunnel failure → disable proxy for remaining attempts
+        if (errMsg.includes('ERR_TUNNEL_CONNECTION_FAILED')) {
+          logger.warn(`[Instagram] Proxy tunnel failed — disabling proxy for this session`);
+          this.proxyRouter = new ProxyRouter([]); // Clear proxies for remaining retries
+        }
+
         if (proxy && (errMsg.includes('429') || errMsg.includes('blocked'))) {
           this.proxyRouter.markBlocked(proxy);
         }

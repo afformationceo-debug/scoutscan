@@ -294,10 +294,25 @@ export class DMEngine {
           }
         }
 
-        // Step 2: Send DM — all platforms use browser-based DM modules
-        const proxyUsed = this.getProxy(campaign.platform);
+        // Step 2: Send DM — with proxy fallback on tunnel failure
+        let proxyUsed = this.getProxy(campaign.platform);
         try {
-          await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered, campaignId);
+          try {
+            await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered, campaignId);
+          } catch (proxyErr) {
+            // If proxy tunnel failed, retry without proxy
+            if ((proxyErr as Error).message.includes('ERR_TUNNEL_CONNECTION_FAILED') && proxyUsed) {
+              console.warn(`[DMEngine] Proxy tunnel failed for @${item.recipient_username}, retrying without proxy...`);
+              sseManager.broadcast('campaign:' + campaignId, 'status', {
+                phase: 'proxy_fallback',
+                message: `프록시 연결 실패 → 직접 연결로 재시도...`,
+              });
+              proxyUsed = undefined; // Mark as direct
+              await this.sendDM(campaign.platform, account, item.recipient_username, item.message_rendered, campaignId);
+            } else {
+              throw proxyErr;
+            }
+          }
 
           // Success — record with proxy info
           const now = new Date().toISOString();
