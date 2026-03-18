@@ -28,9 +28,7 @@ import { registry } from '../services/registry.js';
 // 0. Connect CookieManager to DB (must happen before any CookieManager instance is used)
 CookieManager.setDbAdapter(cookieDbAdapter);
 
-// 0.1 Connect SSEManager to DB for notification persistence
-import { sseManager } from './services/sse-manager.js';
-sseManager.setDb(db);
+// SSEManager DB connection deferred to after server start
 
 // 0.5. One-time migration: filesystem cookies → DB (runs on first boot after upgrade)
 const migratedCookies = migrateCookiesFromFilesystemToDB();
@@ -202,6 +200,10 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
 
   // Start cookie health monitoring
   cookieHealthService.start(300_000); // 5 minutes
+
+  // Connect SSEManager to DB for notification persistence
+  const { sseManager: ssm } = await import('./services/sse-manager.js');
+  ssm.setDb(db);
 
   // No auto-resume: campaigns must be started manually via UI
 });
