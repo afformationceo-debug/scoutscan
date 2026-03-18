@@ -647,6 +647,7 @@
                 <button @click="toggleActive(t)" class="badge" :class="t.isActive ? 'badge-success' : 'badge-c'" x-text="t.isActive ? 'ON' : 'OFF'"></button>
               </td>
               <td class="px-3 py-2 text-center whitespace-nowrap space-x-1">
+                <button @click="openEditModal(t)" class="badge bg-info/15 text-info hover:opacity-80 cursor-pointer">수정</button>
                 <button @click="runNow(t)" :disabled="!t.isActive || getJobProgress(t.pairId)?.status === 'running'" class="badge badge-accent hover:opacity-80 disabled:opacity-30 cursor-pointer">Run</button>
                 <button @click="removeKeyword(t.id)" class="badge badge-error hover:opacity-80 cursor-pointer">삭제</button>
               </td>
@@ -654,6 +655,62 @@
           </template>
         </tbody>
       </table>
+    </div>
+  </div>
+
+    <!-- Keyword Edit Modal -->
+    <div x-show="editModalTarget" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="editModalTarget = null">
+      <div class="bg-dark-card border border-dark-border rounded-xl shadow-2xl w-[480px]">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-dark-border">
+          <h3 class="text-sm font-heading font-bold text-white">키워드 수정</h3>
+          <button @click="editModalTarget = null" class="text-kaia-muted hover:text-white">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="px-5 py-4 space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] text-kaia-muted uppercase mb-1">플랫폼</label>
+              <select x-model="editModalData.platform" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+                <option value="instagram">instagram</option>
+                <option value="twitter">twitter</option>
+                <option value="tiktok">tiktok</option>
+                <option value="youtube">youtube</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] text-kaia-muted uppercase mb-1">국가</label>
+              <input type="text" x-model="editModalData.region" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[10px] text-kaia-muted uppercase mb-1">키워드</label>
+            <input type="text" x-model="editModalData.keyword" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[10px] text-kaia-muted uppercase mb-1">주기 (시간)</label>
+              <input type="number" x-model="editModalData.scrapingCycleHours" min="0" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+            </div>
+            <div>
+              <label class="block text-[10px] text-kaia-muted uppercase mb-1">최대/회</label>
+              <input type="number" x-model="editModalData.maxResultsPerRun" min="10" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+            </div>
+            <div>
+              <label class="block text-[10px] text-kaia-muted uppercase mb-1">추출 수</label>
+              <input type="number" x-model="editModalData.totalExtracted" min="0" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+            </div>
+          </div>
+          <div>
+            <label class="block text-[10px] text-kaia-muted uppercase mb-1">Until (수집 종료일)</label>
+            <input type="date" x-model="editModalData.scrapeUntil" class="w-full rounded-lg border border-dark-border bg-dark-body px-3 py-1.5 text-xs text-white">
+          </div>
+        </div>
+        <div class="px-5 py-3 border-t border-dark-border flex justify-end gap-2">
+          <button @click="editModalTarget = null" class="px-4 py-1.5 text-[12px] text-kaia-muted border border-dark-border rounded-lg">취소</button>
+          <button @click="saveEditModal()" class="px-4 py-1.5 text-[12px] font-semibold bg-accent text-black rounded-lg hover:bg-accent-hover">저장</button>
+        </div>
+      </div>
     </div>
   </div>
 

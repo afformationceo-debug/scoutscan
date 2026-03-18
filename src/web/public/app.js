@@ -930,6 +930,43 @@ function keywordsPage() {
       this.load();
     },
 
+    // ─── Edit Modal ───
+    editModalTarget: null,
+    editModalData: {},
+
+    openEditModal(target) {
+      this.editModalTarget = target;
+      this.editModalData = {
+        platform: target.platform,
+        region: target.region,
+        keyword: target.keyword,
+        scrapingCycleHours: target.scrapingCycleHours,
+        maxResultsPerRun: target.maxResultsPerRun,
+        totalExtracted: target.totalExtracted || 0,
+        scrapeUntil: target.scrapeUntil ? target.scrapeUntil.split('T')[0] : '',
+      };
+    },
+
+    async saveEditModal() {
+      if (!this.editModalTarget) return;
+      const payload = {
+        platform: this.editModalData.platform,
+        region: this.editModalData.region,
+        keyword: this.editModalData.keyword,
+        scrapingCycleHours: parseInt(this.editModalData.scrapingCycleHours) || 0,
+        maxResultsPerRun: parseInt(this.editModalData.maxResultsPerRun) || 200,
+        totalExtracted: parseInt(this.editModalData.totalExtracted) || 0,
+        scrapeUntil: this.editModalData.scrapeUntil ? new Date(this.editModalData.scrapeUntil + 'T23:59:59Z').toISOString() : '',
+      };
+      await fetch(`/api/keywords/${this.editModalTarget.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      this.editModalTarget = null;
+      this.load();
+    },
+
     async toggleActive(target) {
       await fetch(`/api/keywords/${target.id}`, {
         method: 'PATCH',
