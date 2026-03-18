@@ -629,7 +629,7 @@ export class DMEngine {
 
     const now = new Date().toISOString();
     // Log campaign-template binding for audit
-    console.log(`[DMEngine] Queue generation: campaign="${campaign.name}" (${campaignId.slice(0, 8)}) sender=@${campaign.sender_username || 'any'} template="${campaign.message_template.slice(0, 30)}..."`);
+    console.log(`[DMEngine] Queue generation: campaign="${campaign.name}" (${campaignId.slice(0, 8)}) sender=@${campaign.sender_username || 'any'} template="${(campaign.message_template || '').slice(0, 30)}..."`);
 
     const insertStmt = db.prepare(`
       INSERT INTO dm_action_queue (influencer_key, campaign_id, platform, message_rendered, created_at)
