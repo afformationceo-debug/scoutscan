@@ -599,18 +599,9 @@ export class DMEngine {
     if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
     if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
 
-    // Only include influencers that were scraped from keyword targets (have source_pair_ids)
-    // Platform-only filter: country is determined by AI, not keyword region
-    if (campaign.linked_keyword_group) {
-      const platforms = campaign.linked_keyword_group.split(',').map((g: string) => g.trim()).filter(Boolean);
-      const platformConditions = platforms.map(() => `source_pair_ids LIKE ?`);
-      conditions.push(`(source_pair_ids IS NOT NULL AND (${platformConditions.join(' OR ')}))`);
-      for (const p of platforms) {
-        // Match platform prefix: "instagram" → '%instagram:%'
-        params.push(`%${p}:%`);
-      }
-      console.log(`[DMEngine] Platform filter: ${platforms.join(', ')} | Country by AI: ${campaign.target_country || 'any'}`);
-    }
+    // Country + Platform matching is sufficient for campaign targeting
+    // source_pair_ids filter removed: all influencers matching country+platform should be eligible
+    console.log(`[DMEngine] Queue filter: platform=${campaign.platform} | country=${campaign.target_country || 'any'}`);
 
     // Exclude already queued in THIS campaign only (other campaigns can send to same influencer)
     conditions.push(`influencer_key NOT IN (SELECT influencer_key FROM dm_action_queue WHERE campaign_id = ?)`);
