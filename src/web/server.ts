@@ -29,7 +29,7 @@ import { registry } from '../services/registry.js';
 CookieManager.setDbAdapter(cookieDbAdapter);
 
 // 0.1 Connect SSEManager to DB for notification persistence
-import { sseManager } from '../services/../web/services/sse-manager.js';
+import { sseManager } from './services/sse-manager.js';
 sseManager.setDb(db);
 
 // 0.5. One-time migration: filesystem cookies → DB (runs on first boot after upgrade)
