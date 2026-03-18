@@ -28,6 +28,10 @@ import { registry } from '../services/registry.js';
 // 0. Connect CookieManager to DB (must happen before any CookieManager instance is used)
 CookieManager.setDbAdapter(cookieDbAdapter);
 
+// 0.1 Connect SSEManager to DB for notification persistence
+import { sseManager } from '../services/../web/services/sse-manager.js';
+sseManager.setDb(db);
+
 // 0.5. One-time migration: filesystem cookies → DB (runs on first boot after upgrade)
 const migratedCookies = migrateCookiesFromFilesystemToDB();
 if (migratedCookies > 0) console.log(`[Startup] Migrated ${migratedCookies} cookie file(s) from filesystem to DB`);

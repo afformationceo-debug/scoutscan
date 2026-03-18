@@ -18,23 +18,17 @@ const PERSIST_EVENTS = new Set([
 
 class SSEManager {
   private clients: SSEClient[] = [];
-  private _db: any = null;
   private _insertStmt: any = null;
+  private _dbRef: any = null;
 
-  /** Lazy DB access to avoid circular deps */
-  private getDb() {
-    if (!this._db) {
-      try {
-        // Dynamic import at runtime
-        const Database = require('better-sqlite3');
-        const { join } = require('path');
-        this._db = new Database(join(process.cwd(), 'data', 'scraper.db'));
-        this._insertStmt = this._db.prepare(
-          'INSERT INTO notifications (type, message, detail, created_at) VALUES (?, ?, ?, ?)'
-        );
-      } catch { /* DB not ready yet */ }
-    }
-    return this._insertStmt;
+  /** Set DB reference (called once from server.ts after DB init) */
+  setDb(db: any) {
+    this._dbRef = db;
+    try {
+      this._insertStmt = db.prepare(
+        'INSERT INTO notifications (type, message, detail, created_at) VALUES (?, ?, ?, ?)'
+      );
+    } catch { /* table may not exist yet */ }
   }
 
   /** Add a client to a channel */
@@ -66,7 +60,7 @@ class SSEManager {
     // Persist important events to DB
     if (channel === 'global' && PERSIST_EVENTS.has(event)) {
       try {
-        const stmt = this.getDb();
+        const stmt = this._insertStmt;
         if (stmt) {
           const message = data.message || this.buildMessage(event, data);
           const detail = data.detail || data.error || '';
