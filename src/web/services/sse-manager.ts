@@ -19,11 +19,23 @@ const PERSIST_EVENTS = new Set([
 class SSEManager {
   private clients: SSEClient[] = [];
   private _insertStmt: any = null;
-  private _dbRef: any = null;
+  private _dbInitAttempted = false;
 
-  /** Set DB reference (called once from server.ts after DB init) */
+  /** Lazy init: get insert statement from db.ts on first use */
+  private ensureDb() {
+    if (this._insertStmt || this._dbInitAttempted) return;
+    this._dbInitAttempted = true;
+    try {
+      // Lazy require to avoid circular dependency at module load time
+      const { db } = require('./db.js');
+      this._insertStmt = db.prepare(
+        'INSERT INTO notifications (type, message, detail, created_at) VALUES (?, ?, ?, ?)'
+      );
+    } catch { /* DB not ready yet */ }
+  }
+
+  /** External DB injection (alternative to lazy require) */
   setDb(db: any) {
-    this._dbRef = db;
     try {
       this._insertStmt = db.prepare(
         'INSERT INTO notifications (type, message, detail, created_at) VALUES (?, ?, ?, ?)'
@@ -60,6 +72,7 @@ class SSEManager {
     // Persist important events to DB
     if (channel === 'global' && PERSIST_EVENTS.has(event)) {
       try {
+        this.ensureDb();
         const stmt = this._insertStmt;
         if (stmt) {
           const message = data.message || this.buildMessage(event, data);

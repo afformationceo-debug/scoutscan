@@ -201,10 +201,6 @@ serve({ fetch: app.fetch, port, serverOptions: { maxHeaderSize: 65536 } }, (info
   // Start cookie health monitoring
   cookieHealthService.start(300_000); // 5 minutes
 
-  // Connect SSEManager to DB for notification persistence
-  const { sseManager: ssm } = await import('./services/sse-manager.js');
-  ssm.setDb(db);
-
   // No auto-resume: campaigns must be started manually via UI
 });
 
