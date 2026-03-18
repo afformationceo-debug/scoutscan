@@ -592,9 +592,13 @@ export class DMEngine {
       params.push(...countries);
     }
     if (campaign.target_tiers) {
-      const tiers = JSON.parse(campaign.target_tiers);
-      conditions.push(`scout_tier IN (${tiers.map(() => '?').join(',')})`);
-      params.push(...tiers);
+      try {
+        const tiers = JSON.parse(campaign.target_tiers);
+        if (Array.isArray(tiers) && tiers.length > 0) {
+          conditions.push(`scout_tier IN (${tiers.map(() => '?').join(',')})`);
+          params.push(...tiers);
+        }
+      } catch { /* invalid JSON, skip tier filter */ }
     }
     if (campaign.min_followers) { conditions.push('followers_count >= ?'); params.push(campaign.min_followers); }
     if (campaign.max_followers) { conditions.push('followers_count <= ?'); params.push(campaign.max_followers); }
@@ -642,6 +646,10 @@ export class DMEngine {
 
     let queued = 0;
     for (const inf of influencers) {
+      if (!campaign.message_template) {
+        console.error(`[DMEngine] Campaign "${campaign.name}" has no message template — skipping queue generation`);
+        break;
+      }
       const message = this.renderTemplate(campaign.message_template, inf);
       insertStmt.run(inf.influencer_key, campaignId, inf.platform, message, now);
       updateCampaignIdStmt.run(campaignId, inf.influencer_key);
